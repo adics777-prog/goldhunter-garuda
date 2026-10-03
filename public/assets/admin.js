@@ -155,7 +155,7 @@
           <div class="row" id="bact">${b && b.status === 'done' && b.file_id ? `<a class="btn btn-ghost btn-sm" href="/api/files/${b.file_id}">⬇ Unduh .${o.platform === 'mt4' ? 'ex4' : 'ex5'}</a>` : ''}
           <button class="btn btn-ghost btn-sm" id="rebuild">↻ Generate ulang</button></div>
           ${b && b.status === 'failed' ? `<div class="alert err tiny" style="margin-top:10px;white-space:pre-wrap">${esc((b.log || '').slice(-600))}</div>` : ''}` : ''}
-        ${o.includes_vps && l ? `<hr><form id="vpsf"><div class="small muted" style="margin-bottom:10px">VPS pribadi untuk member (RAM 2 GB, 2 core, 40 GB). Isi akses Remote Desktop-nya; member memasang MetaTrader &amp; EA sendiri.</div>
+        ${o.includes_vps && l ? `<hr><form id="vpsf"><div class="small muted" style="margin-bottom:10px">VPS pribadi untuk member. Isi akses Remote Desktop-nya; member memasang MetaTrader &amp; EA sendiri.</div>
           <div class="grid c2" style="gap:0 12px"><div class="field"><label>IP / host VPS</label><input name="vps_ip" value="${esc(l.vps_ip)}"></div>
           <div class="field"><label>Username VPS</label><input name="vps_user" value="${esc(l.vps_user)}"></div></div>
           <div class="field"><label>Password VPS ${l.vps_pass ? '(kosongkan = tidak diubah)' : ''}</label><input name="vps_pass" placeholder="${l.vps_pass ? '••••••' : ''}"></div>
@@ -356,7 +356,8 @@
       ${products.map((p) => `<tr><td>${p.sort}</td><td><b>${esc(p.name)}</b><div class="tiny muted">${esc(p.description).slice(0, 90)}</div></td><td class="small">${KINDS[p.kind] || p.kind}</td>
         <td class="nowrap">${p.billing === 'free' ? 'Gratis' : rupiah(p.price) + (p.billing === 'monthly' ? '/bln' : '')}</td>
         <td>${p.active ? '<span class="badge b-green">tampil</span>' : '<span class="badge b-gray">disembunyikan</span>'}</td><td><button class="btn btn-ghost btn-sm" data-p="${p.id}">Edit</button></td></tr>`).join('')}</tbody></table></div>
-      <p class="small muted" style="margin-top:12px">Diskon per durasi (mis. 12 bulan -25%) diatur di <a href="#/pengaturan">Pengaturan</a>.</p>`;
+      <p class="small muted" style="margin-top:12px">Klik <b>Edit</b> untuk mengubah nama, harga, deskripsi atau keunggulan. Perubahan langsung tampil di landing page dan member area; pesanan yang sudah dibuat tetap memakai harga saat order.
+      Diskon per durasi (mis. 12 bulan -25%) dan spesifikasi VPS diatur di <a href="#/pengaturan">Pengaturan</a>.</p>`;
     const edit = (p) => {
       const m = modal(p ? 'Edit produk' : 'Produk baru', `<form id="pf">
         <div class="field"><label>Nama</label><input name="name" value="${esc(p?.name)}"></div>
@@ -404,6 +405,7 @@
           <div class="help" style="margin-bottom:14px">⚠️ Selama pembayaran masih transfer manual, sebaiknya dibiarkan mati (bukti bisa palsu). Aktifkan setelah memakai payment gateway.</div>
           <h3>Notifikasi</h3>
           <div class="field"><label>Email admin untuk notifikasi (pisahkan koma)</label><input name="admin_notify_email" value="${esc(s.admin_notify_email)}" placeholder="kosong = email admin"></div>
+          <div class="field"><label>Spesifikasi VPS (ditampilkan ke member)</label><input name="vps_spec" value="${esc(s.vps_spec)}" placeholder="RAM 2 GB, 2 core, disk 40 GB, Windows"></div>
           <div class="field"><label>WhatsApp admin (ditampilkan ke member)</label><input name="whatsapp" value="${esc(s.whatsapp)}" placeholder="08xxxxxxxxxx"></div>
           <div class="field"><label>Pengingat sebelum masa sewa habis (hari, pisahkan koma)</label><input name="reminder_days" value="${s.reminder_days.join(', ')}"></div>
           <label class="row small" style="color:var(--text)"><input type="checkbox" name="mt4_enabled" ${s.mt4_enabled === '1' ? 'checked' : ''}> MT4 bisa dipesan (aktifkan setelah EA versi MQL4 ada)</label></div>
@@ -455,7 +457,7 @@
         durations: d.durations.split(/[,\s]+/).filter(Boolean).map(Number),
         discounts: Object.fromEntries(d.discounts.split(',').map((x) => x.split('=').map((y) => y.trim())).filter((x) => x.length === 2)),
         reminder_days: d.reminder_days.split(/[,\s]+/).filter(Boolean).map(Number),
-        admin_notify_email: d.admin_notify_email, whatsapp: d.whatsapp, mt4_enabled: d.mt4_enabled ? '1' : '0',
+        admin_notify_email: d.admin_notify_email, whatsapp: d.whatsapp, vps_spec: d.vps_spec, mt4_enabled: d.mt4_enabled ? '1' : '0',
         auto_complete_ea: d.auto_complete_ea ? '1' : '0', auto_process_paid: d.auto_process_paid ? '1' : '0',
         ib_brokers: $$('.ibr').map((r) => ({ name: $('.ib-name', r).value, link: $('.ib-link', r).value, active: $('.ib-act', r).checked })),
         email_provider: d.email_provider, email_from: d.email_from, email_from_name: d.email_from_name, email_api_key: d.email_api_key,

@@ -198,7 +198,7 @@ Lihat tutorial di menu "Cara Jadi IB"', 0),
 VPS pribadi: RAM 2 GB, 2 core, disk 40 GB
 Akses Remote Desktop, setting EA bebas
 Pengingat sebelum masa sewa VPS habis', 1),
- ('vps_ea', 'Paket VPS + EA', 'vps_ea', 'monthly', 1, 1, 0, 500000,
+ ('vps_ea', 'Paket VPS + EA', 'vps_ea', 'monthly', 1, 1, 0, 450000,
   'File EA berlisensi + VPS Windows pribadi 24 jam untuk broker apa pun. Anda login lewat Remote Desktop dan mengatur EA sendiri.',
   'VPS pribadi: RAM 2 GB, 2 core, disk 40 GB
 File .ex5 terkunci di nomor akun Anda
@@ -228,7 +228,8 @@ DANA / OVO 08xxxxxxxxxx a.n. NAMA ANDA'),
  ('mt4_enabled', '0'),
  ('unique_code', '1'),
  ('auto_complete_ea', '1'),
- ('welcome_email_password', '1'), -- put the chosen password in the welcome email (never stored in the email log)
+ ('welcome_email_password', '1'),
+ ('vps_spec', 'RAM 2 GB, 2 core, disk 40 GB, Windows'), -- put the chosen password in the welcome email (never stored in the email log)
  ('email_provider', ''),         -- '' = use env EMAIL_PROVIDER; log | resend | brevo
  ('email_from', ''),
  ('email_from_name', ''),      -- EA-only order: mark completed as soon as the .ex5 is built

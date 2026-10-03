@@ -115,14 +115,14 @@
           ${p.requires_ib ? `<div class="alert warn" style="margin-bottom:16px">Syarat EA gratis: akun trading Anda <b>terdaftar di bawah IB kami</b>. Admin akan mengeceknya sebelum memproses.</div>` : ''}
           <div class="field"><label>Platform</label><div class="choice">
             <label><input type="radio" name="platform" value="mt5" checked><span>MetaTrader 5</span></label>
-            <label><input type="radio" name="platform" value="mt4" ${c.mt4_enabled ? '' : 'disabled'}><span>MetaTrader 4 ${c.mt4_enabled ? '' : '<span class="tiny muted">(segera hadir)</span>'}</span></label>
+            <label><input type="radio" name="platform" value="mt4" ${c.mt4_enabled ? '' : 'disabled'}><span>MetaTrader 4${c.mt4_enabled ? '' : ' <i class="tiny" style="font-style:normal;opacity:.8">(segera hadir)</i>'}</span></label>
           </div></div>
           <div class="field"><label>Broker</label>${brokerField}</div>
           <div class="field"><label>Nomor akun trading (login MT)</label><input name="account_number" inputmode="numeric" placeholder="contoh: 183946672" required>
             <div class="help">EA akan dikunci hanya untuk nomor akun ini. Ganti nomor akun hanya bisa lewat pengajuan ke admin.</div></div>
           <div class="field"><label>Server broker ${p.includes_vps ? '' : '<span class="muted">(opsional)</span>'}</label><input name="broker_server" placeholder="contoh: Exness-MT5Real25">
             <div class="help">Terlihat di MetaTrader: File → Login to Trade Account, atau di email pembukaan akun dari broker.</div></div>
-          ${p.includes_vps ? `<div class="alert info small" style="margin-bottom:16px">🖥️ <b>VPS pribadi untuk Anda</b> (RAM 2 GB, 2 core, disk 40 GB, Windows). Setelah pesanan selesai, IP, username dan password Remote Desktop muncul di menu <b>Lisensi &amp; VPS</b>. Anda login sendiri lalu memasang MetaTrader dan EA, dan bisa mengatur setting EA sesuka Anda.</div>` : ''}
+          ${p.includes_vps ? `<div class="alert info small" style="margin-bottom:16px">🖥️ <b>VPS pribadi untuk Anda</b> (${esc(c.vps_spec || "Windows")}). Setelah pesanan selesai, IP, username dan password Remote Desktop muncul di menu <b>Lisensi &amp; VPS</b>. Anda login sendiri lalu memasang MetaTrader dan EA, dan bisa mengatur setting EA sesuka Anda.</div>` : ''}
           ${p.billing === 'monthly' ? `<div class="field"><label>Lama sewa</label><div class="choice">${durations}</div></div>` : ''}
           <div class="alert info small" style="margin-bottom:16px">EA GoldHunter Garuda dirancang untuk akun <b>Standard Cent (USC)</b> dengan mode <b>hedging</b>, pair XAUUSDc.</div>
           <button class="btn btn-gold btn-block" type="submit">${p.billing === 'free' ? 'Ajukan EA Gratis' : 'Buat Pesanan'}</button>
@@ -376,7 +376,7 @@
       </div></div>`;
     view.innerHTML = `${title('Cara Jadi IB &amp; Dapat EA Gratis')}
       <div class="alert ok" style="margin-bottom:20px">🎁 <b>EA GoldHunter Garuda GRATIS</b> untuk akun trading yang terdaftar di bawah IB (Introducing Broker) kami.
-        ${vps ? `Ingin EA berjalan 24 jam tanpa menyalakan komputer? Sewa VPS pribadi (RAM 2 GB, 2 core, disk 40 GB) cukup <b>${rupiah(vps.price)}/bulan</b>.` : ''}</div>
+        ${vps ? `Ingin EA berjalan 24 jam tanpa menyalakan komputer? Sewa VPS pribadi${c.vps_spec ? ` (${esc(c.vps_spec)})` : ""} cukup <b>${rupiah(vps.price)}/bulan</b>.` : ''}</div>
       ${brokers.length ? brokers.map(brokerCard).join('') : '<div class="alert">Link IB belum tersedia.</div>'}
       <p class="small muted" style="margin:10px 0 24px">Saat ini tersedia broker: <b>${brokers.map((b) => esc(b.name)).join(', ') || '-'}</b>. HFM segera menyusul.</p>
       <div class="grid c2" style="align-items:start">

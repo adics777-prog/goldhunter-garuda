@@ -180,7 +180,7 @@ route('GET', '/catalog', 'public', async ({ env }) => {
   const s = await getSettings(env);
   const { results } = await env.DB.prepare('SELECT id, code, name, kind, billing, includes_ea, includes_vps, requires_ib, price, description, features FROM products WHERE active=1 ORDER BY sort, id').all();
   return json({
-    products: results, durations: s.durations, discounts: s.discounts, mt4_enabled: s.mt4_enabled === '1',
+    products: results, durations: s.durations, discounts: s.discounts, mt4_enabled: s.mt4_enabled === '1', vps_spec: s.vps_spec || '',
     ib_brokers: s.ib_brokers.filter((b) => b.active && b.link), whatsapp: s.whatsapp || '',
   });
 });
@@ -686,7 +686,7 @@ route('PUT', '/admin/products/:id', 'admin', async ({ request, env, params }) =>
 });
 
 const EDITABLE_SETTINGS = ['durations', 'discounts', 'bank_accounts', 'admin_notify_email', 'whatsapp', 'pay_deadline_hours', 'reminder_days', 'mt4_enabled',
-  'unique_code', 'ib_brokers', 'auto_complete_ea', 'auto_process_paid', 'welcome_email_password', 'email_provider', 'email_from', 'email_from_name'];
+  'unique_code', 'ib_brokers', 'auto_complete_ea', 'auto_process_paid', 'welcome_email_password', 'email_provider', 'email_from', 'email_from_name', 'vps_spec'];
 route('GET', '/admin/settings', 'admin', async ({ env }) => {
   const s = await getSettings(env);
   const out = Object.fromEntries(EDITABLE_SETTINGS.map((k) => [k, s[k] ?? '']));
