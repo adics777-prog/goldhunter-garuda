@@ -363,7 +363,7 @@
       <ol class="steps small">
         <li><b>Buka pengaturan MetaTrader</b>Menu <i>Tools → Options</i> (atau tekan <span class="mono">Ctrl+O</span>), tab <i>Expert Advisors</i>.</li>
         <li><b>Izinkan alamat web</b>Centang <i>Allow WebRequest for listed URL</i>, klik tanda <b>+</b>, ketik <span class="copy mono" data-copy="https://goldhuntergaruda.com">https://goldhuntergaruda.com</span>, lalu <b>OK</b>.</li>
-        <li><b>Selesai</b>Dalam ±5 menit laporan pertama masuk dan tampil di kartu lisensi Anda. Nama di papan tampil singkat (misal "Budi S."); minta admin jika ingin disamarkan.</li>
+        <li><b>Selesai</b>Dalam ±5 menit laporan pertama masuk dan tampil di kartu lisensi Anda. Nama di papan tampil singkat (misal "Budi S****"); minta admin jika ingin disamarkan.</li>
       </ol></div>`;
 
   // ------------------------------------------------------------------ lisensi

@@ -397,7 +397,7 @@
       <form class="card" id="bf" style="margin-bottom:18px"><div class="grid" style="grid-template-columns:repeat(auto-fit,minmax(min(200px,100%),1fr));gap:0 14px;align-items:end">
         <div class="field"><label>Papan profit publik</label><select name="board_enabled"><option value="1">Tampil</option><option value="0" ${s.board_enabled === '0' ? 'selected' : ''}>Disembunyikan</option></select></div>
         <div class="field"><label>Nama yang ditampilkan</label><select name="board_name_mode">
-          ${[['first_initial', 'Nama depan + inisial (Budi S.)'], ['first', 'Nama depan saja (Budi)'], ['full', 'Nama lengkap'], ['hidden', 'Samarkan semua (Member Anonim)']]
+          ${[['first_initial', 'Nama depan + inisial (Budi S****)'], ['first', 'Nama depan saja (Budi)'], ['full', 'Nama lengkap'], ['hidden', 'Samarkan semua (Member Anonim)']]
             .map(([v, l]) => `<option value="${v}" ${(s.board_name_mode || 'first_initial') === v ? 'selected' : ''}>${l}</option>`).join('')}</select></div>
         <div class="field"><label>Jumlah di landing page</label><input name="board_landing_top" type="number" min="0" max="50" value="${esc(s.board_landing_top || 10)}"></div>
         <div class="field"><label>Sembunyikan jika tidak lapor (hari)</label><input name="board_stale_days" type="number" min="1" max="30" value="${esc(s.board_stale_days || 3)}"></div>

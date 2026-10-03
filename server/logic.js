@@ -294,8 +294,10 @@ export function boardName(full, mode, hidden) {
   const parts = String(full || '').trim().split(/\s+/).filter(Boolean);
   if (!parts.length) return 'Member';
   if (mode === 'full') return parts.join(' ');
-  if (mode === 'first') return parts[0];
-  return parts[0] + (parts[1] ? ' ' + parts[1][0].toUpperCase() + '.' : '');
+  const cap = (w) => w.charAt(0).toUpperCase() + w.slice(1);
+  if (mode === 'first') return cap(parts[0]);
+  // default: first name + initial of the second word, e.g. "Budi S****"
+  return cap(parts[0]) + (parts[1] ? ' ' + parts[1][0].toUpperCase() + '****' : '');
 }
 export const maskAccount = (a) => { a = String(a || ''); return a.length <= 4 ? a : a.slice(0, 2) + '****' + a.slice(-2); };
 
