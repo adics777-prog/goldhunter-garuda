@@ -181,8 +181,38 @@ route('GET', '/catalog', 'public', async ({ env }) => {
   const { results } = await env.DB.prepare('SELECT id, code, name, kind, billing, includes_ea, includes_vps, requires_ib, managed_vps, price, description, features FROM products WHERE active=1 ORDER BY sort, id').all();
   return json({
     products: results, durations: s.durations, discounts: s.discounts, mt4_enabled: s.mt4_enabled === '1', vps_spec: s.vps_spec || '',
+    min_capital_usd: Number(s.min_capital_usd || 100),
     ib_brokers: s.ib_brokers.filter((b) => b.active && b.link), whatsapp: s.whatsapp || '',
   });
+});
+
+// USD -> IDR rate for the minimum-capital display. Free sources, cached 15 minutes at the edge.
+const RATE_SOURCES = [
+  ['open.er-api.com', 'https://open.er-api.com/v6/latest/USD', (j) => j.rates && j.rates.IDR],
+  ['fawazahmed0 currency-api', 'https://cdn.jsdelivr.net/npm/@fawazahmed0/currency-api@latest/v1/currencies/usd.min.json', (j) => j.usd && j.usd.idr],
+  ['frankfurter (ECB)', 'https://api.frankfurter.dev/v1/latest?base=USD&symbols=IDR', (j) => j.rates && j.rates.IDR],
+];
+route('GET', '/rate', 'public', async ({ env, waitUntil }) => {
+  const cache = caches.default;
+  const key = new Request('https://goldhuntergaruda.com/__cache/usd-idr');
+  const hit = await cache.match(key);
+  if (hit) return hit;
+  let rate = 0, source = '';
+  for (const [name, url, pick] of RATE_SOURCES) {
+    try {
+      const r = await fetch(url, { cf: { cacheTtl: 900 } });
+      const v = Number(pick(await r.json()));
+      if (v > 1000 && v < 100000) { rate = v; source = name; break; }
+    } catch {}
+  }
+  const s = await getSettings(env);
+  if (rate) await putSetting(env, 'usd_idr_last', JSON.stringify({ rate, source, at: now() }));
+  else { try { ({ rate, source } = JSON.parse(s.usd_idr_last || '{}')); source += ' (terakhir)'; } catch {} }
+  const res = new Response(JSON.stringify({ usd_idr: rate || 0, source, updated_at: now(), min_capital_usd: Number(s.min_capital_usd || 100) }), {
+    headers: { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'public, max-age=900' },
+  });
+  if (rate) waitUntil(cache.put(key, res.clone()));
+  return res;
 });
 
 route('GET', '/member/summary', 'member', async ({ env, user }) => {
@@ -735,7 +765,8 @@ route('PUT', '/admin/products/:id', 'admin', async ({ request, env, params }) =>
 });
 
 const EDITABLE_SETTINGS = ['durations', 'discounts', 'bank_accounts', 'admin_notify_email', 'whatsapp', 'pay_deadline_hours', 'reminder_days', 'mt4_enabled',
-  'ib_brokers', 'auto_complete_ea', 'auto_process_paid', 'welcome_email_password', 'email_provider', 'email_from', 'email_from_name', 'vps_spec'];
+  'ib_brokers', 'auto_complete_ea', 'auto_process_paid', 'welcome_email_password', 'email_provider', 'email_from', 'email_from_name', 'vps_spec',
+  'min_capital_usd'];
 route('GET', '/admin/settings', 'admin', async ({ env }) => {
   const s = await getSettings(env);
   const out = Object.fromEntries(EDITABLE_SETTINGS.map((k) => [k, s[k] ?? '']));

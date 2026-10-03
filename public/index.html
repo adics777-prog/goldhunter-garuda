@@ -195,6 +195,13 @@
     section{padding:70px 0}
     .cta-box{padding:44px 22px}
   }
+  .cap-box{display:grid;grid-template-columns:1fr auto 1fr;align-items:center;gap:20px;max-width:760px;margin:-20px auto 46px;padding:26px 30px;border:1px solid var(--gold-2);border-radius:22px;background:linear-gradient(135deg,rgba(245,197,66,.10),rgba(20,20,28,.9));text-align:center}
+  .cap-box>div{display:flex;flex-direction:column;align-items:center}
+  .cap-label{font-size:.78rem;letter-spacing:2px;text-transform:uppercase;color:var(--muted)}
+  .cap-usd{font-family:'Cinzel',serif;font-size:clamp(1.9rem,4vw,2.4rem);line-height:1.2;white-space:nowrap}
+  @media(max-width:640px){.cap-box{grid-template-columns:1fr;gap:10px}}
+  .cap-usc{font-size:.85rem;color:var(--muted)}
+  .cap-eq{font-size:2rem;color:var(--gold)}
 </style>
 </head>
 <body>
@@ -281,13 +288,18 @@
 <section id="promo" style="padding-bottom:40px">
   <div class="container">
     <div class="center"><span class="tag">🔥 Promo GoldHunter Garuda</span></div>
-    <h2 class="sec-title">EA Emas Otomatis, <span class="gold-text">GRATIS</span></h2>
-    <p class="sec-sub">Cukup buka akun Exness di bawah partner GoldHunter Garuda, maka EA bisa Anda pakai tanpa biaya lisensi. Jalan 24 jam di VPS, pantau santai dari HP.</p>
+    <h2 class="sec-title">Biarkan Robot Emas <span class="gold-text">Bekerja untuk Anda</span></h2>
+    <p class="sec-sub">Mulai dari modal kecil, EA GoldHunter Garuda trading emas (XAUUSD) otomatis 24 jam di VPS. Anda cukup pantau dari HP sambil tetap menjalani aktivitas sehari-hari.</p>
+    <div class="cap-box reveal">
+      <div><span class="cap-label">Modal minimal</span><b class="gold-text cap-usd" data-cap="usd">$100</b><span class="cap-usc"><span data-cap="usc">10.000 USC</span> di akun Standard Cent</span></div>
+      <div class="cap-eq">≈</div>
+      <div><span class="cap-label">Dalam Rupiah</span><b class="gold-text cap-usd" data-cap="idr">Rp …</b><span class="cap-usc" data-cap="rate">mengambil kurs hari ini…</span></div>
+    </div>
     <div class="grid-3">
       <div class="feat reveal"><div class="ico">🎁</div><h3>EA Gratis Selamanya</h3><p>Untuk akun Exness yang terdaftar di bawah partner GoldHunter Garuda, baik akun baru maupun pindah partner. Spread &amp; komisi tetap sama.</p></div>
-      <div class="feat reveal"><div class="ico">🪙</div><h3>Modal Ringan, Akun Cent</h3><p>Dirancang untuk akun Standard Cent (USC), jadi bisa mulai dengan modal kecil dan lot kecil.</p></div>
+      <div class="feat reveal"><div class="ico">🪙</div><h3>Mulai $100 Saja</h3><p>Akun Standard Cent: $100 tampil sebagai 10.000 USC, jadi lot bisa sangat kecil dan risiko per posisi lebih terkendali.</p></div>
       <div class="feat reveal"><div class="ico">🖥️</div><h3>VPS 24 Jam <span class="promo-vps"></span></h3><p>VPS pribadi (Anda pegang sendiri) atau VPS share dikelola admin: cukup kirim akun, admin bantu setup sampai jalan.</p></div>
-      <div class="feat reveal"><div class="ico">📱</div><h3>Pantau dari HP</h3><p>Lihat posisi &amp; profit kapan saja lewat aplikasi MetaTrader dengan akun pantau (password investor).</p></div>
+      <div class="feat reveal"><div class="ico">📱</div><h3>Otomatis, Pantau dari HP</h3><p>Tidak perlu memantau chart seharian. EA yang membuka &amp; menutup posisi; Anda cukup lihat hasilnya lewat aplikasi MetaTrader dengan akun pantau.</p></div>
       <div class="feat reveal"><div class="ico">🔒</div><h3>Lisensi Aman</h3><p>File EA dikunci ke nomor akun Anda. Ganti akun cukup ajukan dari member area.</p></div>
       <div class="feat reveal"><div class="ico">💬</div><h3>Dibantu Admin</h3><p>Ada kendala order, pembayaran atau setup? Chat admin langsung via WhatsApp.</p></div>
     </div>
@@ -448,6 +460,18 @@
   setInterval(() => { p += (Math.random() - .48) * 1.2; priceEl.textContent = p.toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2}); }, 1500);
 
   document.getElementById('yr').textContent = new Date().getFullYear();
+
+  // Modal minimal + konversi Rupiah dari kurs hari ini
+  fetch('/api/rate').then(r => r.json()).then(r => {
+    const usd = Number(r.min_capital_usd || 100);
+    const fmt = n => 'Rp ' + Math.round(n).toString().replace(/\B(?=(\d{3})+(?!\d))/g, '.');
+    document.querySelectorAll('[data-cap="usd"]').forEach(el => el.textContent = '$' + usd);
+    document.querySelectorAll('[data-cap="usc"]').forEach(el => el.textContent = (usd * 100).toLocaleString('id-ID') + ' USC');
+    if (r.usd_idr) {
+      document.querySelectorAll('[data-cap="idr"]').forEach(el => el.textContent = fmt(Math.round(usd * r.usd_idr / 1000) * 1000));
+      document.querySelectorAll('[data-cap="rate"]').forEach(el => el.textContent = 'kurs hari ini ' + fmt(r.usd_idr) + '/USD');
+    }
+  }).catch(() => {});
 
   // Paket & harga dari database (sama dengan member area)
   const rp = n => 'Rp ' + Math.round(n).toString().replace(/\B(?=(\d{3})+(?!\d))/g, '.');

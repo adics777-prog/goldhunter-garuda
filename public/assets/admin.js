@@ -423,6 +423,8 @@
           <div class="help" style="margin-bottom:14px">⚠️ Selama pembayaran masih transfer manual, sebaiknya dibiarkan mati (bukti bisa palsu). Aktifkan setelah memakai payment gateway.</div>
           <h3>Notifikasi</h3>
           <div class="field"><label>Email admin untuk notifikasi (pisahkan koma)</label><input name="admin_notify_email" value="${esc(s.admin_notify_email)}" placeholder="kosong = email admin"></div>
+          <div class="field"><label>Modal minimal akun cent (USD)</label><input name="min_capital_usd" type="number" min="1" value="${esc(s.min_capital_usd || 100)}">
+            <div class="help">Ditampilkan ke member &amp; landing page beserta konversi Rupiah otomatis (×100 = USC).</div></div>
           <div class="field"><label>Spesifikasi VPS (ditampilkan ke member)</label><input name="vps_spec" value="${esc(s.vps_spec)}" placeholder="RAM 2 GB, 2 core, disk 40 GB, Windows"></div>
           <div class="field"><label>WhatsApp admin (ditampilkan ke member)</label><input name="whatsapp" value="${esc(s.whatsapp)}" placeholder="08xxxxxxxxxx"></div>
           <div class="field"><label>Pengingat sebelum masa sewa habis (hari, pisahkan koma)</label><input name="reminder_days" value="${s.reminder_days.join(', ')}"></div>
@@ -475,7 +477,7 @@
         durations: d.durations.split(/[,\s]+/).filter(Boolean).map(Number),
         discounts: Object.fromEntries(d.discounts.split(',').map((x) => x.split('=').map((y) => y.trim())).filter((x) => x.length === 2)),
         reminder_days: d.reminder_days.split(/[,\s]+/).filter(Boolean).map(Number),
-        admin_notify_email: d.admin_notify_email, whatsapp: d.whatsapp, vps_spec: d.vps_spec, mt4_enabled: d.mt4_enabled ? '1' : '0',
+        admin_notify_email: d.admin_notify_email, whatsapp: d.whatsapp, vps_spec: d.vps_spec, min_capital_usd: d.min_capital_usd, mt4_enabled: d.mt4_enabled ? '1' : '0',
         auto_complete_ea: d.auto_complete_ea ? '1' : '0', auto_process_paid: d.auto_process_paid ? '1' : '0',
         ib_brokers: $$('.ibr').map((r) => ({ name: $('.ib-name', r).value, link: $('.ib-link', r).value, active: $('.ib-act', r).checked })),
         email_provider: d.email_provider, email_from: d.email_from, email_from_name: d.email_from_name, email_api_key: d.email_api_key,

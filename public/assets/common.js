@@ -120,6 +120,20 @@ const GHG = (() => {
     return q.createSvgTag({ cellSize: Math.max(2, Math.floor(size / (q.getModuleCount() + 8))), margin: 4, scalable: true });
   }
 
+  // Minimum capital: "$100 (10.000 USC) ≈ Rp 1.788.000", live USD->IDR rate from /api/rate
+  let ratePromise = null;
+  const getRate = () => (ratePromise ||= api('/rate').catch(() => ({ usd_idr: 0 })));
+  async function fillCapital(root = document) {
+    const r = await getRate();
+    const usd = Number(r.min_capital_usd || 100);
+    const idr = r.usd_idr ? Math.round(usd * r.usd_idr / 1000) * 1000 : 0;
+    $$('[data-cap="usd"]', root).forEach((el) => el.textContent = '$' + usd);
+    $$('[data-cap="usc"]', root).forEach((el) => el.textContent = (usd * 100).toLocaleString('id-ID') + ' USC');
+    $$('[data-cap="idr"]', root).forEach((el) => el.textContent = idr ? '± ' + rupiah(idr) : '');
+    $$('[data-cap="rate"]', root).forEach((el) => el.textContent = r.usd_idr ? `kurs hari ini ${rupiah(r.usd_idr)}/USD` : '');
+  }
+  const capitalLine = () => `Modal minimal <b data-cap="usd">$100</b> (<span data-cap="usc">10.000 USC</span>) <b data-cap="idr" style="color:var(--gold)"></b> <span class="tiny muted" data-cap="rate"></span>`;
+
   async function logout() {
     await api('/auth/logout', { method: 'POST', body: {} }).catch(() => {});
     location.href = '/masuk';
@@ -127,6 +141,6 @@ const GHG = (() => {
 
   return {
     $, $$, esc, rupiah, fmtDate, fmtDateTime, ago, api, toast, busy, modal, confirmBox, copy, readProof,
-    orderBadge, licenseBadge, buildBadge, billingText, platformText, qrSvg, logout,
+    orderBadge, licenseBadge, buildBadge, billingText, platformText, qrSvg, logout, fillCapital, capitalLine,
   };
 })();

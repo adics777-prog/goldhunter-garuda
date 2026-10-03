@@ -229,7 +229,8 @@ DANA / OVO 08xxxxxxxxxx a.n. NAMA ANDA'),
  ('unique_code', '1'),
  ('auto_complete_ea', '1'),
  ('welcome_email_password', '1'),
- ('vps_spec', 'RAM 2 GB, 2 core, disk 40 GB, Windows'), -- put the chosen password in the welcome email (never stored in the email log)
+ ('vps_spec', 'RAM 2 GB, 2 core, disk 40 GB, Windows'),
+ ('min_capital_usd', '100'),     -- minimum deposit on a Standard Cent account (USD; x100 = USC) -- put the chosen password in the welcome email (never stored in the email log)
  ('email_provider', ''),         -- '' = use env EMAIL_PROVIDER; log | resend | brevo
  ('email_from', ''),
  ('email_from_name', ''),      -- EA-only order: mark completed as soon as the .ex5 is built

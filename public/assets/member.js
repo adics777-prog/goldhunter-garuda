@@ -1,7 +1,7 @@
 // Member area (hash router). Pages: beranda, order, pesanan, lisensi, ib, notifikasi, profil.
 (() => {
   const { $, $$, esc, rupiah, fmtDate, fmtDateTime, ago, api, toast, busy, modal, confirmBox, readProof,
-    orderBadge, licenseBadge, buildBadge, billingText, qrSvg } = GHG;
+    orderBadge, licenseBadge, buildBadge, billingText, qrSvg, fillCapital, capitalLine } = GHG;
   const view = $('#view');
   let me = null, catalog = null, timer = null;
 
@@ -52,6 +52,7 @@
     view.innerHTML = '<div class="loading"><span class="spinner"></span></div>';
     try { await fn(arg); } catch (e) { view.innerHTML = `<div class="alert err">${esc(e.message)}</div>`; }
     window.scrollTo(0, 0);
+    fillCapital(view);
   }
   window.addEventListener('hashchange', render);
   $('#burger').onclick = () => $('#side').classList.toggle('open');
@@ -72,7 +73,7 @@
       <div class="card gold" style="margin-bottom:22px">
         <div class="row between">
           <div style="max-width:620px"><h3 class="gold-text cinzel" style="font-size:1.3rem;margin-bottom:6px">EA GRATIS lewat IB Exness</h3>
-            <p class="muted">Akun Exness Anda terdaftar di bawah partner GoldHunter Garuda? Maka EA GoldHunter Garuda <b style="color:var(--text)">gratis</b> untuk akun itu. Mau jalan 24 jam? Sewa VPS pribadi kami${vpsP ? ` <b style="color:var(--text)">${rupiah(vpsP.price)}/bulan</b>` : ''}.</p></div>
+            <p class="muted">Akun Exness Anda terdaftar di bawah partner GoldHunter Garuda? Maka EA GoldHunter Garuda <b style="color:var(--text)">gratis</b> untuk akun itu. Cukup modal <b data-cap="usd" style="color:var(--text)">$100</b> <span data-cap="idr"></span> di akun cent. Mau jalan 24 jam? Sewa VPS kami${vpsP ? ` <b style="color:var(--text)">${rupiah(vpsP.price)}/bulan</b>` : ''}.</p></div>
           <div class="row"><a class="btn btn-outline" href="#/ib">Syarat &amp; Panduan</a><a class="btn btn-gold" href="#/order">Order Sekarang</a></div>
         </div>
       </div>
@@ -143,7 +144,7 @@
             <div class="alert info small" style="margin-bottom:16px">🖥️ <b>VPS share dikelola admin.</b> Akun Anda dipasang di server kami dan <b>admin membantu setup sampai EA berjalan</b>. Anda tidak perlu mengurus VPS dan tidak mendapat akses Remote Desktop. Pantau lewat aplikasi MetaTrader di HP dengan <b>password investor</b> (akun pantau).</div>` : ''}
           ${p.includes_vps && !p.managed_vps ? `<div class="alert info small" style="margin-bottom:16px">🖥️ <b>VPS pribadi untuk Anda</b> (${esc(c.vps_spec || "Windows")}). Setelah pesanan selesai, IP, username dan password Remote Desktop muncul di menu <b>Lisensi &amp; VPS</b>. Anda login sendiri lalu memasang MetaTrader dan EA, dan bisa mengatur setting EA sesuka Anda.</div>` : ''}
           ${p.billing === 'monthly' ? `<div class="field"><label>Lama sewa</label><div class="choice">${durations}</div></div>` : ''}
-          <div class="alert info small" style="margin-bottom:16px">EA GoldHunter Garuda dirancang untuk akun <b>Standard Cent (USC)</b> dengan mode <b>hedging</b>, pair XAUUSDc.</div>
+          <div class="alert info small" style="margin-bottom:16px">Syarat akun: <b>Standard Cent (USC)</b>, mode <b>hedging</b>, pair XAUUSDc.<br>${capitalLine()}</div>
           <button class="btn btn-gold btn-block" type="submit">${p.billing === 'free' ? 'Ajukan EA Gratis' : 'Buat Pesanan'}</button>
         </form>
         <div class="card summary" id="sum"></div>
@@ -472,7 +473,7 @@
       <li><b>Isi data pendaftaran</b>Pilih negara Indonesia, isi email dan buat password. Gunakan email yang <b>belum pernah</b> dipakai di ${esc(name)}.</li>
       <li><b>Verifikasi profil</b>Di Personal Area: verifikasi email, nomor HP, lalu upload KTP dan bukti alamat.</li>
       <li><b>Buat akun trading MT5 Standard Cent</b>Personal Area → <i>Akun Saya</i> → <i>Buka akun baru</i> → pilih <b>Standard Cent</b>, platform <b>MT5</b>. Catat <b>nomor akun</b> dan <b>servernya</b>.</li>
-      <li><b>Deposit</b>Deposit sesuai modal yang Anda rencanakan (akun cent: saldo tampil dalam USC).</li>
+      <li><b>Deposit</b>${capitalLine()}. Di akun cent saldo tampil dalam USC ($1 = 100 USC).</li>
       ${finish}</ol></div>`;
     const guideMove = `<div class="card"><h3>Panduan ②: Sudah punya akun ${esc(name)}, pindah ke partner GoldHunter Garuda</h3>
       <div class="alert warn small" style="margin-bottom:16px"><b>Penting:</b> setelah pindah partner disetujui, hanya akun trading yang <b>dibuat sesudahnya</b> yang tercatat di bawah GoldHunter Garuda. Akun trading lama tetap di partner lama, jadi Anda perlu <b>membuat akun trading baru</b> (langkah 5).</div>
