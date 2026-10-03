@@ -5,6 +5,15 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>GOLDHUNTER GARUDA — EA Gold Otomatis</title>
 <meta name="description" content="GOLDHUNTER GARUDA: Expert Advisor khusus XAUUSD untuk MT4 & MT5. Trading emas otomatis 24/5 dengan manajemen risiko terukur.">
+<link rel="canonical" href="https://goldhuntergaruda.com/">
+<link rel="icon" href="/assets/brand/favicon.ico">
+<link rel="apple-touch-icon" href="/assets/brand/apple-touch-icon.png">
+<meta property="og:type" content="website">
+<meta property="og:url" content="https://goldhuntergaruda.com/">
+<meta property="og:title" content="GOLDHUNTER GARUDA — EA Gold Otomatis">
+<meta property="og:description" content="EA XAUUSD untuk MetaTrader 5. GRATIS untuk akun Exness lewat IB kami, atau sewa / beli lisensi.">
+<meta property="og:image" content="https://goldhuntergaruda.com/assets/brand/goldhunter-garuda-banner-1200x630.jpg">
+<meta name="twitter:card" content="summary_large_image">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@700;900&family=Poppins:wght@300;400;600;700&display=swap" rel="stylesheet">
 <style>
@@ -203,7 +212,8 @@
       <a href="#spek">Spesifikasi</a>
       <a href="#harga">Harga</a>
       <a href="#faq">FAQ</a>
-      <a href="#harga" class="btn btn-gold">Beli Sekarang</a>
+      <a href="/masuk" id="nav-login">Masuk</a>
+      <a href="/daftar" class="btn btn-gold" id="nav-cta">Daftar Gratis</a>
     </div>
     <button class="burger" id="burger" aria-label="Menu">☰</button>
   </div>
@@ -229,7 +239,7 @@
       <h1><span class="gold-text">GOLDHUNTER<br>GARUDA</span><small>BURU EMAS · OTOMATIS</small></h1>
       <p>Robot trading emas yang bekerja <b>24 jam / 5 hari</b> untuk Anda. Entry presisi, risiko terkendali, tanpa harus memantau chart seharian.</p>
       <div class="hero-btns">
-        <a href="#harga" class="btn btn-gold">🦅 Dapatkan Sekarang</a>
+        <a href="/daftar" class="btn btn-gold">🦅 Dapatkan EA Gratis</a>
         <a href="#fitur" class="btn btn-outline">Lihat Fitur</a>
       </div>
       <div class="badges">
@@ -326,45 +336,11 @@
 <!-- ============ HARGA ============ -->
 <section id="harga" class="pricing">
   <div class="container">
-    <div class="center"><span class="tag">🔥 Promo Terbatas</span></div>
+    <div class="center"><span class="tag">🎁 EA Gratis via IB Exness</span></div>
     <h2 class="sec-title">Pilih <span class="gold-text">Paket</span> Anda</h2>
-    <p class="sec-sub">Harga promo berakhir dalam:</p>
-    <div class="countdown" id="countdown">
-      <div><b id="cd-d">00</b><span>Hari</span></div>
-      <div><b id="cd-h">00</b><span>Jam</span></div>
-      <div><b id="cd-m">00</b><span>Menit</span></div>
-      <div><b id="cd-s">00</b><span>Detik</span></div>
-    </div>
-    <div class="plans">
-      <div class="plan reveal">
-        <h3>Elang</h3><p class="desc">Untuk pemula yang ingin mencoba</p>
-        <div class="price"><s>Rp 1.500.000</s><b class="gold-text">Rp 799rb</b></div>
-        <ul>
-          <li>1 Akun Real</li><li>Lisensi 3 Bulan</li><li>File EA + Preset</li><li>Panduan Instalasi</li>
-          <li class="no">Bantuan Setting VPS</li><li class="no">Grup VIP</li>
-        </ul>
-        <a class="btn btn-outline order" data-plan="Elang">Pilih Paket</a>
-      </div>
-      <div class="plan best reveal">
-        <span class="ribbon">⭐ PALING LARIS</span>
-        <h3 class="gold-text">Garuda</h3><p class="desc">Pilihan terbaik untuk trader serius</p>
-        <div class="price"><s>Rp 3.500.000</s><b class="gold-text">Rp 1.499rb</b></div>
-        <ul>
-          <li>2 Akun Real</li><li>Lisensi 1 Tahun</li><li>File EA + Semua Preset</li><li>Bantuan Instalasi &amp; VPS</li>
-          <li>Grup VIP Telegram</li><li>Update Gratis</li>
-        </ul>
-        <a class="btn btn-gold order" data-plan="Garuda">Ambil Promo Ini</a>
-      </div>
-      <div class="plan reveal">
-        <h3>Raja Garuda</h3><p class="desc">Akses penuh selamanya</p>
-        <div class="price"><s>Rp 7.000.000</s><b class="gold-text">Rp 2.999rb</b></div>
-        <ul>
-          <li>5 Akun Real</li><li>Lisensi Lifetime</li><li>Semua Preset + Custom</li><li>Instalasi Full oleh Tim</li>
-          <li>Grup VIP Telegram</li><li>Update Gratis Selamanya</li>
-        </ul>
-        <a class="btn btn-outline order" data-plan="Raja Garuda">Pilih Paket</a>
-      </div>
-    </div>
+    <p class="sec-sub">Daftar akun Exness lewat link IB kami dan dapatkan EA <b style="color:var(--gold)">GRATIS</b>. Untuk broker lain, pilih sewa bulanan atau beli selamanya. Semua lisensi dikunci ke nomor akun trading Anda.</p>
+    <div class="plans" id="plans"><p class="center" style="grid-column:1/-1;color:var(--muted)">Memuat paket…</p></div>
+    <p class="center" style="margin-top:34px;color:var(--muted);font-size:.9rem">Sewa 12 bulan lebih hemat. Order, pembayaran, unduh EA &amp; perpanjangan semuanya lewat <a href="/daftar" style="color:var(--gold)">member area</a>.</p>
   </div>
 </section>
 
@@ -445,23 +421,38 @@
   }), { threshold: .12 });
   document.querySelectorAll('.reveal').forEach(el => io.observe(el));
 
-  // Countdown promo: selalu berakhir tengah malam 3 hari ke depan
-  const end = new Date(); end.setHours(24,0,0,0); end.setDate(end.getDate() + 2);
-  const pad = n => String(n).padStart(2, '0');
-  (function tick(){
-    let t = Math.max(0, end - Date.now()) / 1000;
-    document.getElementById('cd-d').textContent = pad(Math.floor(t / 86400));
-    document.getElementById('cd-h').textContent = pad(Math.floor(t % 86400 / 3600));
-    document.getElementById('cd-m').textContent = pad(Math.floor(t % 3600 / 60));
-    document.getElementById('cd-s').textContent = pad(Math.floor(t % 60));
-    setTimeout(tick, 1000);
-  })();
-
   // Animasi harga ticker (visual saja, bukan harga live)
   let p = 2650.40; const priceEl = document.getElementById('price');
   setInterval(() => { p += (Math.random() - .48) * 1.2; priceEl.textContent = p.toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2}); }, 1500);
 
   document.getElementById('yr').textContent = new Date().getFullYear();
+
+  // Paket & harga dari database (sama dengan member area)
+  const rp = n => 'Rp ' + Math.round(n).toString().replace(/\B(?=(\d{3})+(?!\d))/g, '.');
+  const escH = t => String(t ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+  fetch('/api/catalog').then(r => r.json()).then(c => {
+    const best = c.products.find(p => p.billing === 'free');
+    document.getElementById('plans').innerHTML = c.products.map(p => {
+      const price = p.billing === 'free' ? 'GRATIS' : rp(p.price);
+      const per = p.billing === 'monthly' ? '<span style="font-size:.9rem;color:var(--muted)"> /bulan</span>' : p.billing === 'lifetime' ? '<span style="font-size:.9rem;color:var(--muted)"> sekali bayar</span>' : '';
+      const feats = String(p.features || '').split(/\r?\n/).filter(Boolean).map(f => `<li>${escH(f)}</li>`).join('');
+      return `<div class="plan reveal show ${p === best ? 'best' : ''}">${p === best ? '<span class="ribbon">⭐ GRATIS VIA IB</span>' : p.requires_ib ? '<span class="ribbon">KHUSUS IB</span>' : ''}
+        <h3 class="${p === best ? 'gold-text' : ''}">${escH(p.name)}</h3><p class="desc">${escH(p.description)}</p>
+        <div class="price"><b class="gold-text">${price}</b>${per}</div><ul>${feats}</ul>
+        <a class="btn ${p === best ? 'btn-gold' : 'btn-outline'}" href="/daftar?paket=${p.id}">${p.billing === 'free' ? 'Daftar &amp; Ajukan Gratis' : 'Pilih Paket'}</a></div>`;
+    }).join('');
+    if (c.whatsapp) document.querySelectorAll('.wa').forEach(a => a.href = `https://wa.me/${c.whatsapp.replace(/\D/g, '').replace(/^0/, '62')}?text=${encodeURIComponent('Halo Admin, saya ingin bertanya tentang EA GOLDHUNTER GARUDA.')}`);
+  }).catch(() => { document.getElementById('plans').innerHTML = '<p class="center" style="grid-column:1/-1"><a class="btn btn-gold" href="/daftar">Lihat paket di member area</a></p>'; });
+
+  // Sudah login? tombol menu langsung ke area masing-masing
+  fetch('/api/me').then(r => r.json()).then(r => {
+    if (!r.user) return;
+    document.getElementById('nav-login').classList.add('hidden-login');
+    document.getElementById('nav-login').style.display = 'none';
+    const cta = document.getElementById('nav-cta');
+    cta.textContent = r.user.role === 'admin' ? 'Admin Area' : 'Member Area';
+    cta.href = r.user.role === 'admin' ? '/admin' : '/member';
+  }).catch(() => {});
 </script>
 </body>
 </html>

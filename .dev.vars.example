@@ -1,0 +1,12 @@
+# Salin ke .dev.vars untuk tes lokal (file .dev.vars tidak ikut ke GitHub)
+SITE_URL=http://localhost:8788
+ADMIN_EMAILS=email-admin@contoh.com
+# 32 byte base64 -> buat dengan: node -e "console.log(require('crypto').randomBytes(32).toString('base64'))"
+DATA_KEY=
+BUILDER_TOKEN=
+CRON_SECRET=
+EMAIL_PROVIDER=log
+EMAIL_FROM=
+EMAIL_FROM_NAME=GoldHunter Garuda
+BREVO_API_KEY=
+RESEND_API_KEY=

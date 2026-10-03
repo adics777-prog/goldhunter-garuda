@@ -1,0 +1,14 @@
+{
+  "name": "goldhunter-garuda-web",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "wrangler pages dev --port 8788",
+    "db:migrate:local": "wrangler d1 migrations apply goldhunter-db --local",
+    "db:migrate:remote": "wrangler d1 migrations apply goldhunter-db --remote",
+    "deploy": "wrangler pages deploy"
+  },
+  "devDependencies": {
+    "wrangler": "^4.40.0"
+  }
+}

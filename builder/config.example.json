@@ -1,0 +1,15 @@
+{
+  "api_base": "https://goldhuntergaruda.com",
+  "token": "ISI_SAMA_DENGAN_BUILDER_TOKEN_DI_CLOUDFLARE",
+  "poll_seconds": 15,
+  "mt5": {
+    "ea_source": "C:/Users/User/Documents/Robot Trading/GoldHunter_Garuda.mq5",
+    "metaeditor": "C:/Program Files/MetaTrader 5 EXNESS/MetaEditor64.exe",
+    "mql_dir": "C:/Users/User/AppData/Roaming/MetaQuotes/Terminal/53785E099C927DB68A545C249CDBCE06/MQL5"
+  },
+  "mt4": {
+    "ea_source": "",
+    "metaeditor": "C:/Program Files (x86)/MetaTrader 4 EXNESS/metaeditor.exe",
+    "mql_dir": ""
+  }
+}

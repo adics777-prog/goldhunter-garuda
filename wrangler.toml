@@ -1,0 +1,20 @@
+# Cloudflare Pages: GoldHunter Garuda (landing page + member/admin area)
+name = "goldhunter-garuda"
+compatibility_date = "2026-09-01"
+pages_build_output_dir = "./public"
+
+[[d1_databases]]
+binding = "DB"
+database_name = "goldhunter-db"
+# Database produksi (Cloudflare D1, region APAC)
+database_id = "4f4609a2-bd9b-4a27-b36a-c9f08fdf3725"
+migrations_dir = "migrations"
+
+[vars]
+SITE_NAME = "GoldHunter Garuda"
+SITE_URL = "https://goldhuntergaruda.com"
+EMAIL_PROVIDER = "log"   # log | brevo | resend  (ganti ke resend/brevo setelah domain diverifikasi)
+EMAIL_FROM = "no-reply@goldhuntergaruda.com"
+EMAIL_FROM_NAME = "GoldHunter Garuda"
+# Rahasia (JANGAN ditulis di sini, repo ini publik) -> isi di Cloudflare dashboard / .dev.vars:
+# ADMIN_EMAILS, DATA_KEY, BUILDER_TOKEN, CRON_SECRET, BREVO_API_KEY / RESEND_API_KEY

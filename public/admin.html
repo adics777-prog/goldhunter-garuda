@@ -1,0 +1,45 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Admin — GoldHunter Garuda</title>
+<meta name="robots" content="noindex">
+<link rel="icon" href="/assets/brand/favicon.ico">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@700;900&family=Poppins:wght@300;400;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/assets/app.css">
+</head>
+<body>
+<div class="topbar">
+  <a class="brand" href="#/" style="padding:0"><img src="/assets/brand/goldhunter-garuda-logo-512.png" alt=""><span class="gold-text">ADMIN</span></a>
+  <button id="burger" aria-label="Menu">☰</button>
+</div>
+<div class="app">
+  <aside class="side" id="side">
+    <a class="brand" href="#/"><img src="/assets/brand/goldhunter-garuda-logo-512.png" alt=""><span><span class="gold-text">GOLDHUNTER</span><small>ADMIN AREA</small></span></a>
+    <nav class="nav">
+      <a href="#/" data-nav="">📊 Dashboard</a>
+      <div class="sep">Order</div>
+      <a href="#/ib" data-nav="ib">🎁 Order EA Gratis (IB) <span class="count hidden" id="c-ib"></span></a>
+      <a href="#/pesanan" data-nav="pesanan">💳 Order Berbayar <span class="count hidden" id="c-paid"></span></a>
+      <a href="#/ganti-akun" data-nav="ganti-akun">🔁 Ganti Nomor Akun <span class="count hidden" id="c-chg"></span></a>
+      <div class="sep">Data</div>
+      <a href="#/lisensi" data-nav="lisensi">🔑 Lisensi &amp; VPS</a>
+      <a href="#/build" data-nav="build">⚙️ Generate EA</a>
+      <a href="#/member" data-nav="member">👥 Member</a>
+      <div class="sep">Pengaturan</div>
+      <a href="#/produk" data-nav="produk">🏷️ Produk &amp; Harga</a>
+      <a href="#/pengaturan" data-nav="pengaturan">🛠️ Pengaturan</a>
+      <a href="#/email" data-nav="email">✉️ Log Email</a>
+      <a href="/member">↩ Member Area</a>
+    </nav>
+    <div class="me"><div id="me-name"></div><div id="me-email" class="muted tiny"></div>
+      <button class="btn btn-ghost btn-sm" style="margin-top:10px" onclick="GHG.logout()">Keluar</button></div>
+  </aside>
+  <main class="main" id="view"><div class="loading"><span class="spinner"></span></div></main>
+</div>
+<script src="/assets/common.js"></script>
+<script src="/assets/admin.js"></script>
+</body>
+</html>

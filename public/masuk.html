@@ -1,0 +1,34 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Masuk — GoldHunter Garuda</title>
+<meta name="robots" content="noindex">
+<link rel="icon" href="/assets/brand/favicon.ico">
+<link rel="apple-touch-icon" href="/assets/brand/apple-touch-icon.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@700;900&family=Poppins:wght@300;400;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/assets/app.css">
+</head>
+<body data-page="masuk">
+<main class="auth"><div class="auth-box">
+  <a class="auth-logo" href="/"><img src="/assets/brand/goldhunter-garuda-logo-512.png" alt=""><b class="gold-text">GOLDHUNTER GARUDA</b></a>
+  <div class="card">
+    <h1>Masuk Member Area</h1>
+    <p class="sub">Masuk untuk order EA, sewa VPS, dan unduh file EA Anda.</p>
+    <div class="alert info small hidden" id="order-note" style="margin-bottom:16px">🛒 Silakan masuk untuk melanjutkan order. Belum punya akun? <a href="/daftar" id="reg-link">Daftar dulu</a>.</div>
+    <div id="msg" class="alert hidden" style="margin-bottom:16px"></div>
+    <form novalidate>
+      <div class="field"><label>Email</label><input name="email" type="email" required autocomplete="email" placeholder="nama@email.com"></div>
+      <div class="field"><label>Password</label><div class="pw-wrap"><input name="password" type="password" required minlength="8" autocomplete="current-password"><button type="button" data-toggle-pw>lihat</button></div></div>
+      <p class="right small" style="margin:-6px 0 16px"><a href="/lupa-password">Lupa password?</a></p>
+      <button class="btn btn-gold btn-block" type="submit">Masuk</button>
+    </form>
+  </div>
+  <p class="links">Belum punya akun? <a href="/daftar" class="keep-q">Daftar gratis</a></p>
+</div></main>
+<script src="/assets/common.js"></script>
+<script src="/assets/auth.js"></script>
+</body>
+</html>

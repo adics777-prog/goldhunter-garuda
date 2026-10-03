@@ -1,0 +1,38 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Daftar — GoldHunter Garuda</title>
+<meta name="robots" content="noindex">
+<link rel="icon" href="/assets/brand/favicon.ico">
+<link rel="apple-touch-icon" href="/assets/brand/apple-touch-icon.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@700;900&family=Poppins:wght@300;400;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/assets/app.css">
+</head>
+<body data-page="daftar">
+<main class="auth"><div class="auth-box">
+  <a class="auth-logo" href="/"><img src="/assets/brand/goldhunter-garuda-logo-512.png" alt=""><b class="gold-text">GOLDHUNTER GARUDA</b></a>
+  <div class="card">
+    <h1>Daftar Member</h1>
+    <p class="sub">Gratis. Info login dikirim ke email Anda setelah pendaftaran berhasil.</p>
+    <div class="alert info small" id="order-note" style="margin-bottom:16px">🛒 <b>Untuk order wajib daftar dulu.</b> Isi data di bawah, lalu Anda langsung diarahkan ke halaman order.</div>
+    <div id="msg" class="alert hidden" style="margin-bottom:16px"></div>
+    <form novalidate>
+      <div class="field"><label>Nama lengkap</label><input name="name" required autocomplete="name"></div>
+      <div class="field"><label>Email</label><input name="email" type="email" required autocomplete="email" placeholder="nama@email.com"></div>
+      <div class="field"><label>Nomor WhatsApp</label><input name="phone" type="tel" required autocomplete="tel" placeholder="08xxxxxxxxxx"></div>
+      <div class="field"><label>Alamat</label><textarea name="address" required autocomplete="street-address" placeholder="Jalan, kota, provinsi" style="min-height:70px"></textarea></div>
+      <div class="field"><label>Password (min. 8 karakter)</label><div class="pw-wrap"><input name="password" type="password" required minlength="8" autocomplete="new-password"><button type="button" data-toggle-pw>lihat</button></div></div>
+      <div class="field"><label>Ulangi password</label><div class="pw-wrap"><input name="password2" type="password" required minlength="8" autocomplete="new-password"><button type="button" data-toggle-pw>lihat</button></div></div>
+      <label class="row small" style="align-items:flex-start;gap:10px;margin:4px 0 18px;color:var(--muted)"><input type="checkbox" name="agree" value="1" style="margin-top:4px"> <span>Saya paham trading forex/emas berisiko tinggi dan hasil masa lalu tidak menjamin hasil di masa depan.</span></label>
+      <button class="btn btn-gold btn-block" type="submit">Daftar Sekarang</button>
+    </form>
+  </div>
+  <p class="links">Sudah punya akun? <a href="/masuk" class="keep-q">Masuk</a></p>
+</div></main>
+<script src="/assets/common.js"></script>
+<script src="/assets/auth.js"></script>
+</body>
+</html>

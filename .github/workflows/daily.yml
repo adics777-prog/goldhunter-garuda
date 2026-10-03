@@ -1,0 +1,15 @@
+# Pengingat masa sewa (7/3/1 hari), tandai lisensi habis, batalkan order tak dibayar.
+# Butuh secret repo: CRON_SECRET (sama dengan secret CRON_SECRET di Cloudflare Pages).
+name: Harian GoldHunter
+on:
+  schedule:
+    - cron: '0 1 * * *'   # 08:00 WIB
+  workflow_dispatch:
+jobs:
+  daily:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Jalankan tugas harian
+        run: |
+          curl -fsS -X POST https://goldhuntergaruda.com/api/cron/daily \
+            -H "x-cron-secret: ${{ secrets.CRON_SECRET }}" -H "content-type: application/json" -d '{}'
