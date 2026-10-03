@@ -161,7 +161,9 @@
           <div class="row" id="bact">${b && b.status === 'done' && b.file_id ? `<a class="btn btn-ghost btn-sm" href="/api/files/${b.file_id}">⬇ Unduh .${o.platform === 'mt4' ? 'ex4' : 'ex5'}</a>` : ''}
           <button class="btn btn-ghost btn-sm" id="rebuild">↻ Generate ulang</button></div>
           ${b && b.status === 'failed' ? `<div class="alert err tiny" style="margin-top:10px;white-space:pre-wrap">${esc((b.log || '').slice(-600))}</div>` : ''}` : ''}
-        ${o.includes_vps && l ? `<hr><form id="vpsf"><div class="small muted" style="margin-bottom:10px">VPS pribadi untuk member. Isi akses Remote Desktop-nya; member memasang MetaTrader &amp; EA sendiri.</div>
+        ${o.includes_vps && l ? `<hr><form id="vpsf"><div class="small muted" style="margin-bottom:10px">${o.managed_vps
+            ? `<b style="color:var(--gold)">VPS share dikelola admin.</b> Pasang di server Anda: akun <b class="copy" data-copy="${esc(l.account_number)}">${esc(l.account_number)}</b> · server <span class="copy" data-copy="${esc(l.broker_server)}">${esc(l.broker_server)}</span> · password <span class="copy mono" data-copy="${esc(o.trading_pass)}">${esc(o.trading_pass) || '-'}</span>. Kolom IP/username/password di bawah hanya catatan internal Anda (tidak terlihat member).`
+            : 'VPS pribadi untuk member. Isi akses Remote Desktop-nya; member memasang MetaTrader &amp; EA sendiri.'}</div>
           <div class="grid c2" style="gap:0 12px"><div class="field"><label>IP / host VPS</label><input name="vps_ip" value="${esc(l.vps_ip)}"></div>
           <div class="field"><label>Username VPS</label><input name="vps_user" value="${esc(l.vps_user)}"></div></div>
           <div class="field"><label>Password VPS ${l.vps_pass ? '(kosongkan = tidak diubah)' : ''}</label><input name="vps_pass" placeholder="${l.vps_pass ? '••••••' : ''}"></div>
@@ -300,7 +302,7 @@
             <div class="field"><label>Nomor akun</label><input name="account_number" value="${esc(l.account_number)}"></div>
             <div class="field"><label>Server broker</label><input name="broker_server" value="${esc(l.broker_server)}"></div>
           </div>
-          ${l.includes_vps ? `<div class="small muted" style="margin:4px 0 10px">Akses Remote Desktop VPS pribadi member:</div>
+          ${l.includes_vps ? `<div class="small muted" style="margin:4px 0 10px">${l.managed_vps ? `VPS share dikelola admin. Password trading member: <span class="mono copy" data-copy="${esc(l.trading_pass)}">${esc(l.trading_pass) || '-'}</span>. IP/username/password VPS di bawah hanya catatan internal.` : 'Akses Remote Desktop VPS pribadi member:'}</div>
           <div class="grid c2" style="gap:0 12px"><div class="field"><label>IP VPS</label><input name="vps_ip" value="${esc(l.vps_ip)}"></div>
             <div class="field"><label>Username VPS</label><input name="vps_user" value="${esc(l.vps_user)}"></div></div>
           <div class="field"><label>Password VPS ${l.vps_pass ? '(sekarang: <span class="mono copy" data-copy="' + esc(l.vps_pass) + '">' + esc(l.vps_pass) + '</span>)' : ''}</label><input name="vps_pass" placeholder="kosongkan = tidak diubah"></div>
@@ -364,7 +366,7 @@
   }
 
   // ------------------------------------------------------------------ products
-  const KINDS = { ea_ib: 'EA gratis (IB)', ib_vps: 'VPS untuk EA gratis (IB)', ea_lifetime: 'EA beli selamanya', ea_rent: 'EA sewa bulanan', vps_ea: 'VPS + EA (bulanan)', vps: 'VPS saja (bulanan)' };
+  const KINDS = { ea_ib: 'EA gratis (IB)', ib_vps: 'VPS pribadi + EA gratis (IB)', ib_vps_shared: 'VPS share dikelola admin + EA gratis (IB)', vps_ea_shared: 'VPS share dikelola admin + EA (bulanan)', ea_lifetime: 'EA beli selamanya', ea_rent: 'EA sewa bulanan', vps_ea: 'VPS pribadi + EA (bulanan)', vps: 'VPS saja (bulanan)' };
   async function productsPage() {
     const { products } = await api('/admin/products');
     view.innerHTML = `${title('🏷️ Produk &amp; Harga', '<button class="btn btn-gold btn-sm" id="np">+ Produk</button>')}

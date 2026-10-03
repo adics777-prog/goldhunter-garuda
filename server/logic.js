@@ -146,7 +146,8 @@ export async function completeOrder(env, base, orderId, adminNote) {
   const user = await getUser(env, o.user_id);
   const parts = [];
   if (p.includes_ea) parts.push('File EA berlisensi bisa diunduh di menu <b>Lisensi &amp; VPS</b>.');
-  if (p.includes_vps) parts.push('VPS pribadi Anda sudah siap. Alamat IP, username dan password Remote Desktop ada di menu <b>Lisensi &amp; VPS</b>; silakan login lalu pasang MetaTrader dan EA.');
+  if (p.includes_vps && p.managed_vps) parts.push('Akun Anda sudah dipasang di VPS kami dan EA sudah berjalan (VPS dikelola admin). Pantau dari HP lewat aplikasi MetaTrader dengan <b>password investor (akun pantau)</b>; panduannya ada di menu <b>Lisensi &amp; VPS</b>.');
+  else if (p.includes_vps) parts.push('VPS pribadi Anda sudah siap. Alamat IP, username dan password Remote Desktop ada di menu <b>Lisensi &amp; VPS</b>; silakan login lalu pasang MetaTrader dan EA.');
   await notify(env, o.user_id, `Pesanan ${o.code} selesai`, `Masa aktif: ${fmtDate(lic.expires_at)}.`, '#/lisensi');
   await emailUser(env, user, `Pesanan ${o.code} selesai`,
     `<p>Halo ${esc(user.name)},</p><p>Pesanan <b>${esc(o.code)}</b> (${esc(p.name)}) untuk akun <b>${esc(o.account_number)}</b> sudah selesai diproses.</p>

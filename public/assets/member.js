@@ -136,9 +136,12 @@
           <div class="field"><label>Broker</label>${brokerField}</div>
           <div class="field"><label>Nomor akun trading (login MT)</label><input name="account_number" inputmode="numeric" placeholder="contoh: 183946672" required>
             <div class="help">EA akan dikunci hanya untuk nomor akun ini. Ganti nomor akun hanya bisa lewat pengajuan ke admin.</div></div>
-          <div class="field"><label>Server broker ${p.includes_vps ? '' : '<span class="muted">(opsional)</span>'}</label><input name="broker_server" placeholder="contoh: Exness-MT5Real25">
+          <div class="field"><label>Server broker ${p.managed_vps ? '' : '<span class="muted">(opsional)</span>'}</label><input name="broker_server" placeholder="contoh: Exness-MT5Real25">
             <div class="help">Terlihat di MetaTrader: File → Login to Trade Account, atau di email pembukaan akun dari broker.</div></div>
-          ${p.includes_vps ? `<div class="alert info small" style="margin-bottom:16px">🖥️ <b>VPS pribadi untuk Anda</b> (${esc(c.vps_spec || "Windows")}). Setelah pesanan selesai, IP, username dan password Remote Desktop muncul di menu <b>Lisensi &amp; VPS</b>. Anda login sendiri lalu memasang MetaTrader dan EA, dan bisa mengatur setting EA sesuka Anda.</div>` : ''}
+          ${p.managed_vps ? `<div class="field"><label>Password trading (password utama akun)</label><div class="pw-wrap"><input name="trading_password" type="password" autocomplete="off" required><button type="button" data-toggle-pw>lihat</button></div>
+            <div class="help">Dipakai admin untuk login MetaTrader di VPS kami dan memasang EA. Disimpan terenkripsi. Bukan password Personal Area broker.</div></div>
+            <div class="alert info small" style="margin-bottom:16px">🖥️ <b>VPS share dikelola admin.</b> Akun Anda dipasang di server kami dan <b>admin membantu setup sampai EA berjalan</b>. Anda tidak perlu mengurus VPS dan tidak mendapat akses Remote Desktop. Pantau lewat aplikasi MetaTrader di HP dengan <b>password investor</b> (akun pantau).</div>` : ''}
+          ${p.includes_vps && !p.managed_vps ? `<div class="alert info small" style="margin-bottom:16px">🖥️ <b>VPS pribadi untuk Anda</b> (${esc(c.vps_spec || "Windows")}). Setelah pesanan selesai, IP, username dan password Remote Desktop muncul di menu <b>Lisensi &amp; VPS</b>. Anda login sendiri lalu memasang MetaTrader dan EA, dan bisa mengatur setting EA sesuka Anda.</div>` : ''}
           ${p.billing === 'monthly' ? `<div class="field"><label>Lama sewa</label><div class="choice">${durations}</div></div>` : ''}
           <div class="alert info small" style="margin-bottom:16px">EA GoldHunter Garuda dirancang untuk akun <b>Standard Cent (USC)</b> dengan mode <b>hedging</b>, pair XAUUSDc.</div>
           <button class="btn btn-gold btn-block" type="submit">${p.billing === 'free' ? 'Ajukan EA Gratis' : 'Buat Pesanan'}</button>
@@ -164,14 +167,14 @@
         ${total ? '<p class="tiny muted" style="margin-top:8px">Kode unik 3 digit ditambahkan ke nominal transfer agar pembayaran mudah dicocokkan.</p>' : ''}
         <hr><ol class="steps small">${p.billing === 'free'
           ? '<li><b>Ajukan</b>Isi nomor akun Exness Anda.</li><li><b>Admin cek IB</b>Akun dicek di portal partner.</li><li><b>EA dikirim</b>File .ex5 terkunci di akun Anda, unduh di menu Lisensi.</li>'
-          : `<li><b>Transfer</b>Sesuai nominal di halaman pesanan.</li><li><b>Konfirmasi</b>Upload bukti transfer.</li>${p.requires_ib ? '<li><b>Admin cek IB</b>Akun dicek di portal partner.</li>' : ''}<li><b>Diproses</b>${p.includes_vps ? 'Admin menyiapkan VPS pribadi Anda' + (p.includes_ea ? ' + file EA dikunci ke akun Anda' : '') + '.' : 'File EA dikunci ke akun Anda.'}</li>`}</ol>`;
+          : `<li><b>Transfer</b>Sesuai nominal di halaman pesanan.</li><li><b>Konfirmasi</b>Upload bukti transfer.</li>${p.requires_ib ? '<li><b>Admin cek IB</b>Akun dicek di portal partner.</li>' : ''}<li><b>Diproses</b>${p.managed_vps ? 'Admin memasang akun Anda di VPS dan menyalakan EA.' : p.includes_vps ? 'Admin menyiapkan VPS pribadi Anda' + (p.includes_ea ? ' + file EA dikunci ke akun Anda' : '') + '.' : 'File EA dikunci ke akun Anda.'}</li>`}</ol>`;
     };
     f.onchange = calc;
     calc();
     f.onsubmit = async (e) => {
       e.preventDefault();
       const d = Object.fromEntries(new FormData(f));
-      const body = { product_id: p.id, platform: d.platform, account_number: (d.account_number || '').trim(), broker_server: d.broker_server,
+      const body = { product_id: p.id, platform: d.platform, account_number: (d.account_number || '').trim(), broker_server: d.broker_server, trading_password: d.trading_password,
         months: Number(d.months) || null,
         broker: p.requires_ib ? d.broker : (d.broker_sel || d.broker_other || '').trim() };
       if (!/^\d{4,15}$/.test(body.account_number)) return toast('Nomor akun harus angka', 'err');
@@ -236,7 +239,7 @@
         ? '✅ Pengajuan diterima. Admin sedang mengecek bahwa akun Anda terdaftar di bawah IB kami, lalu <b>segera memproses</b>.'
         : `✅ Bukti transfer diterima. Admin sedang mengecek pembayaran Anda, lalu pesanan <b>segera diproses</b>. <a href="#/bayar/${o.id}">Ganti bukti transfer</a>`}</div>`;
     } else if (o.status === 'processing') {
-      action = `<div class="alert info">⚙️ ${o.paid_at ? 'Pembayaran sudah diterima. ' : ''}Pesanan sedang diproses admin${o.includes_ea ? ' (file EA dikunci ke nomor akun Anda)' : ''}${o.includes_vps ? ' dan VPS pribadi Anda disiapkan' : ''}.</div>`;
+      action = `<div class="alert info">⚙️ ${o.paid_at ? 'Pembayaran sudah diterima. ' : ''}Pesanan sedang diproses admin${o.includes_ea ? ' (file EA dikunci ke nomor akun Anda)' : ''}${o.includes_vps ? (o.managed_vps ? ' dan akun Anda dipasang di VPS kami' : ' dan VPS pribadi Anda disiapkan') : ''}.</div>`;
     } else if (o.status === 'completed') {
       action = `<div class="alert ok">🎉 Pesanan selesai. <a href="#/lisensi">Buka Lisensi &amp; VPS →</a></div>`;
     } else if (o.status === 'rejected') {
@@ -324,6 +327,16 @@
     };
   }
 
+  // Monitoring from a phone with the read-only (investor) password
+  const monitorGuide = (name = 'Exness') => `<div class="card"><h3>📱 Pantau dari HP dengan akun pantau (password investor)</h3>
+      <p class="small muted" style="margin-bottom:12px">Disarankan memantau lewat aplikasi MetaTrader di HP memakai <b>password investor</b>. Password ini hanya bisa <b>melihat</b> posisi, profit dan riwayat, tidak bisa membuka/menutup order, jadi aman dan tidak mengganggu EA yang berjalan.</p>
+      <ol class="steps small">
+        <li><b>Buat password investor</b>Di MetaTrader PC/VPS: menu <i>Tools → Options → Server → Change</i>, pilih <i>Change investor (read only) password</i>. Bisa juga lewat pengaturan akun trading di Personal Area ${esc(name)}. Pengguna VPS share boleh minta dibuatkan oleh admin.</li>
+        <li><b>Pasang aplikasi MetaTrader 5</b>Dari Play Store (Android) atau App Store (iPhone). Gratis.</li>
+        <li><b>Login akun</b>Buka aplikasi → <i>Pengaturan → Akun baru / Login ke akun yang ada</i> → cari broker <b>${esc(name)}</b> → pilih server akun Anda → isi <b>nomor akun</b> dan <b>password investor</b>.</li>
+        <li><b>Pantau</b>Tab <i>Trade</i> untuk posisi berjalan dan floating, tab <i>History</i> untuk profit. Jangan login memakai password utama di banyak perangkat sekaligus.</li>
+      </ol></div>`;
+
   // ------------------------------------------------------------------ lisensi
   async function licensesPage() {
     const [{ licenses, changes, renewals }, c] = await Promise.all([api('/licenses'), getCatalog()]);
@@ -341,7 +354,11 @@
         else if (l.status === 'expired') ea = `<span class="muted small">Perpanjang untuk mengunduh EA lagi.</span>`;
         else ea = `<span class="muted small">File EA tersedia setelah pesanan selesai.</span>`;
       }
-      const vps = l.includes_vps ? (l.vps_ip
+      const vps = l.includes_vps && l.managed_vps
+        ? `<div class="summary" style="margin-top:14px"><div class="small" style="margin-bottom:6px"><b style="color:var(--gold)">🖥️ VPS share, dikelola admin</b></div>
+            <p class="small muted">${l.status === 'active' ? 'Akun Anda berjalan di VPS kami. Admin yang mengurus MetaTrader &amp; EA.' : 'Admin sedang memasang akun Anda di VPS.'} Pantau dari HP dengan password investor (panduan di bawah).</p>
+            ${l.vps_note ? `<p class="small" style="margin-top:8px">Catatan admin: ${esc(l.vps_note)}</p>` : ''}</div>`
+        : l.includes_vps ? (l.vps_ip
         ? `<div class="summary" style="margin-top:14px"><div class="small muted" style="margin-bottom:6px">VPS (dikelola admin)</div><dl class="kv small">
             <dt>IP / Host</dt><dd><span class="copy mono" data-copy="${esc(l.vps_ip)}">${esc(l.vps_ip)}</span></dd>
             ${l.vps_user ? `<dt>Username</dt><dd><span class="copy mono" data-copy="${esc(l.vps_user)}">${esc(l.vps_user)}</span></dd>` : ''}
@@ -380,7 +397,8 @@
         <li><b>Unduh file .ex5</b>Klik "Unduh EA" di atas. File hanya berjalan di nomor akun yang tertera.</li>
         <li><b>Salin ke folder Experts</b>Di MetaTrader 5: File → Open Data Folder → MQL5 → Experts, tempel file .ex5, lalu klik kanan Navigator → Refresh.</li>
         <li><b>Pasang di chart</b>Buka chart XAUUSDc timeframe M1, seret EA ke chart, centang "Allow Algo Trading", lalu nyalakan tombol Algo Trading.</li>
-        <li><b>Ganti file saat diperbarui</b>Setelah perpanjangan atau ganti akun, unduh file baru dan timpa file lama.</li></ol></div>`;
+        <li><b>Ganti file saat diperbarui</b>Setelah perpanjangan atau ganti akun, unduh file baru dan timpa file lama.</li></ol></div>
+      <div style="margin-top:22px">${monitorGuide()}</div>`;
     $$('[data-renew]').forEach((b) => b.onclick = () => renewModal(licenses.find((l) => l.id == b.dataset.renew), c));
     $$('[data-change]').forEach((b) => b.onclick = () => changeModal(licenses.find((l) => l.id == b.dataset.change)));
   }
@@ -412,7 +430,8 @@
       ${l.requires_ib ? '<br><b>Akun baru juga harus terdaftar di bawah IB kami.</b>' : ''}</p>
       <form id="chf" novalidate>
         <div class="field"><label>Nomor akun baru</label><input name="new_account" inputmode="numeric" required></div>
-        <div class="field"><label>Server broker akun baru ${l.includes_vps ? '' : '<span class="muted">(opsional)</span>'}</label><input name="new_server" placeholder="contoh: Exness-MT5Real25"></div>
+        <div class="field"><label>Server broker akun baru ${l.managed_vps ? '' : '<span class="muted">(opsional)</span>'}</label><input name="new_server" placeholder="contoh: Exness-MT5Real25"></div>
+        ${l.managed_vps ? `<div class="field"><label>Password trading akun baru</label><div class="pw-wrap"><input name="new_password" type="password" autocomplete="off"><button type="button" data-toggle-pw>lihat</button></div></div>` : ''}
         <div class="field"><label>Alasan</label><textarea name="reason" placeholder="contoh: akun lama ditutup / pindah ke akun cent baru"></textarea></div>
         <button class="btn btn-gold btn-block" type="submit">Kirim Pengajuan</button></form>`);
     const f = $('#chf', m.el);

@@ -178,7 +178,7 @@ route('POST', '/me/password', 'member', async ({ request, env, user }) => {
 
 route('GET', '/catalog', 'public', async ({ env }) => {
   const s = await getSettings(env);
-  const { results } = await env.DB.prepare('SELECT id, code, name, kind, billing, includes_ea, includes_vps, requires_ib, price, description, features FROM products WHERE active=1 ORDER BY sort, id').all();
+  const { results } = await env.DB.prepare('SELECT id, code, name, kind, billing, includes_ea, includes_vps, requires_ib, managed_vps, price, description, features FROM products WHERE active=1 ORDER BY sort, id').all();
   return json({
     products: results, durations: s.durations, discounts: s.discounts, mt4_enabled: s.mt4_enabled === '1', vps_spec: s.vps_spec || '',
     ib_brokers: s.ib_brokers.filter((b) => b.active && b.link), whatsapp: s.whatsapp || '',
@@ -249,6 +249,10 @@ function parseAccount(b, product, settings) {
     const ok = settings.ib_brokers.some((x) => x.active && x.link && x.name === broker);
     if (!ok) fail(400, 'EA gratis hanya untuk akun broker yang terdaftar di bawah IB kami');
   }
+  if (product.managed_vps) {
+    if (!broker_server) fail(400, 'VPS share: server broker wajib diisi (contoh: Exness-MT5Real25)');
+    if (!String(b.trading_password || '')) fail(400, 'VPS share: password trading wajib diisi agar admin bisa memasang akun Anda');
+  }
   return { platform, account_number, broker, broker_server };
 }
 
@@ -270,7 +274,7 @@ route('POST', '/orders', 'member', async ({ request, env, user, base }) => {
   }
   const id = await createOrder(env, base, user, {
     kind: 'new', product_id: p.id, months: int(b.months), ...acc,
-    trading_pass_enc: null,
+    trading_pass_enc: p.managed_vps ? await encrypt(env, String(b.trading_password)) : null,
   });
   return json({ ok: true, id });
 });
@@ -282,7 +286,7 @@ route('GET', '/orders', 'member', async ({ env, user }) => {
 });
 
 route('GET', '/orders/:id', 'member', async ({ env, user, params }) => {
-  const o = await env.DB.prepare(`SELECT o.*, p.name AS product_name, p.billing, p.includes_ea, p.includes_vps, p.requires_ib, p.kind AS product_kind
+  const o = await env.DB.prepare(`SELECT o.*, p.name AS product_name, p.billing, p.includes_ea, p.includes_vps, p.requires_ib, p.managed_vps, p.kind AS product_kind
       FROM orders o JOIN products p ON p.id=o.product_id WHERE o.id=? AND o.user_id=?`).bind(int(params.id), user.id).first();
   if (!o) fail(404, 'Pesanan tidak ditemukan');
   delete o.trading_pass_enc;
@@ -339,7 +343,10 @@ async function licenseView(env, l, forAdmin) {
     includes_ea: l.includes_ea, includes_vps: l.includes_vps, requires_ib: l.requires_ib, platform: l.platform, account_number: l.account_number,
     broker: l.broker, broker_server: l.broker_server, expires_at: l.expires_at, status: l.status,
     days_left: l.expires_at ? Math.ceil((l.expires_at - now()) / DAY) : null,
-    vps_ip: l.vps_ip, vps_user: l.vps_user, vps_pass: await decrypt(env, l.vps_pass_enc), vps_note: l.vps_note,
+    managed_vps: l.managed_vps,
+    // Shared VPS: the server login is the admin's, never shown to the member.
+    vps_ip: l.managed_vps && !forAdmin ? '' : l.vps_ip, vps_user: l.managed_vps && !forAdmin ? '' : l.vps_user,
+    vps_pass: l.managed_vps && !forAdmin ? '' : await decrypt(env, l.vps_pass_enc), vps_note: l.vps_note,
     build, build_pending: pending, created_at: l.created_at,
   };
   if (forAdmin) {
@@ -348,7 +355,7 @@ async function licenseView(env, l, forAdmin) {
   }
   return out;
 }
-const LICENSE_SQL = `SELECT l.*, p.name AS product_name, p.kind AS product_kind, p.billing, p.includes_ea, p.includes_vps, p.requires_ib,
+const LICENSE_SQL = `SELECT l.*, p.name AS product_name, p.kind AS product_kind, p.billing, p.includes_ea, p.includes_vps, p.requires_ib, p.managed_vps,
   u.name AS user_name, u.email AS user_email, u.phone AS user_phone
   FROM licenses l JOIN products p ON p.id=l.product_id JOIN users u ON u.id=l.user_id`;
 
@@ -389,9 +396,10 @@ route('POST', '/licenses/:id/change-account', 'member', async ({ request, env, u
   if (!/^\d{4,15}$/.test(new_account)) fail(400, 'Nomor akun baru harus angka (4-15 digit)');
   if (new_account === l.account_number) fail(400, 'Nomor akun baru sama dengan yang lama');
   const new_server = str(b.new_server, 80);
+  if (l.managed_vps && (!new_server || !b.new_password)) fail(400, 'VPS share: isi server dan password trading akun baru');
   await env.DB.prepare(`INSERT INTO account_changes (license_id, user_id, old_account, new_account, new_server, new_pass_enc, reason, created_at)
       VALUES (?,?,?,?,?,?,?,?)`).bind(l.id, user.id, l.account_number, new_account, new_server,
-    null, str(b.reason, 500), now()).run();
+    b.new_password ? await encrypt(env, String(b.new_password)) : null, str(b.reason, 500), now()).run();
   await notify(env, user.id, 'Pengajuan ganti nomor akun terkirim', `${l.account_number} → ${new_account}. Menunggu persetujuan admin.`, '#/lisensi');
   await emailAdmin(env, base, 'Pengajuan ganti nomor akun',
     `<p>${esc(user.name)} (${esc(user.email)}) minta ganti akun ${esc(l.account_number)} → <b>${esc(new_account)}</b> (${esc(l.product_name)}).</p><p>Alasan: ${esc(str(b.reason, 500)) || '-'}</p>`,
@@ -479,7 +487,7 @@ route('GET', '/admin/orders', 'admin', async ({ env, url }) => {
 });
 
 route('GET', '/admin/orders/:id', 'admin', async ({ env, params }) => {
-  const o = await env.DB.prepare(`SELECT o.*, p.name AS product_name, p.billing, p.includes_ea, p.includes_vps, p.requires_ib, p.kind AS product_kind,
+  const o = await env.DB.prepare(`SELECT o.*, p.name AS product_name, p.billing, p.includes_ea, p.includes_vps, p.requires_ib, p.managed_vps, p.kind AS product_kind,
       u.name AS user_name, u.email AS user_email, u.phone AS user_phone, u.address AS user_address
       FROM orders o JOIN products p ON p.id=o.product_id JOIN users u ON u.id=o.user_id WHERE o.id=?`).bind(int(params.id)).first();
   if (!o) fail(404, 'Order tidak ditemukan');
@@ -704,24 +712,24 @@ route('GET', '/admin/products', 'admin', async ({ env }) => {
   return json({ products: results });
 });
 function productFields(b) {
-  const kind = ['ea_ib', 'ib_vps', 'ea_lifetime', 'ea_rent', 'vps_ea', 'vps'].includes(b.kind) ? b.kind : fail(400, 'Jenis produk tidak valid');
+  const kind = ['ea_ib', 'ib_vps', 'ib_vps_shared', 'ea_lifetime', 'ea_rent', 'vps_ea', 'vps_ea_shared', 'vps'].includes(b.kind) ? b.kind : fail(400, 'Jenis produk tidak valid');
   const billing = { ea_ib: 'free', ea_lifetime: 'lifetime' }[kind] || 'monthly';
   const price = int(b.price);
   if (billing !== 'free' && !(price > 0)) fail(400, 'Harga harus lebih dari 0');
-  return [str(b.name, 80) || fail(400, 'Nama produk wajib'), kind, billing, kind === 'vps' ? 0 : 1, ['vps_ea', 'vps', 'ib_vps'].includes(kind) ? 1 : 0,
-    ['ea_ib', 'ib_vps'].includes(kind) ? 1 : 0, billing === 'free' ? 0 : price, str(b.description, 600), str(b.features, 1500), b.active ? 1 : 0, int(b.sort) || 0];
+  return [str(b.name, 80) || fail(400, 'Nama produk wajib'), kind, billing, kind === 'vps' ? 0 : 1, ['vps_ea', 'vps', 'ib_vps', 'ib_vps_shared', 'vps_ea_shared'].includes(kind) ? 1 : 0,
+    ['ea_ib', 'ib_vps', 'ib_vps_shared'].includes(kind) ? 1 : 0, kind.endsWith('_shared') ? 1 : 0, billing === 'free' ? 0 : price, str(b.description, 600), str(b.features, 1500), b.active ? 1 : 0, int(b.sort) || 0];
 }
 route('POST', '/admin/products', 'admin', async ({ request, env }) => {
   const b = await readJson(request);
   const f = productFields(b);
-  await env.DB.prepare(`INSERT INTO products (code, name, kind, billing, includes_ea, includes_vps, requires_ib, price, description, features, active, sort)
-      VALUES (?,?,?,?,?,?,?,?,?,?,?,?)`).bind(`${f[1]}_${randomToken(4).toLowerCase()}`, ...f).run();
+  await env.DB.prepare(`INSERT INTO products (code, name, kind, billing, includes_ea, includes_vps, requires_ib, managed_vps, price, description, features, active, sort)
+      VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)`).bind(`${f[1]}_${randomToken(4).toLowerCase()}`, ...f).run();
   return json({ ok: true });
 });
 route('PUT', '/admin/products/:id', 'admin', async ({ request, env, params }) => {
   const b = await readJson(request);
   const f = productFields(b);
-  await env.DB.prepare(`UPDATE products SET name=?, kind=?, billing=?, includes_ea=?, includes_vps=?, requires_ib=?, price=?, description=?, features=?, active=?, sort=? WHERE id=?`)
+  await env.DB.prepare(`UPDATE products SET name=?, kind=?, billing=?, includes_ea=?, includes_vps=?, requires_ib=?, managed_vps=?, price=?, description=?, features=?, active=?, sort=? WHERE id=?`)
     .bind(...f, int(params.id)).run();
   return json({ ok: true });
 });

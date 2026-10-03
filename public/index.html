@@ -207,6 +207,7 @@
       <span class="gold-text">GOLDHUNTER</span>
     </a>
     <div class="menu" id="menu">
+      <a href="#promo">Promo</a>
       <a href="#fitur">Fitur</a>
       <a href="#cara">Cara Kerja</a>
       <a href="#spek">Spesifikasi</a>
@@ -275,6 +276,26 @@
 </div>
 
 <!-- ============ FITUR ============ -->
+
+<!-- ============ PROMO ============ -->
+<section id="promo" style="padding-bottom:40px">
+  <div class="container">
+    <div class="center"><span class="tag">🔥 Promo GoldHunter Garuda</span></div>
+    <h2 class="sec-title">EA Emas Otomatis, <span class="gold-text">GRATIS</span></h2>
+    <p class="sec-sub">Cukup buka akun Exness di bawah partner GoldHunter Garuda, maka EA bisa Anda pakai tanpa biaya lisensi. Jalan 24 jam di VPS, pantau santai dari HP.</p>
+    <div class="grid-3">
+      <div class="feat reveal"><div class="ico">🎁</div><h3>EA Gratis Selamanya</h3><p>Untuk akun Exness yang terdaftar di bawah partner GoldHunter Garuda, baik akun baru maupun pindah partner. Spread &amp; komisi tetap sama.</p></div>
+      <div class="feat reveal"><div class="ico">🪙</div><h3>Modal Ringan, Akun Cent</h3><p>Dirancang untuk akun Standard Cent (USC), jadi bisa mulai dengan modal kecil dan lot kecil.</p></div>
+      <div class="feat reveal"><div class="ico">🖥️</div><h3>VPS 24 Jam <span class="promo-vps"></span></h3><p>VPS pribadi (Anda pegang sendiri) atau VPS share dikelola admin: cukup kirim akun, admin bantu setup sampai jalan.</p></div>
+      <div class="feat reveal"><div class="ico">📱</div><h3>Pantau dari HP</h3><p>Lihat posisi &amp; profit kapan saja lewat aplikasi MetaTrader dengan akun pantau (password investor).</p></div>
+      <div class="feat reveal"><div class="ico">🔒</div><h3>Lisensi Aman</h3><p>File EA dikunci ke nomor akun Anda. Ganti akun cukup ajukan dari member area.</p></div>
+      <div class="feat reveal"><div class="ico">💬</div><h3>Dibantu Admin</h3><p>Ada kendala order, pembayaran atau setup? Chat admin langsung via WhatsApp.</p></div>
+    </div>
+    <div class="center" style="margin-top:36px"><a href="/daftar" class="btn btn-gold">🦅 Daftar &amp; Ambil EA Gratis</a></div>
+    <p class="center" style="margin-top:18px;color:var(--muted);font-size:.8rem">Trading forex &amp; emas berisiko tinggi dan bisa menyebabkan kerugian. Hasil masa lalu (termasuk backtest) tidak menjamin hasil di masa depan.</p>
+  </div>
+</section>
+
 <section id="fitur">
   <div class="container">
     <div class="center"><span class="tag">Keunggulan</span></div>
@@ -379,7 +400,8 @@
         <p>Expert Advisor XAUUSD untuk trader Indonesia. Otomatis, disiplin, terukur.</p>
       </div>
       <div class="foot-links">
-        <a href="#fitur">Fitur</a><a href="#cara">Cara Kerja</a><a href="#spek">Spesifikasi</a><a href="#harga">Harga</a><a href="#faq">FAQ</a>
+        <a href="#promo">Promo</a>
+      <a href="#fitur">Fitur</a><a href="#cara">Cara Kerja</a><a href="#spek">Spesifikasi</a><a href="#harga">Harga</a><a href="#faq">FAQ</a>
       </div>
     </div>
     <div class="disclaimer">
@@ -441,6 +463,8 @@
         <div class="price"><b class="gold-text">${price}</b>${per}</div><ul>${feats}</ul>
         <a class="btn ${p === best ? 'btn-gold' : 'btn-outline'}" href="/daftar?paket=${p.id}">${p.billing === 'free' ? 'Daftar &amp; Ajukan Gratis' : 'Pilih Paket'}</a></div>`;
     }).join('');
+    const vpsMin = Math.min(...c.products.filter(p => p.includes_vps && p.price > 0).map(p => p.price));
+    if (isFinite(vpsMin)) document.querySelectorAll('.promo-vps').forEach(el => el.textContent = '· mulai ' + rp(vpsMin) + '/bln');
     if (c.whatsapp) document.querySelectorAll('.wa').forEach(a => a.href = `https://wa.me/${c.whatsapp.replace(/\D/g, '').replace(/^0/, '62')}?text=${encodeURIComponent('Halo Admin, saya ingin bertanya tentang EA GOLDHUNTER GARUDA.')}`);
   }).catch(() => { document.getElementById('plans').innerHTML = '<p class="center" style="grid-column:1/-1"><a class="btn btn-gold" href="/daftar">Lihat paket di member area</a></p>'; });
 
