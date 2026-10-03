@@ -37,6 +37,8 @@ Email yang tercantum di `ADMIN_EMAILS` otomatis menjadi admin saat mendaftar.
 Builder lokal: salin `builder/config.example.json` ke `builder/config.json`, set `api_base` ke `http://127.0.0.1:8788`
 dan `token` sama dengan `BUILDER_TOKEN` di `.dev.vars`, lalu jalankan `python builder/ghg_builder.py`.
 
+Sebelum commit, jalankan `python scripts/version-assets.py` supaya browser langsung memuat JS/CSS terbaru.
+
 ## Tayang di goldhuntergaruda.com (sekali saja)
 
 1. Beli domain `goldhuntergaruda.com` di Cloudflare (Domain Registration).
