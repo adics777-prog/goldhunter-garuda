@@ -207,17 +207,19 @@
     const tail = String(o.unique_code).padStart(3, '0');
     return t.endsWith(tail) ? `${t.slice(0, -3)}<span style="color:var(--green);text-decoration:underline">${tail}</span>` : t;
   };
-  const bankList = (bank_accounts) => String(bank_accounts || '').split(/\r?\n/).filter(Boolean).map((l) => {
-    const num = (l.match(/\d[\d\s-]{5,}\d/) || [''])[0].replace(/[\s-]/g, '');
-    return `<div class="row between" style="padding:8px 0;border-bottom:1px solid var(--line)"><span>${esc(l)}</span>${num ? `<button class="btn btn-ghost btn-sm" data-copy="${esc(num)}">Salin</button>` : ''}</div>`;
-  }).join('') || '<div class="muted">Rekening belum diatur admin. Silakan hubungi admin.</div>';
+  const bankList = (banks) => (banks || []).length ? `<div class="banks">${banks.map((b) => `
+      <div class="bank-card"><div class="bank-name">${esc(b.bank)}</div>
+        <div class="bank-num mono">${esc(b.number)}</div>
+        ${b.name ? `<div class="tiny muted">a.n. <b style="color:var(--text)">${esc(b.name)}</b></div>` : ''}
+        <button class="btn btn-ghost btn-sm" data-copy="${esc(String(b.number).replace(/[\s-]/g, ''))}">Salin nomor</button></div>`).join('')}</div>`
+    : '<div class="alert warn small">Rekening tujuan belum diatur admin. Silakan hubungi admin sebelum transfer.</div>';
   const waButton = (whatsapp, text, label = '💬 Ada kendala? Chat admin via WhatsApp') => {
     const wa = waLink(whatsapp, text);
     return wa ? `<a class="btn btn-ghost btn-sm" target="_blank" rel="noopener" href="${wa}">${label}</a>` : '';
   };
 
   async function orderDetail(id) {
-    const { order: o, bank_accounts, whatsapp } = await api('/orders/' + id);
+    const { order: o, banks, whatsapp } = await api('/orders/' + id);
     const free = o.billing === 'free';
     const steps = [
       ['Pesanan dibuat', o.created_at],
@@ -233,7 +235,7 @@
         <p class="muted small">Transfer <b>tepat</b> sesuai nominal, <b>termasuk 3 digit kode unik</b>, sebelum <b>${fmtDateTime(o.pay_deadline)}</b>.</p>
         <div class="summary" style="margin:14px 0"><div class="muted small">Total transfer (kode unik <b>${o.unique_code}</b>)</div>
           <div class="row between"><span class="total">${totalHtml(o)}</span><button class="btn btn-outline btn-sm" data-copy="${o.total}">Salin nominal</button></div></div>
-        <div style="margin-bottom:18px">${bankList(bank_accounts)}</div>
+        <div style="margin-bottom:18px"><div class="small muted" style="margin-bottom:8px">Transfer ke salah satu rekening berikut:</div>${bankList(banks)}</div>
         <div class="row"><a class="btn btn-gold" href="#/bayar/${o.id}">Saya Sudah Transfer → Konfirmasi Pembayaran</a>
           ${o.proof_file_id ? '' : '<button class="btn btn-red btn-sm" type="button" id="cancel">Batalkan pesanan</button>'}</div>
         <div style="margin-top:12px">${waButton(whatsapp, `Halo admin GoldHunter Garuda, saya ada kendala pembayaran pesanan ${o.code}`)}</div></div>`;
@@ -292,7 +294,7 @@
         <div style="margin-top:16px">${waButton(c.whatsapp, 'Halo admin GoldHunter Garuda, saya ada kendala pembayaran')}</div>`;
       return;
     }
-    const { order: o, bank_accounts, whatsapp } = await api('/orders/' + id);
+    const { order: o, banks, whatsapp } = await api('/orders/' + id);
     if (!['awaiting_payment', 'awaiting_verification'].includes(o.status) || !o.total) { location.replace('#/pesanan/' + o.id); return; }
     view.innerHTML = `
       <div class="crumb"><a href="#/pesanan/${o.id}">← Pesanan ${esc(o.code)}</a></div>
@@ -315,7 +317,7 @@
           <button class="btn btn-gold btn-block" type="submit">Kirim Bukti Transfer</button>
         </form>
         <div class="stack">
-          <div class="card"><h3>Rekening tujuan</h3>${bankList(bank_accounts)}
+          <div class="card"><h3>Rekening tujuan</h3>${bankList(banks)}
             <p class="tiny muted" style="margin-top:10px">Batas pembayaran: ${fmtDateTime(o.pay_deadline)}</p></div>
           <div class="card"><h3>Ada kendala?</h3><p class="small muted" style="margin-bottom:12px">Salah nominal, transfer gagal, atau bukti tidak bisa diupload? Hubungi admin, sebutkan kode pesanan <b>${esc(o.code)}</b>.</p>
             ${waButton(whatsapp, `Halo admin GoldHunter Garuda, saya ada kendala pembayaran pesanan ${o.code} (total ${rupiah(o.total)})`, '💬 Chat Admin via WhatsApp') || '<span class="muted small">Kontak admin belum diatur.</span>'}</div>

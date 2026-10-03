@@ -197,3 +197,10 @@ tbody tr.click:hover{background:var(--card-2)}
 label.row{flex-wrap:nowrap}
 .wa-float{position:fixed;right:18px;bottom:18px;width:56px;height:56px;border-radius:50%;background:#25d366;display:grid;place-items:center;box-shadow:0 8px 24px rgba(0,0,0,.45);z-index:90;transition:.2s}
 .wa-float:hover{transform:scale(1.08)}
+.banks{display:grid;gap:10px;grid-template-columns:repeat(auto-fit,minmax(min(220px,100%),1fr))}
+.bank-card{background:var(--bg-2);border:1px solid var(--line);border-radius:12px;padding:12px 14px;display:flex;flex-direction:column;gap:3px;align-items:flex-start}
+.bank-name{font-weight:700;color:var(--gold);letter-spacing:.5px}
+.bank-num{font-size:1.15rem;font-weight:700;letter-spacing:1px}
+.bank-card .btn{margin-top:6px}
+@media (max-width:700px){.bkr{grid-template-columns:1fr 1fr!important}}
+@media (max-width:600px){.btn{white-space:normal;text-align:center;line-height:1.35}}

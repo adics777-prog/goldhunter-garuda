@@ -3,7 +3,7 @@ import { now, DAY, fail, addMonths, fmtDate, rupiah, esc, randomToken } from './
 import { layout, sendEmail } from './email.js';
 
 // ---------- settings ----------
-const JSON_KEYS = ['durations', 'discounts', 'reminder_days', 'ib_brokers'];
+const JSON_KEYS = ['durations', 'discounts', 'reminder_days', 'ib_brokers', 'bank_list'];
 export async function getSettings(env) {
   const { results } = await env.DB.prepare('SELECT key, value FROM settings').all();
   const s = {};
@@ -15,6 +15,7 @@ export async function getSettings(env) {
   s.discounts ||= { 12: 25 };
   s.reminder_days ||= [7, 3, 1];
   s.ib_brokers ||= [];
+  s.bank_list ||= [];
   return s;
 }
 export async function putSetting(env, key, value) {
@@ -22,6 +23,10 @@ export async function putSetting(env, key, value) {
   await env.DB.prepare('INSERT INTO settings (key, value) VALUES (?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value')
     .bind(key, v).run();
 }
+
+// Payment accounts shown to members (only the active ones)
+export const activeBanks = (s) => (s.bank_list || []).filter((b) => b.active !== false && b.bank && b.number)
+  .map((b) => ({ bank: b.bank, number: b.number, name: b.name || '' }));
 
 // ---------- pricing ----------
 export function quote(product, months, settings) {
@@ -187,7 +192,7 @@ export async function createOrder(env, base, user, fields) {
       `<p>${esc(user.name)} (${esc(user.email)}) mengajukan EA gratis untuk akun ${esc(fields.broker)} <b>${esc(fields.account_number)}</b>. Cek di portal partner bahwa akun ini di bawah IB Anda, lalu klik Proses.</p>`, '/admin#/pesanan/' + id);
     return id;
   }
-  const banks = String(s.bank_accounts || '').split(/\r?\n/).filter(Boolean).map((l) => `<li>${esc(l)}</li>`).join('');
+  const banks = activeBanks(s).map((b) => `<li><b>${esc(b.bank)}</b> <span style="font-family:monospace;font-size:16px;color:#f5c542">${esc(b.number)}</span>${b.name ? ` a.n. <b>${esc(b.name)}</b>` : ''}</li>`).join('');
   const wa = s.whatsapp ? `https://wa.me/${String(s.whatsapp).replace(/\D/g, '').replace(/^0/, '62')}` : '';
   const payBlock = `<p>Silakan transfer <b>tepat</b> sebesar:</p><p style="font-size:24px;font-weight:bold;color:#f5c542;margin:6px 0">${rupiah(total)}</p>
        <p style="color:#a3a3b2;font-size:13px;margin-top:0">sudah termasuk 3 digit kode unik <b>${uniq}</b> agar pembayaran Anda mudah dikenali.</p>

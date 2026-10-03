@@ -6,7 +6,7 @@ import {
 } from '../../server/util.js';
 import {
   getSettings, putSetting, quote, notify, emailUser, emailAdmin, newOrderCode, getUser, getProduct,
-  processOrder, completeOrder, queueBuild, claimBuild, rebuildAll, finishBuild, runDaily, orderStatusLabel, pickUniqueCode, ensureUniqueCode, createOrder, changeOrderMonths, getUsdIdr, toIdr, boardName, maskAccount, reportInterval,
+  processOrder, completeOrder, queueBuild, claimBuild, rebuildAll, finishBuild, runDaily, orderStatusLabel, pickUniqueCode, ensureUniqueCode, createOrder, changeOrderMonths, getUsdIdr, toIdr, boardName, maskAccount, reportInterval, activeBanks,
 } from '../../server/logic.js';
 import { layout, sendEmail } from '../../server/email.js';
 
@@ -342,7 +342,7 @@ route('GET', '/orders/:id', 'member', async ({ env, user, params }) => {
   if (!o) fail(404, 'Pesanan tidak ditemukan');
   delete o.trading_pass_enc;
   const s = await getSettings(env);
-  return json({ order: { ...o, status_label: orderStatusLabel(o.status) }, bank_accounts: s.bank_accounts || '', whatsapp: s.whatsapp || '' });
+  return json({ order: { ...o, status_label: orderStatusLabel(o.status) }, banks: activeBanks(s), whatsapp: s.whatsapp || '' });
 });
 
 route('POST', '/orders/:id/confirm', 'member', async ({ request, env, user, params, base }) => {
@@ -815,7 +815,7 @@ route('PUT', '/admin/products/:id', 'admin', async ({ request, env, params }) =>
   return json({ ok: true });
 });
 
-const EDITABLE_SETTINGS = ['durations', 'discounts', 'bank_accounts', 'admin_notify_email', 'whatsapp', 'pay_deadline_hours', 'reminder_days', 'mt4_enabled',
+const EDITABLE_SETTINGS = ['durations', 'discounts', 'bank_list', 'admin_notify_email', 'whatsapp', 'pay_deadline_hours', 'reminder_days', 'mt4_enabled',
   'ib_brokers', 'auto_complete_ea', 'auto_process_paid', 'welcome_email_password', 'email_provider', 'email_from', 'email_from_name', 'vps_spec',
   'min_capital_usd', 'invoice_days_before', 'auto_rebuild_on_version', 'report_interval_min', 'board_enabled', 'board_name_mode', 'board_landing_top', 'board_stale_days', 'profit_est_enabled', 'profit_est_min_idr', 'profit_est_max_idr', 'profit_est_basis'];
 route('GET', '/admin/settings', 'admin', async ({ env }) => {
@@ -834,6 +834,12 @@ route('PUT', '/admin/settings', 'admin', async ({ request, env }) => {
     if (k === 'durations') { v = [...new Set(v.map(Number).filter((n) => n >= 1 && n <= 36))].sort((a, c) => a - c); if (!v.length) fail(400, 'Minimal 1 durasi'); }
     if (k === 'reminder_days') v = [...new Set(v.map(Number).filter((n) => n >= 1 && n <= 60))].sort((a, c) => c - a);
     if (k === 'discounts') v = Object.fromEntries(Object.entries(v).map(([m, d]) => [String(int(m)), Math.max(0, Math.min(90, Number(d) || 0))]).filter(([m, d]) => m !== 'null' && d > 0));
+    if (k === 'bank_list') {
+      if (!Array.isArray(v)) fail(400, 'Daftar rekening tidak valid');
+      v = v.map((x) => ({ bank: str(x.bank, 40), number: str(x.number, 40).replace(/[^\d\s-]/g, '').trim(), name: str(x.name, 80), active: x.active !== false }))
+        .filter((x) => x.bank || x.number);
+      for (const x of v) if (!x.bank || !x.number) fail(400, 'Setiap rekening wajib punya nama bank dan nomor');
+    }
     if (k === 'ib_brokers') v = v.map((x) => ({ name: str(x.name, 40), link: str(x.link, 300), active: !!x.active })).filter((x) => x.name);
     if (k === 'email_provider' && !['', 'log', 'resend', 'brevo'].includes(v)) fail(400, 'Penyedia email tidak dikenal');
     if (k === 'email_from' && v && !isEmail(str(v, 120))) fail(400, 'Alamat pengirim email tidak valid');

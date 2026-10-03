@@ -477,13 +477,19 @@
     const s = await api('/admin/settings');
     const env = s._env;
     const prov = s.email_provider || env.email_provider || 'log';
+    const bankRow = (b = { bank: '', number: '', name: '', active: true }) => `<div class="bkr" style="display:grid;grid-template-columns:1fr 1.3fr 1.4fr auto auto;gap:8px;align-items:center;margin-bottom:8px">
+      <input class="bk-bank" value="${esc(b.bank)}" placeholder="Bank / e-wallet (BCA, DANA…)"><input class="bk-num" value="${esc(b.number)}" placeholder="Nomor rekening" inputmode="numeric">
+      <input class="bk-name" value="${esc(b.name)}" placeholder="Atas nama"><label class="row nowrap" style="margin:0;color:var(--text)"><input type="checkbox" class="bk-act" ${b.active !== false ? 'checked' : ''}> aktif</label>
+      <button type="button" class="btn btn-red btn-sm bk-del" title="Hapus">✕</button></div>`;
     const brokerRow = (b = { name: '', link: '', active: true }) => `<div class="row ibr" style="margin-bottom:8px;flex-wrap:nowrap">
       <input class="ib-name" value="${esc(b.name)}" placeholder="Broker" style="max-width:120px"><input class="ib-link" style="flex:1" value="${esc(b.link)}" placeholder="https://link-ib-anda">
       <label class="row nowrap" style="margin:0;color:var(--text)"><input type="checkbox" class="ib-act" ${b.active ? 'checked' : ''}> aktif</label></div>`;
     view.innerHTML = `${title('🛠️ Pengaturan')}
       <form id="sf" class="grid" style="align-items:start;grid-template-columns:repeat(auto-fit,minmax(min(380px,100%),1fr))">
-        <div class="card"><h3>Pembayaran</h3>
-          <div class="field"><label>Rekening / e-wallet tujuan transfer (satu per baris)</label><textarea name="bank_accounts" style="min-height:110px">${esc(s.bank_accounts)}</textarea></div>
+        <div class="card" style="grid-column:1/-1"><h3>Pembayaran</h3>
+          <label>Rekening / e-wallet tujuan transfer (tampil ke member saat bayar)</label>
+          <div id="bkl">${(s.bank_list || []).map(bankRow).join('')}</div>
+          <button type="button" class="btn btn-ghost btn-sm" id="addbk" style="margin:4px 0 16px">+ Tambah rekening</button>
           <div class="grid c2" style="gap:0 12px"><div class="field"><label>Batas waktu bayar (jam)</label><input name="pay_deadline_hours" type="number" min="1" value="${esc(s.pay_deadline_hours)}"></div>
           <div class="field"><label>Kode unik</label><input value="Selalu aktif: 3 digit, berbeda tiap order (30 hari)" disabled></div></div>
           <h3 style="margin-top:8px">Durasi sewa &amp; diskon</h3>
@@ -549,6 +555,9 @@
         <div style="grid-column:1/-1"><button class="btn btn-gold" type="submit">Simpan Pengaturan</button></div>
       </form>`;
     $('#addib').onclick = () => $('#ibl').insertAdjacentHTML('beforeend', brokerRow());
+    $('#addbk').onclick = () => $('#bkl').insertAdjacentHTML('beforeend', bankRow());
+    $('#bkl').onclick = (e) => { if (e.target.classList.contains('bk-del')) e.target.closest('.bkr').remove(); };
+    if (!(s.bank_list || []).length) $('#bkl').insertAdjacentHTML('beforeend', bankRow());
     $('#test-email').onclick = async (e) => {
       const r = await busy(e.target, () => post('/admin/email-test', { to: $('#test-to').value }));
       if (r.status === 'sent') toast('Email tes terkirim ✔ Cek inbox (dan folder Spam).');
@@ -559,7 +568,9 @@
       e.preventDefault();
       const d = Object.fromEntries(new FormData(e.target));
       const body = {
-        bank_accounts: d.bank_accounts, pay_deadline_hours: d.pay_deadline_hours,
+        bank_list: $$('.bkr').map((r) => ({ bank: $('.bk-bank', r).value.trim(), number: $('.bk-num', r).value.trim(), name: $('.bk-name', r).value.trim(), active: $('.bk-act', r).checked }))
+          .filter((x) => x.bank || x.number),
+        pay_deadline_hours: d.pay_deadline_hours,
         durations: d.durations.split(/[,\s]+/).filter(Boolean).map(Number),
         discounts: Object.fromEntries(d.discounts.split(',').map((x) => x.split('=').map((y) => y.trim())).filter((x) => x.length === 2)),
         reminder_days: d.reminder_days.split(/[,\s]+/).filter(Boolean).map(Number),
