@@ -6,7 +6,7 @@ import {
 } from '../../server/util.js';
 import {
   getSettings, putSetting, quote, notify, emailUser, emailAdmin, newOrderCode, getUser, getProduct,
-  processOrder, completeOrder, queueBuild, claimBuild, finishBuild, runDaily, orderStatusLabel, pickUniqueCode, ensureUniqueCode, createOrder, changeOrderMonths,
+  processOrder, completeOrder, queueBuild, claimBuild, rebuildAll, finishBuild, runDaily, orderStatusLabel, pickUniqueCode, ensureUniqueCode, createOrder, changeOrderMonths, getUsdIdr, toIdr, boardName, maskAccount,
 } from '../../server/logic.js';
 import { layout, sendEmail } from '../../server/email.js';
 
@@ -193,33 +193,85 @@ route('GET', '/catalog', 'public', async ({ env }) => {
   });
 });
 
-// USD -> IDR rate for the minimum-capital display. Free sources, cached 15 minutes at the edge.
-const RATE_SOURCES = [
-  ['open.er-api.com', 'https://open.er-api.com/v6/latest/USD', (j) => j.rates && j.rates.IDR],
-  ['fawazahmed0 currency-api', 'https://cdn.jsdelivr.net/npm/@fawazahmed0/currency-api@latest/v1/currencies/usd.min.json', (j) => j.usd && j.usd.idr],
-  ['frankfurter (ECB)', 'https://api.frankfurter.dev/v1/latest?base=USD&symbols=IDR', (j) => j.rates && j.rates.IDR],
-];
 route('GET', '/rate', 'public', async ({ env, waitUntil }) => {
-  const cache = caches.default;
-  const key = new Request('https://goldhuntergaruda.com/__cache/usd-idr');
-  const hit = await cache.match(key);
-  if (hit) return hit;
-  let rate = 0, source = '';
-  for (const [name, url, pick] of RATE_SOURCES) {
-    try {
-      const r = await fetch(url, { cf: { cacheTtl: 900 } });
-      const v = Number(pick(await r.json()));
-      if (v > 1000 && v < 100000) { rate = v; source = name; break; }
-    } catch {}
-  }
+  const r = await getUsdIdr(env, waitUntil);
   const s = await getSettings(env);
-  if (rate) await putSetting(env, 'usd_idr_last', JSON.stringify({ rate, source, at: now() }));
-  else { try { ({ rate, source } = JSON.parse(s.usd_idr_last || '{}')); source += ' (terakhir)'; } catch {} }
-  const res = new Response(JSON.stringify({ usd_idr: rate || 0, source, updated_at: now(), min_capital_usd: Number(s.min_capital_usd || 100) }), {
+  return new Response(JSON.stringify({ usd_idr: r.rate || 0, source: r.source, updated_at: now(), min_capital_usd: Number(s.min_capital_usd || 100) }), {
     headers: { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'public, max-age=900' },
   });
-  if (rate) waitUntil(cache.put(key, res.clone()));
-  return res;
+});
+
+// ======================= PROFIT REPORTS (from the EA) & PUBLIC BOARD =======================
+route('POST', '/ea/report', 'public', async ({ request, env }) => {
+  const b = await readJson(request);
+  const id = int(b.lic);
+  const l = id ? await env.DB.prepare('SELECT id, account_number, report_token, status FROM licenses WHERE id=?').bind(id).first() : null;
+  if (!l || !l.report_token || String(b.token || '') !== l.report_token) fail(403, 'Token laporan tidak valid');
+  if (String(b.login || '') !== String(l.account_number)) fail(403, 'Nomor akun tidak cocok dengan lisensi');
+  const t = now();
+  const num = (v) => { const n = Number(v); return Number.isFinite(n) ? Math.round(n * 100) / 100 : 0; };
+  const last = await env.DB.prepare('SELECT updated_at FROM ea_stats WHERE license_id=?').bind(l.id).first();
+  if (last && t - last.updated_at < 60) return json({ ok: true, throttled: true });
+  const cur = str(b.currency, 8).toUpperCase();
+  const wib = new Date((t + 7 * 3600) * 1000).toISOString().slice(0, 10);
+  await env.DB.batch([
+    env.DB.prepare(`INSERT INTO ea_stats (license_id, login, server, currency, balance, equity, profit_day, profit_week, profit_month, positions, ea_version, updated_at)
+        VALUES (?,?,?,?,?,?,?,?,?,?,?,?) ON CONFLICT(license_id) DO UPDATE SET login=excluded.login, server=excluded.server, currency=excluded.currency,
+        balance=excluded.balance, equity=excluded.equity, profit_day=excluded.profit_day, profit_week=excluded.profit_week, profit_month=excluded.profit_month,
+        positions=excluded.positions, ea_version=excluded.ea_version, updated_at=excluded.updated_at`)
+      .bind(l.id, str(b.login, 20), str(b.server, 80), cur, num(b.balance), num(b.equity), num(b.day), num(b.week), num(b.month), int(b.positions) || 0, str(b.version, 20), t),
+    env.DB.prepare(`INSERT INTO ea_stats_daily (license_id, day, profit, balance, currency) VALUES (?,?,?,?,?)
+        ON CONFLICT(license_id, day) DO UPDATE SET profit=excluded.profit, balance=excluded.balance, currency=excluded.currency`)
+      .bind(l.id, wib, num(b.day), num(b.balance), cur),
+  ]);
+  return json({ ok: true });
+});
+
+async function boardRows(env, rate, { includeHidden = false } = {}) {
+  const s = await getSettings(env);
+  const stale = now() - Number(s.board_stale_days || 3) * DAY;
+  const { results } = await env.DB.prepare(`SELECT st.*, l.id AS lid, l.account_number, l.broker, l.platform, l.status, l.board_show, l.board_hide_name,
+      u.name AS user_name, u.email AS user_email, p.name AS product_name
+      FROM ea_stats st JOIN licenses l ON l.id=st.license_id JOIN users u ON u.id=l.user_id JOIN products p ON p.id=l.product_id
+      ${includeHidden ? '' : `WHERE l.status='active' AND l.board_show=1 AND st.updated_at > ${stale}`}`).all();
+  const mode = s.board_name_mode || 'first_initial';
+  return results.map((r) => {
+    const idr = (v) => { const x = toIdr(v, r.currency, rate); return x == null ? null : Math.round(x); };
+    const pct = (p) => (r.balance - p) > 0 ? Math.round(p / (r.balance - p) * 10000) / 100 : null;
+    const row = {
+      name: boardName(r.user_name, mode, r.board_hide_name), account: maskAccount(r.account_number), broker: r.broker, platform: r.platform,
+      day_idr: idr(r.profit_day), week_idr: idr(r.profit_week), month_idr: idr(r.profit_month), balance_idr: idr(r.balance),
+      day_pct: pct(r.profit_day), week_pct: pct(r.profit_week), month_pct: pct(r.profit_month), updated_at: r.updated_at,
+    };
+    if (includeHidden) Object.assign(row, { license_id: r.lid, user_name: r.user_name, user_email: r.user_email, account_number: r.account_number,
+      product_name: r.product_name, status: r.status, currency: r.currency, balance: r.balance, equity: r.equity, positions: r.positions,
+      ea_version: r.ea_version, board_show: r.board_show, board_hide_name: r.board_hide_name, stale: r.updated_at <= stale });
+    return row;
+  }).filter((r) => includeHidden || r.month_idr != null);
+}
+
+route('GET', '/board', 'public', async ({ env, url, waitUntil }) => {
+  const s = await getSettings(env);
+  if (s.board_enabled !== '1') return json({ enabled: false, rows: [] });
+  const period = ['day', 'week', 'month'].includes(url.searchParams.get('period')) ? url.searchParams.get('period') : 'month';
+  const { rate, source } = await getUsdIdr(env, waitUntil);
+  const rows = (await boardRows(env, rate)).sort((a, b) => (b[period + '_idr'] || 0) - (a[period + '_idr'] || 0));
+  const limit = Math.min(int(url.searchParams.get('limit')) || 500, 500);
+  return new Response(JSON.stringify({
+    enabled: true, period, usd_idr: rate, rate_source: source, generated_at: now(), landing_top: Number(s.board_landing_top || 10),
+    total_accounts: rows.length, total_idr: rows.reduce((a, r) => a + (r[period + '_idr'] || 0), 0), rows: rows.slice(0, limit),
+  }), { headers: { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'public, max-age=60' } });
+});
+
+route('GET', '/admin/board', 'admin', async ({ env, waitUntil }) => {
+  const { rate } = await getUsdIdr(env, waitUntil);
+  const rows = (await boardRows(env, rate, { includeHidden: true })).sort((a, b) => (b.month_idr || 0) - (a.month_idr || 0));
+  return json({ usd_idr: rate, rows });
+});
+route('PUT', '/admin/licenses/:id/board', 'admin', async ({ request, env, params }) => {
+  const b = await readJson(request);
+  await env.DB.prepare('UPDATE licenses SET board_show=?, board_hide_name=? WHERE id=?').bind(b.board_show ? 1 : 0, b.board_hide_name ? 1 : 0, int(params.id)).run();
+  return json({ ok: true });
 });
 
 route('GET', '/member/summary', 'member', async ({ env, user }) => {
@@ -351,7 +403,9 @@ async function licenseView(env, l, forAdmin) {
     vps_ip: l.managed_vps && !forAdmin ? '' : l.vps_ip, vps_user: l.managed_vps && !forAdmin ? '' : l.vps_user,
     vps_pass: l.managed_vps && !forAdmin ? '' : await decrypt(env, l.vps_pass_enc), vps_note: l.vps_note,
     build, build_pending: pending, created_at: l.created_at,
+    report: await env.DB.prepare('SELECT currency, balance, equity, profit_day, profit_week, profit_month, positions, updated_at FROM ea_stats WHERE license_id=?').bind(l.id).first(),
   };
+  if (forAdmin) { out.board_show = l.board_show; out.board_hide_name = l.board_hide_name; }
   if (forAdmin) {
     out.trading_pass = await decrypt(env, l.trading_pass_enc);
     out.user_id = l.user_id; out.user_name = l.user_name; out.user_email = l.user_email; out.user_phone = l.user_phone;
@@ -470,7 +524,8 @@ route('GET', '/admin/stats', 'admin', async ({ env }) => {
   return json({
     awaiting_payment: pay.n, awaiting_verification: ver.n, processing: proc.n, active_licenses: act.n, expiring_7d: soon.n,
     ib_open: ib.n, ib_unchecked: ibUnchecked.n, pending_changes: chg.n, members: members.n, builds_pending: queued.n, builds_failed_7d: failed.n, revenue_30d: revenue.n,
-    builder, daily, now: t,
+    builder, daily, now: t, auto_rebuild: s.auto_rebuild_on_version !== '0',
+    version_event: (() => { try { return JSON.parse(s.ea_version_event || 'null'); } catch { return null; } })(),
   });
 });
 
@@ -757,7 +812,7 @@ route('PUT', '/admin/products/:id', 'admin', async ({ request, env, params }) =>
 
 const EDITABLE_SETTINGS = ['durations', 'discounts', 'bank_accounts', 'admin_notify_email', 'whatsapp', 'pay_deadline_hours', 'reminder_days', 'mt4_enabled',
   'ib_brokers', 'auto_complete_ea', 'auto_process_paid', 'welcome_email_password', 'email_provider', 'email_from', 'email_from_name', 'vps_spec',
-  'min_capital_usd', 'invoice_days_before', 'profit_est_enabled', 'profit_est_min_idr', 'profit_est_max_idr', 'profit_est_basis'];
+  'min_capital_usd', 'invoice_days_before', 'auto_rebuild_on_version', 'board_enabled', 'board_name_mode', 'board_landing_top', 'board_stale_days', 'profit_est_enabled', 'profit_est_min_idr', 'profit_est_max_idr', 'profit_est_basis'];
 route('GET', '/admin/settings', 'admin', async ({ env }) => {
   const s = await getSettings(env);
   const out = Object.fromEntries(EDITABLE_SETTINGS.map((k) => [k, s[k] ?? '']));
@@ -810,6 +865,11 @@ route('GET', '/admin/builds', 'admin', async ({ env }) => {
   return json({ builds: results });
 });
 
+route('POST', '/admin/rebuild-all', 'admin', async ({ env }) => {
+  const n = await rebuildAll(env, '', 'Generate ulang semua oleh admin');
+  return json({ ok: true, queued: n });
+});
+
 route('POST', '/admin/run-daily', 'admin', async ({ env, base }) => json({ ok: true, result: await runDaily(env, base) }));
 
 // =====================================================================
@@ -826,7 +886,7 @@ route('POST', '/builder/claim', 'builder', async ({ request, env, base, waitUnti
     await putSetting(env, 'daily_last_run', JSON.stringify({ at: now(), running: true }));
     waitUntil(runDaily(env, base).catch((e) => console.error('daily', e)));
   }
-  return json({ job: await claimBuild(env, str(b.builder_id, 60) || 'builder') });
+  return json({ job: await claimBuild(env, str(b.builder_id, 60) || 'builder', b.versions && typeof b.versions === 'object' ? b.versions : {}) });
 });
 route('POST', '/builder/result', 'builder', async ({ request, env, base }) => {
   const b = await readJson(request);

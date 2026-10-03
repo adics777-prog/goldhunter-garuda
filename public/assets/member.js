@@ -350,6 +350,22 @@
         <li><b>Pantau</b>Tab <i>Trade</i> untuk posisi berjalan dan floating, tab <i>History</i> untuk profit. Jangan login memakai password utama di banyak perangkat sekaligus.</li>
       </ol></div>`;
 
+  // Profit report sent by the EA (shown on the public progress board)
+  const reportBox = (l) => {
+    const r = l.report;
+    if (!r) return `<div class="small muted" style="margin-top:12px">📈 Laporan profit: <b>belum masuk</b>. Izinkan WebRequest di MetaTrader agar progress Anda tampil (panduan di bawah).</div>`;
+    const cur = esc(r.currency);
+    const f = (v) => `${v < 0 ? '-' : '+'}${Math.abs(v).toLocaleString('id-ID', { maximumFractionDigits: 2 })} ${cur}`;
+    return `<div class="small" style="margin-top:12px">📈 Laporan EA ${ago(r.updated_at)}: hari ini <b>${f(r.profit_day)}</b> · minggu ini <b>${f(r.profit_week)}</b> · bulan ini <b>${f(r.profit_month)}</b> <a href="/profit" target="_blank" class="tiny">papan progress ↗</a></div>`;
+  };
+  const reportGuide = () => `<div class="card"><h3>📈 Aktifkan laporan profit ke web (sekali saja)</h3>
+      <p class="small muted" style="margin-bottom:12px">EA mengirim profit harian, mingguan dan bulanan ke papan <a href="/profit" target="_blank">Progress Member</a>. EA tetap trading normal walaupun langkah ini belum dilakukan.</p>
+      <ol class="steps small">
+        <li><b>Buka pengaturan MetaTrader</b>Menu <i>Tools → Options</i> (atau tekan <span class="mono">Ctrl+O</span>), tab <i>Expert Advisors</i>.</li>
+        <li><b>Izinkan alamat web</b>Centang <i>Allow WebRequest for listed URL</i>, klik tanda <b>+</b>, ketik <span class="copy mono" data-copy="https://goldhuntergaruda.com">https://goldhuntergaruda.com</span>, lalu <b>OK</b>.</li>
+        <li><b>Selesai</b>Dalam ±5 menit laporan pertama masuk dan tampil di kartu lisensi Anda. Nama di papan tampil singkat (misal "Budi S."); minta admin jika ingin disamarkan.</li>
+      </ol></div>`;
+
   // ------------------------------------------------------------------ lisensi
   async function licensesPage() {
     const [{ licenses, changes, renewals }, c] = await Promise.all([api('/licenses'), getCatalog()]);
@@ -392,7 +408,7 @@
           ? `<div class="row between small"><span>${l.requires_ib ? 'Sewa VPS' : 'Masa aktif'} s/d <b>${fmtDate(l.expires_at)}</b></span><span class="${l.days_left <= 7 ? 'badge b-orange' : 'muted'}">${l.days_left > 0 ? l.days_left + ' hari lagi' : 'sudah habis'}</span></div><div class="bar"><i style="width:${pct}%"></i></div>`
           : '<div class="small">Masa aktif: <b>Selamanya</b></div>'}
           ${l.requires_ib && l.includes_vps ? '<div class="tiny muted" style="margin-top:4px">EA gratis (IB) tidak kedaluwarsa; yang diperpanjang hanya sewa VPS.</div>' : ''}</div>
-        <div class="row">${ea}</div>${vps}
+        <div class="row">${ea}</div>${vps}${l.includes_ea ? reportBox(l) : ''}
         <div class="row" style="margin-top:16px">
           ${l.billing === 'monthly' && ['active', 'expired'].includes(l.status) ? (renewing
             ? (renewing.status === 'awaiting_payment'
@@ -413,7 +429,8 @@
         <li><b>Salin ke folder Experts</b>Di MetaTrader 5: File → Open Data Folder → MQL5 → Experts, tempel file .ex5, lalu klik kanan Navigator → Refresh.</li>
         <li><b>Pasang di chart</b>Buka chart XAUUSDc timeframe M1, seret EA ke chart, centang "Allow Algo Trading", lalu nyalakan tombol Algo Trading.</li>
         <li><b>Ganti file saat diperbarui</b>Setelah perpanjangan atau ganti akun, unduh file baru dan timpa file lama.</li></ol></div>
-      <div style="margin-top:22px">${monitorGuide()}</div>`;
+      <div style="margin-top:22px">${monitorGuide()}</div>
+      ${licenses.some((l) => l.includes_ea) ? `<div style="margin-top:22px">${reportGuide()}</div>` : ''}`;
     $$('[data-renew]').forEach((b) => b.onclick = () => renewModal(licenses.find((l) => l.id == b.dataset.renew), c));
     $$('[data-change]').forEach((b) => b.onclick = () => changeModal(licenses.find((l) => l.id == b.dataset.change)));
   }

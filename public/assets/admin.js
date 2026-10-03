@@ -34,7 +34,7 @@
   }
 
   const routes = { '': dashboard, ib: ibOrders, pesanan: paidOrders, 'ganti-akun': changesPage, lisensi: licensesPage, build: buildsPage,
-    member: usersPage, produk: productsPage, pengaturan: settingsPage, email: emailsPage };
+    member: usersPage, profit: profitPage, produk: productsPage, pengaturan: settingsPage, email: emailsPage };
   async function render() {
     clearInterval(timer);
     const [name, arg] = location.hash.replace(/^#\/?/, '').split('/');
@@ -68,14 +68,24 @@
         <div class="card"><h3>Builder EA (compile otomatis)</h3>
           <p>${online ? '<span class="badge b-green">● Online</span>' : '<span class="badge b-red">● Offline</span>'}
             <span class="small muted">${s.builder ? `terakhir aktif ${ago(s.builder.at)} (${esc(s.builder.id)})` : 'belum pernah terhubung'}</span></p>
+          <p class="small" style="margin-top:8px">Versi EA di builder: <b>MT5 ${s.builder && s.builder.versions && s.builder.versions.mt5 ? 'v' + esc(s.builder.versions.mt5) : '-'}</b> ·
+            <b>MT4 ${s.builder && s.builder.versions && s.builder.versions.mt4 ? 'v' + esc(s.builder.versions.mt4) : 'belum ada (.mq4)'}</b></p>
+          <p class="tiny muted">Builder selalu memakai file EA terbaru di PC. ${s.auto_rebuild ? 'Saat <span class="mono">#property version</span> dinaikkan, semua lisensi aktif otomatis di-compile ulang &amp; member mendapat email.' : 'Compile ulang otomatis saat versi naik: <b>mati</b> (atur di Pengaturan).'}</p>
+          ${s.version_event ? `<p class="tiny" style="margin-top:4px">Terakhir: ${esc(s.version_event.platform).toUpperCase()} v${esc(s.version_event.from)} → v${esc(s.version_event.to)}, ${s.version_event.rebuilt} lisensi di-compile ulang (${ago(s.version_event.at)}).</p>` : ''}
           <p class="small muted" style="margin-top:8px">Antre: <b>${s.builds_pending}</b> · gagal 7 hari: <b>${s.builds_failed_7d}</b>.
             ${online ? '' : 'Jalankan <b>Jalankan Builder.bat</b> di PC/VPS Windows agar order bisa di-generate.'}</p>
-          <a class="btn btn-ghost btn-sm" style="margin-top:12px" href="#/build">Lihat riwayat generate</a></div>
+          <div class="row" style="margin-top:12px"><a class="btn btn-ghost btn-sm" href="#/build">Lihat riwayat generate</a>
+            <button class="btn btn-outline btn-sm" id="rebuild-all">↻ Generate ulang semua lisensi aktif</button></div></div>
         <div class="card"><h3>Pengingat &amp; pembersihan harian</h3>
           <p class="small muted">Kirim email pengingat masa sewa (7/3/1 hari), tandai lisensi yang habis, dan batalkan order yang tidak dibayar. Berjalan otomatis setiap hari.</p>
           <p class="small" style="margin-top:8px">${s.daily ? `Terakhir: ${fmtDateTime(s.daily.at)}, ${s.daily.reminders ?? 0} pengingat, ${s.daily.expired ?? 0} habis, ${s.daily.unpaid_expired ?? 0} order kedaluwarsa` : 'Belum pernah berjalan.'}</p>
           <button class="btn btn-outline btn-sm" style="margin-top:12px" id="run-daily">Jalankan sekarang</button></div>
       </div>`;
+    $('#rebuild-all').onclick = async (e) => {
+      if (!(await confirmBox('Generate ulang semua?', 'Semua lisensi EA yang aktif di-compile ulang dengan file EA terbaru di PC, dan member mendapat email "File EA baru siap diunduh".', 'Generate semua'))) return;
+      const r = await busy(e.target, () => post('/admin/rebuild-all'));
+      toast(`${r.queued} lisensi masuk antrean compile`); render();
+    };
     $('#run-daily').onclick = async (e) => {
       const r = await busy(e.target, () => post('/admin/run-daily'));
       toast(`Selesai: ${r.result.reminders} pengingat, ${r.result.expired} lisensi habis`);
@@ -377,6 +387,47 @@
     });
   }
 
+
+  // ------------------------------------------------------------------ profit board
+  async function profitPage() {
+    const [{ rows, usd_idr }, s] = await Promise.all([api('/admin/board'), api('/admin/settings')]);
+    const money = (n) => n == null ? '-' : (n < 0 ? '- ' : '') + rupiah(Math.abs(n));
+    const cls = (n) => (n || 0) < 0 ? 'color:#ff8b95' : 'color:#6ee7a2';
+    view.innerHTML = `${title('📈 Papan Profit', '<a class="btn btn-ghost btn-sm" href="/profit" target="_blank">Lihat halaman publik ↗</a>')}
+      <form class="card" id="bf" style="margin-bottom:18px"><div class="grid" style="grid-template-columns:repeat(auto-fit,minmax(min(200px,100%),1fr));gap:0 14px;align-items:end">
+        <div class="field"><label>Papan profit publik</label><select name="board_enabled"><option value="1">Tampil</option><option value="0" ${s.board_enabled === '0' ? 'selected' : ''}>Disembunyikan</option></select></div>
+        <div class="field"><label>Nama yang ditampilkan</label><select name="board_name_mode">
+          ${[['first_initial', 'Nama depan + inisial (Budi S.)'], ['first', 'Nama depan saja (Budi)'], ['full', 'Nama lengkap'], ['hidden', 'Samarkan semua (Member Anonim)']]
+            .map(([v, l]) => `<option value="${v}" ${(s.board_name_mode || 'first_initial') === v ? 'selected' : ''}>${l}</option>`).join('')}</select></div>
+        <div class="field"><label>Jumlah di landing page</label><input name="board_landing_top" type="number" min="0" max="50" value="${esc(s.board_landing_top || 10)}"></div>
+        <div class="field"><label>Sembunyikan jika tidak lapor (hari)</label><input name="board_stale_days" type="number" min="1" max="30" value="${esc(s.board_stale_days || 3)}"></div>
+      </div><button class="btn btn-gold btn-sm" type="submit">Simpan</button>
+      <span class="tiny muted" style="margin-left:10px">Profit dalam Rupiah: akun cent (USC) ÷ 100 × kurs ${usd_idr ? rupiah(usd_idr) + '/USD' : '-'}.</span></form>
+      ${rows.length ? `<div class="table-wrap"><table><thead><tr><th>Member (asli)</th><th>Tampil sebagai</th><th>Akun</th><th class="right">Hari ini</th><th class="right">Minggu ini</th><th class="right">Bulan ini</th><th>Balance</th><th>Laporan</th><th>Tampil</th><th>Samarkan nama</th></tr></thead><tbody>
+        ${rows.map((r) => `<tr style="${r.board_show ? '' : 'opacity:.55'}">
+          <td>${esc(r.user_name)}<div class="tiny muted">${esc(r.user_email)}</div></td>
+          <td class="small">${esc(r.name)}</td>
+          <td><a href="#/lisensi/${r.license_id}"><b>${esc(r.account_number)}</b></a><div class="tiny muted">${esc(r.broker)} · ${String(r.platform).toUpperCase()} · ${esc(r.product_name)}</div></td>
+          <td class="right nowrap" style="${cls(r.day_idr)}">${money(r.day_idr)}</td>
+          <td class="right nowrap" style="${cls(r.week_idr)}">${money(r.week_idr)}</td>
+          <td class="right nowrap" style="${cls(r.month_idr)}">${money(r.month_idr)}</td>
+          <td class="small nowrap">${Number(r.balance).toLocaleString('id-ID')} ${esc(r.currency)}<div class="tiny muted">${r.positions} posisi</div></td>
+          <td class="tiny nowrap">${ago(r.updated_at)}${r.stale ? '<div><span class="badge b-orange">tidak lapor</span></div>' : ''}${r.status !== 'active' ? `<div>${licenseBadge(r.status)}</div>` : ''}</td>
+          <td><input type="checkbox" data-show="${r.license_id}" ${r.board_show ? 'checked' : ''}></td>
+          <td><input type="checkbox" data-hide="${r.license_id}" ${r.board_hide_name ? 'checked' : ''}></td></tr>`).join('')}</tbody></table></div>`
+        : `<div class="card empty">Belum ada laporan dari EA member.<br><span class="small">Laporan masuk otomatis dari file EA yang dibuat builder (versi dengan pelapor). Member perlu mengizinkan WebRequest untuk https://goldhuntergaruda.com di MetaTrader.</span></div>`}`;
+    $('#bf').onsubmit = async (e) => {
+      e.preventDefault();
+      await busy($('#bf button'), () => api('/admin/settings', { method: 'PUT', body: Object.fromEntries(new FormData(e.target)) }));
+      toast('Pengaturan papan profit disimpan'); render();
+    };
+    $$('[data-show],[data-hide]').forEach((cb) => cb.onchange = async () => {
+      const id = cb.dataset.show || cb.dataset.hide;
+      const body = { board_show: $(`[data-show="${id}"]`).checked, board_hide_name: $(`[data-hide="${id}"]`).checked };
+      try { await api(`/admin/licenses/${id}/board`, { method: 'PUT', body }); toast('Disimpan'); render(); } catch (err) { toast(err.message, 'err'); }
+    });
+  }
+
   // ------------------------------------------------------------------ products
   const KINDS = { ea_ib: 'EA gratis (IB)', ib_vps: 'VPS pribadi + EA gratis (IB)', ib_vps_shared: 'VPS share dikelola admin + EA gratis (IB)', vps_ea_shared: 'VPS share dikelola admin + EA (bulanan)', vps_shared: 'VPS share dikelola admin saja (bulanan)', ea_lifetime: 'EA beli selamanya', ea_rent: 'EA sewa bulanan', vps_ea: 'VPS pribadi + EA (bulanan)', vps: 'VPS pribadi saja (bulanan)' };
   async function productsPage() {
@@ -442,6 +493,7 @@
           <div class="field"><label>Spesifikasi VPS (ditampilkan ke member)</label><input name="vps_spec" value="${esc(s.vps_spec)}" placeholder="RAM 2 GB, 2 core, disk 40 GB, Windows"></div>
           <div class="field"><label>WhatsApp admin (ditampilkan ke member)</label><input name="whatsapp" value="${esc(s.whatsapp)}" placeholder="08xxxxxxxxxx"></div>
           <div class="field"><label>Pengingat sebelum masa sewa habis (hari, pisahkan koma)</label><input name="reminder_days" value="${s.reminder_days.join(', ')}"></div>
+          <label class="row small" style="color:var(--text);margin-bottom:8px"><input type="checkbox" name="auto_rebuild_on_version" ${s.auto_rebuild_on_version !== '0' ? 'checked' : ''}> Compile ulang semua lisensi aktif otomatis saat versi EA (#property version) naik</label>
           <label class="row small" style="color:var(--text)"><input type="checkbox" name="mt4_enabled" ${s.mt4_enabled === '1' ? 'checked' : ''}> MT4 bisa dipesan (aktifkan setelah EA versi MQL4 ada)</label></div>
         <div class="card" style="grid-column:1/-1" id="email-card"><div class="row between"><h3 style="margin:0">✉️ Email (notifikasi ke member)</h3>
             <span>${prov === 'log' ? '<span class="badge b-orange">Belum aktif: email hanya dicatat di log</span>' : `<span class="badge b-green">Aktif via ${esc(prov)}</span>`}</span></div>
@@ -501,7 +553,7 @@
         reminder_days: d.reminder_days.split(/[,\s]+/).filter(Boolean).map(Number),
         admin_notify_email: d.admin_notify_email, whatsapp: d.whatsapp, vps_spec: d.vps_spec, min_capital_usd: d.min_capital_usd, invoice_days_before: d.invoice_days_before,
         profit_est_enabled: d.profit_est_enabled ? '1' : '0', profit_est_min_idr: d.profit_est_min_idr, profit_est_max_idr: d.profit_est_max_idr, profit_est_basis: d.profit_est_basis, mt4_enabled: d.mt4_enabled ? '1' : '0',
-        auto_complete_ea: d.auto_complete_ea ? '1' : '0', auto_process_paid: d.auto_process_paid ? '1' : '0',
+        auto_complete_ea: d.auto_complete_ea ? '1' : '0', auto_rebuild_on_version: d.auto_rebuild_on_version ? '1' : '0', auto_process_paid: d.auto_process_paid ? '1' : '0',
         ib_brokers: $$('.ibr').map((r) => ({ name: $('.ib-name', r).value, link: $('.ib-link', r).value, active: $('.ib-act', r).checked })),
         email_provider: d.email_provider, email_from: d.email_from, email_from_name: d.email_from_name, email_api_key: d.email_api_key,
         welcome_email_password: d.welcome_email_password ? '1' : '0',

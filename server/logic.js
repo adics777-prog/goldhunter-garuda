@@ -252,6 +252,53 @@ export async function createDueInvoices(env, base) {
   return n;
 }
 
+// ---------- USD -> IDR (free sources, cached 15 minutes at the edge) ----------
+const RATE_SOURCES = [
+  ['open.er-api.com', 'https://open.er-api.com/v6/latest/USD', (j) => j.rates && j.rates.IDR],
+  ['fawazahmed0 currency-api', 'https://cdn.jsdelivr.net/npm/@fawazahmed0/currency-api@latest/v1/currencies/usd.min.json', (j) => j.usd && j.usd.idr],
+  ['frankfurter (ECB)', 'https://api.frankfurter.dev/v1/latest?base=USD&symbols=IDR', (j) => j.rates && j.rates.IDR],
+];
+export async function getUsdIdr(env, waitUntil) {
+  const cache = caches.default;
+  const key = new Request('https://goldhuntergaruda.com/__cache/usd-idr-v2');
+  const hit = await cache.match(key);
+  if (hit) return hit.json();
+  let rate = 0, source = '';
+  for (const [name, url, pick] of RATE_SOURCES) {
+    try {
+      const r = await fetch(url, { cf: { cacheTtl: 900 } });
+      const v = Number(pick(await r.json()));
+      if (v > 1000 && v < 100000) { rate = v; source = name; break; }
+    } catch {}
+  }
+  if (rate) {
+    await putSetting(env, 'usd_idr_last', JSON.stringify({ rate, source, at: now() }));
+    const res = new Response(JSON.stringify({ rate, source }), { headers: { 'content-type': 'application/json', 'cache-control': 'public, max-age=900' } });
+    if (waitUntil) waitUntil(cache.put(key, res)); else await cache.put(key, res);
+    return { rate, source };
+  }
+  const s = await getSettings(env);
+  try { const last = JSON.parse(s.usd_idr_last || '{}'); return { rate: last.rate || 0, source: (last.source || '') + ' (terakhir)' }; } catch { return { rate: 0, source: '' }; }
+}
+// Account-currency amount -> Rupiah. Cent accounts report USC (1 USD = 100 USC).
+export function toIdr(amount, currency, rate) {
+  const c = String(currency || '').toUpperCase();
+  if (c === 'IDR') return amount;
+  if (!rate) return null;
+  if (c === 'USC' || c === 'USX' || c === 'UST') return amount / 100 * rate;
+  if (c === 'USD') return amount * rate;
+  return null;
+}
+export function boardName(full, mode, hidden) {
+  if (hidden || mode === 'hidden') return 'Member Anonim';
+  const parts = String(full || '').trim().split(/\s+/).filter(Boolean);
+  if (!parts.length) return 'Member';
+  if (mode === 'full') return parts.join(' ');
+  if (mode === 'first') return parts[0];
+  return parts[0] + (parts[1] ? ' ' + parts[1][0].toUpperCase() + '.' : '');
+}
+export const maskAccount = (a) => { a = String(a || ''); return a.length <= 4 ? a : a.slice(0, 2) + '****' + a.slice(-2); };
+
 // ---------- builds ----------
 export async function queueBuild(env, licenseId, reason = '') {
   const lic = await env.DB.prepare(`SELECT l.*, p.requires_ib FROM licenses l JOIN products p ON p.id=l.product_id WHERE l.id=?`).bind(licenseId).first();
@@ -265,16 +312,46 @@ export async function queueBuild(env, licenseId, reason = '') {
   return r.meta.last_row_id;
 }
 
-export async function claimBuild(env, builderId) {
+// Every active EA licence of a platform gets a fresh build (new EA version or admin "rebuild all").
+export async function rebuildAll(env, platform, reason) {
+  const { results } = await env.DB.prepare(`SELECT l.id FROM licenses l JOIN products p ON p.id=l.product_id
+      WHERE p.includes_ea=1 AND l.status='active' AND (? = '' OR l.platform=?)`).bind(platform || '', platform || '').all();
+  for (const r of results) await queueBuild(env, r.id, reason);
+  return results.length;
+}
+
+export async function claimBuild(env, builderId, versions = {}) {
   const t = now();
-  await putSetting(env, 'builder_seen', JSON.stringify({ at: t, id: builderId }));
+  const s = await getSettings(env);
+  let seen = {};
+  try { seen = JSON.parse(s.ea_versions_seen || '{}'); } catch {}
+  const clean = {};
+  for (const p of ['mt5', 'mt4']) if (versions[p]) clean[p] = String(versions[p]).slice(0, 20);
+  await putSetting(env, 'builder_seen', JSON.stringify({ at: t, id: builderId, versions: clean }));
+  // The admin edited the EA and raised #property version -> licensed files are rebuilt automatically
+  let changed = false;
+  for (const [p, v] of Object.entries(clean)) {
+    if (seen[p] && seen[p] !== v && s.auto_rebuild_on_version !== '0') {
+      const n = await rebuildAll(env, p, `Versi baru v${v} (sebelumnya v${seen[p]})`);
+      await putSetting(env, 'ea_version_event', JSON.stringify({ at: t, platform: p, from: seen[p], to: v, rebuilt: n }));
+    }
+    if (seen[p] !== v) { seen[p] = v; changed = true; }
+  }
+  if (changed) await putSetting(env, 'ea_versions_seen', JSON.stringify(seen));
   // Jobs stuck "building" for 15 min go back to the queue.
   await env.DB.prepare(`UPDATE builds SET status='queued' WHERE status='building' AND started_at < ?`).bind(t - 900).run();
   const job = await env.DB.prepare(`SELECT * FROM builds WHERE status='queued' ORDER BY id LIMIT 1`).first();
   if (!job) return null;
   const upd = await env.DB.prepare(`UPDATE builds SET status='building', started_at=? WHERE id=? AND status='queued'`).bind(t, job.id).run();
   if (!upd.meta.changes) return null;
-  return { id: job.id, license_id: job.license_id, platform: job.platform, account_number: job.account_number, expires_at: job.expires_at || 0 };
+  // Secret baked into the EA so its profit reports can be trusted (one per license, stable across rebuilds)
+  let lic = await env.DB.prepare('SELECT report_token FROM licenses WHERE id=?').bind(job.license_id).first();
+  let token = lic && lic.report_token;
+  if (!token) {
+    token = randomToken(24);
+    await env.DB.prepare('UPDATE licenses SET report_token=? WHERE id=?').bind(token, job.license_id).run();
+  }
+  return { id: job.id, license_id: job.license_id, platform: job.platform, account_number: job.account_number, expires_at: job.expires_at || 0, report_token: token };
 }
 
 export async function finishBuild(env, base, { id, ok, log, filename, data_b64, ea_version }) {
@@ -320,7 +397,7 @@ export async function finishBuild(env, base, { id, ok, log, filename, data_b64, 
     const user = await getUser(env, lic.user_id);
     await notify(env, lic.user_id, 'File EA baru siap diunduh', `Akun ${lic.account_number}, berlaku: ${fmtDate(lic.expires_at)}.`, '#/lisensi');
     await emailUser(env, user, 'File EA baru siap diunduh',
-      `<p>Halo ${esc(user.name)},</p><p>File EA untuk akun <b>${esc(lic.account_number)}</b> sudah dibuat ulang (berlaku: <b>${fmtDate(lic.expires_at)}</b>). Silakan unduh dan ganti file lama di MetaTrader Anda.</p>`,
+      `<p>Halo ${esc(user.name)},</p><p>File EA${ea_version ? ` <b>versi ${esc(ea_version)}</b>` : ''} untuk akun <b>${esc(lic.account_number)}</b> sudah dibuat (berlaku: <b>${fmtDate(lic.expires_at)}</b>). Silakan unduh dan ganti file lama di MetaTrader Anda.</p>`,
       { text: 'Unduh EA', url: `${base}/member#/lisensi` });
   }
   return { ok: true };

@@ -1,0 +1,99 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Progress Profit Member EA GoldHunter Garuda (Rupiah)</title>
+<meta name="description" content="Progress profit harian, mingguan dan bulanan akun member yang menjalankan EA emas GoldHunter Garuda, dilaporkan otomatis oleh EA dan dikonversi ke Rupiah.">
+<meta name="robots" content="index,follow">
+<meta name="theme-color" content="#07070a">
+<link rel="canonical" href="https://goldhuntergaruda.com/profit">
+<meta property="og:type" content="website">
+<meta property="og:url" content="https://goldhuntergaruda.com/profit">
+<meta property="og:title" content="Progress Profit Member — GoldHunter Garuda">
+<meta property="og:description" content="Profit akun member EA GoldHunter Garuda, dilaporkan otomatis oleh EA, dalam Rupiah.">
+<meta property="og:image" content="https://goldhuntergaruda.com/assets/brand/goldhunter-garuda-banner-1200x630.jpg">
+<link rel="icon" href="/assets/brand/favicon.ico">
+<link rel="apple-touch-icon" href="/assets/brand/apple-touch-icon.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@700;900&family=Poppins:wght@300;400;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/assets/app.css">
+<style>
+  .pub-top{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:14px clamp(16px,4vw,40px);border-bottom:1px solid var(--line);background:var(--bg-2);position:sticky;top:0;z-index:20}
+  .pub-top .brand{padding:0}
+  .pub-wrap{max-width:1000px;margin:0 auto;padding:34px clamp(16px,4vw,32px) 60px}
+  .pub-hero{text-align:center;margin-bottom:26px}
+  .pub-hero h1{font-family:'Cinzel',serif;font-size:clamp(1.6rem,4.5vw,2.4rem);margin-bottom:8px}
+  .pub-hero p{color:var(--muted);max-width:640px;margin:0 auto}
+  .rank{font-family:'Cinzel',serif;color:var(--gold);font-weight:900;width:44px}
+  .pos{color:#6ee7a2;font-weight:700}
+  .neg{color:#ff8b95;font-weight:700}
+  .board td{vertical-align:middle}
+  @media (max-width:600px){ .hide-sm{display:none} th,td{padding:10px 9px} }
+</style>
+</head>
+<body>
+<header class="pub-top">
+  <a class="brand" href="/"><img src="/assets/brand/goldhunter-garuda-logo-128.png" width="38" height="38" alt="GoldHunter Garuda"><span class="gold-text">GOLDHUNTER</span></a>
+  <div class="row"><a class="btn btn-ghost btn-sm" href="/masuk">Masuk</a><a class="btn btn-gold btn-sm" href="/daftar">Daftar Gratis</a></div>
+</header>
+<main class="pub-wrap">
+  <div class="pub-hero">
+    <span class="badge b-gold">📈 Dilaporkan otomatis oleh EA</span>
+    <h1 style="margin-top:12px">Progress <span class="gold-text">Member</span></h1>
+    <p>Profit posisi yang sudah ditutup dari akun member yang menjalankan EA GoldHunter Garuda, dikonversi ke Rupiah dengan kurs terbaru.</p>
+  </div>
+  <div class="row" style="justify-content:center;margin-bottom:18px">
+    <div class="choice" id="tabs">
+      <label><input type="radio" name="p" value="day"><span>Hari ini</span></label>
+      <label><input type="radio" name="p" value="week"><span>Minggu ini</span></label>
+      <label><input type="radio" name="p" value="month" checked><span>Bulan ini</span></label>
+    </div>
+  </div>
+  <div class="grid c3" style="margin-bottom:18px" id="tiles"></div>
+  <div id="list"><div class="loading"><span class="spinner"></span></div></div>
+  <p class="center tiny muted" id="rate" style="margin-top:12px"></p>
+  <div class="center" style="margin:28px 0"><a class="btn btn-gold" href="/daftar">🦅 Daftar &amp; Ambil EA Gratis</a></div>
+  <div class="alert err small center" style="line-height:1.7">
+    <b>⚠️ PERINGATAN RISIKO.</b> Data di atas adalah hasil nyata akun member yang dilaporkan otomatis oleh EA, tanpa diubah, dan <b>bukan jaminan</b> hasil Anda.
+    Trading forex &amp; emas berisiko sangat tinggi dan dapat menyebabkan kehilangan sebagian atau seluruh modal. Kondisi market dinamis dan tidak bisa dikendalikan siapa pun.
+    Hasil tiap akun berbeda tergantung modal, setting, waktu mulai dan broker. Sebagian member memilih tidak ditampilkan atau menyamarkan namanya.
+    <a href="/#risiko" style="color:#ff8b95;text-decoration:underline">Baca peringatan risiko lengkap</a>.
+  </div>
+</main>
+<script src="/assets/common.js"></script>
+<script>
+(() => {
+  const { $, esc, rupiah, ago } = GHG;
+  const money = (n) => n == null ? '-' : (n < 0 ? '- ' : '+ ') + rupiah(Math.abs(n));
+  const label = { day: 'hari ini', week: 'minggu ini', month: 'bulan ini' };
+  async function load(period) {
+    $('#list').innerHTML = '<div class="loading"><span class="spinner"></span></div>';
+    let d;
+    try { d = await (await fetch('/api/board?period=' + period)).json(); } catch { d = { enabled: false }; }
+    if (!d.enabled) { $('#tiles').innerHTML = ''; $('#list').innerHTML = '<div class="card empty">Papan progress sedang tidak ditampilkan.</div>'; return; }
+    const k = period + '_idr', pk = period + '_pct';
+    const plus = d.rows.filter((r) => (r[k] || 0) > 0).length;
+    $('#tiles').innerHTML = `
+      <div class="stat"><b>${d.total_accounts}</b><span>Akun aktif melapor</span></div>
+      <div class="stat"><b style="font-size:1.25rem" class="${d.total_idr < 0 ? 'neg' : ''}">${money(d.total_idr)}</b><span>Total profit ${label[period]}</span></div>
+      <div class="stat"><b>${plus}/${d.rows.length}</b><span>Akun profit ${label[period]}</span></div>`;
+    $('#list').innerHTML = d.rows.length ? `<div class="table-wrap"><table class="board"><thead><tr><th>#</th><th>Member</th><th class="hide-sm">Akun</th><th class="right">Profit ${label[period]}</th><th class="right hide-sm">%</th><th class="hide-sm">Update</th></tr></thead><tbody>
+      ${d.rows.map((r, i) => `<tr><td class="rank">${i + 1}</td><td><b>${esc(r.name)}</b><div class="tiny muted">${esc(r.broker)} · ${String(r.platform).toUpperCase()}</div></td>
+        <td class="hide-sm mono small">${esc(r.account)}</td>
+        <td class="right nowrap ${(r[k] || 0) < 0 ? 'neg' : 'pos'}">${money(r[k])}</td>
+        <td class="right hide-sm small">${r[pk] == null ? '-' : (r[pk] > 0 ? '+' : '') + r[pk] + '%'}</td>
+        <td class="hide-sm tiny muted nowrap">${ago(r.updated_at)}</td></tr>`).join('')}</tbody></table></div>`
+      : '<div class="card empty">Belum ada laporan dari EA member.</div>';
+    $('#rate').textContent = d.usd_idr ? `Kurs ${rupiah(d.usd_idr)}/USD · akun cent: 100 USC = $1 · data diperbarui otomatis tiap beberapa menit` : '';
+  }
+  const tabs = $('#tabs');
+  const start = new URLSearchParams(location.search).get('p');
+  if (['day', 'week', 'month'].includes(start)) tabs.querySelector(`[value=${start}]`).checked = true;
+  tabs.onchange = (e) => { history.replaceState(null, '', '?p=' + e.target.value); load(e.target.value); };
+  load(tabs.querySelector('input:checked').value);
+})();
+</script>
+</body>
+</html>

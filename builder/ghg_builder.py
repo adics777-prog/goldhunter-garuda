@@ -121,6 +121,95 @@ def inject_license(src, build_id, account, expiry):
     return out
 
 
+REPORT_BLOCK = r"""
+//+------------------------------------------------------------------+
+//| LAPORAN PROFIT ke goldhuntergaruda.com - disisipkan GHG Builder
+//| Mengirim balance, equity & profit tertutup hari/minggu/bulan tiap 5 menit.
+//| Butuh: Tools > Options > Expert Advisors > Allow WebRequest > https://goldhuntergaruda.com
+//+------------------------------------------------------------------+
+#define GHG_REPORT_URL   "__URL__"
+#define GHG_LIC_ID       __LIC__
+#define GHG_REPORT_TOKEN "__TOKEN__"
+#define GHG_EA_VERSION   "__VERSION__"
+datetime g_ghgNextReport = 0;
+bool     g_ghgWebWarned  = false;
+
+void GHG_Report()
+  {
+   if(MQLInfoInteger(MQL_TESTER) || MQLInfoInteger(MQL_OPTIMIZATION))
+      return;
+   if(TimeLocal() < g_ghgNextReport)
+      return;
+   g_ghgNextReport = TimeLocal() + 300;
+   long login = AccountInfoInteger(ACCOUNT_LOGIN);
+   if(login == 0)
+      return;
+//--- period starts in broker server time: today 00:00, Monday 00:00, 1st of month 00:00
+   MqlDateTime dt;
+   TimeToStruct(TimeCurrent(), dt);
+   datetime dayStart   = StringToTime(StringFormat("%04d.%02d.%02d", dt.year, dt.mon, dt.day));
+   datetime weekStart  = dayStart - ((dt.day_of_week + 6) % 7) * 86400;
+   datetime monthStart = StringToTime(StringFormat("%04d.%02d.01", dt.year, dt.mon));
+   datetime from = (weekStart < monthStart ? weekStart : monthStart);
+   double pd = 0.0, pw = 0.0, pm = 0.0;
+   if(HistorySelect(from, TimeCurrent() + 86400))
+     {
+      int n = HistoryDealsTotal();
+      for(int i = 0; i < n; i++)
+        {
+         ulong t = HistoryDealGetTicket(i);
+         if(t == 0)
+            continue;
+         long type = HistoryDealGetInteger(t, DEAL_TYPE);
+         if(type != DEAL_TYPE_BUY && type != DEAL_TYPE_SELL)
+            continue;
+         datetime when = (datetime)HistoryDealGetInteger(t, DEAL_TIME);
+         double p = HistoryDealGetDouble(t, DEAL_PROFIT) + HistoryDealGetDouble(t, DEAL_SWAP)
+                    + HistoryDealGetDouble(t, DEAL_COMMISSION) + HistoryDealGetDouble(t, DEAL_FEE);
+         if(when >= monthStart) pm += p;
+         if(when >= weekStart)  pw += p;
+         if(when >= dayStart)   pd += p;
+        }
+     }
+   string json = StringFormat("{\"lic\":%d,\"token\":\"%s\",\"login\":%I64d,\"server\":\"%s\",\"currency\":\"%s\",\"balance\":%.2f,\"equity\":%.2f,\"day\":%.2f,\"week\":%.2f,\"month\":%.2f,\"positions\":%d,\"version\":\"%s\"}",
+                              GHG_LIC_ID, GHG_REPORT_TOKEN, login, AccountInfoString(ACCOUNT_SERVER), AccountInfoString(ACCOUNT_CURRENCY),
+                              AccountInfoDouble(ACCOUNT_BALANCE), AccountInfoDouble(ACCOUNT_EQUITY), pd, pw, pm, PositionsTotal(), GHG_EA_VERSION);
+   char data[], res[];
+   string resHeaders;
+   int len = StringToCharArray(json, data, 0, WHOLE_ARRAY, CP_UTF8);
+   ArrayResize(data, len > 0 ? len - 1 : 0);
+   ResetLastError();
+   int code = WebRequest("POST", GHG_REPORT_URL, "Content-Type: application/json\r\n", 5000, data, res, resHeaders);
+   if(code == -1)
+     {
+      int err = GetLastError();
+      if(!g_ghgWebWarned)
+        {
+         g_ghgWebWarned = true;
+         PrintFormat("GoldHunter Garuda: laporan profit belum terkirim (error %d). Izinkan WebRequest: Tools > Options > Expert Advisors > centang Allow WebRequest, tambahkan https://goldhuntergaruda.com", err);
+        }
+      g_ghgNextReport = TimeLocal() + 1800;   // retry later, trading is not affected
+     }
+  }
+"""
+
+
+def inject_report(src, job, version, api_base):
+    token = job.get('report_token')
+    if not token or not job.get('license_id'):
+        return src
+    url = api_base.rstrip('/') + '/api/ea/report'
+    block = (REPORT_BLOCK.replace('__URL__', url).replace('__LIC__', str(int(job['license_id'])))
+             .replace('__TOKEN__', re.sub(r'[^A-Za-z0-9_-]', '', token)).replace('__VERSION__', re.sub(r'[^0-9A-Za-z.]', '', version or '')))
+    m = re.search(r'^\s*int\s+OnInit\s*\(\s*(void)?\s*\)\s*\{', src, re.M)
+    src = src[:m.start()] + block + '\n' + src[m.start():]
+    # live-only timer is the best place (no extra work in the tester); otherwise OnTick
+    src, n = re.subn(r'(void\s+OnTimer\s*\(\s*(void)?\s*\)\s*\{)', r'\1\n   GHG_Report();', src, count=1)
+    if n == 0:
+        src, n = re.subn(r'(if\(!GHG_LicenseCheck\(false\)\) return;)', r'\1\n   GHG_Report();', src, count=1)
+    return src
+
+
 # ---------------------------------------------------------------- compile
 def read_text(path):
     raw = open(path, 'rb').read()
@@ -156,6 +245,7 @@ def build(cfg, job):
     src = read_text(source)
     version = (re.search(r'#property\s+version\s+"([^"]+)"', src) or [None, ''])[1]
     licensed = inject_license(src, job['id'], job['account_number'], job.get('expires_at') or 0)
+    licensed = inject_report(licensed, job, version, cfg.get('report_base') or cfg['api_base'])
     target = os.path.join(jobdir, name + ext)
     with open(target, 'w', encoding='utf-8-sig', newline='\r\n') as f:
         f.write(licensed.replace('\r\n', '\n'))
@@ -172,6 +262,16 @@ def build(cfg, job):
     filename = f"{name}_{job['account_number']}{out_ext}"
     summary = m.group(0) if m else 'compiled'
     return data, filename, version, summary, jobdir
+
+
+def source_versions(cfg):
+    out = {}
+    for platform in ('mt5', 'mt4'):
+        src = (cfg.get(platform) or {}).get('ea_source')
+        if src and os.path.exists(src):
+            m = re.search(r'#property\s+version\s+"([^"]+)"', read_text(src))
+            out[platform] = m.group(1) if m else '?'
+    return out
 
 
 def handle(cfg, job):
@@ -213,7 +313,7 @@ def main():
     log(f"GHG Builder aktif -> {cfg['api_base']} (cek tiap {cfg.get('poll_seconds', 15)} detik)")
     while True:
         try:
-            job = api(cfg, '/api/builder/claim', {'builder_id': builder_id}).get('job')
+            job = api(cfg, '/api/builder/claim', {'builder_id': builder_id, 'versions': source_versions(cfg)}).get('job')
             if job:
                 handle(cfg, job)
                 continue          # look for the next job right away

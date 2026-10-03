@@ -222,6 +222,12 @@
   @media(max-width:640px){.cap-box{grid-template-columns:1fr;gap:10px}}
   .cap-usc{font-size:.85rem;color:var(--muted)}
   .cap-eq{font-size:2rem;color:var(--gold)}
+  .board-list{max-width:760px;margin:0 auto;display:grid;gap:10px}
+  .board-item{display:grid;grid-template-columns:44px 1fr auto;align-items:center;gap:12px;background:var(--card);border:1px solid var(--line);border-radius:14px;padding:12px 18px}
+  .board-item .rk{font-family:'Cinzel',serif;font-weight:900;color:var(--gold);font-size:1.2rem}
+  .board-item small{display:block;color:var(--muted);font-size:.75rem}
+  .board-item .pf{font-weight:700;color:#6ee7a2;white-space:nowrap;text-align:right}
+  .board-item .pf.neg{color:#ff8b95}
   .profit-est{display:flex;flex-direction:column;align-items:center;text-align:center;max-width:760px;margin:-26px auto 46px;padding:18px 24px;border:1px dashed var(--gold-2);border-radius:18px;background:rgba(245,197,66,.05)}
   .profit-est[hidden]{display:none}
   .profit-est b{font-family:'Cinzel',serif;font-size:clamp(1.6rem,4vw,2.2rem)}
@@ -241,6 +247,7 @@
     </a>
     <div class="menu" id="menu">
       <a href="#promo">Promo</a>
+      <a href="/profit">Progress</a>
       <a href="#fitur">Fitur</a>
       <a href="#cara">Cara Kerja</a>
       <a href="#spek">Spesifikasi</a>
@@ -337,6 +344,18 @@
     </div>
     <div class="center" style="margin-top:36px"><a href="/daftar" class="btn btn-gold">🦅 Daftar &amp; Ambil EA Gratis</a></div>
     <p class="center" style="margin-top:18px;color:#e3c3c6;font-size:.78rem">⚠️ Trading forex &amp; emas berisiko tinggi dan bisa menyebabkan kerugian, termasuk seluruh modal. Tidak ada jaminan profit. <a href="#risiko" style="color:#ff8b95;text-decoration:underline">Baca peringatan risiko lengkap</a>.</p>
+  </div>
+</section>
+
+<!-- ============ PROGRESS MEMBER ============ -->
+<section id="progress" hidden style="padding-top:20px">
+  <div class="container">
+    <div class="center"><span class="tag">📈 Progress Member</span></div>
+    <h2 class="sec-title">Progress Member <span class="gold-text">Bulan Ini</span></h2>
+    <p class="sec-sub">Profit tertutup akun member yang menjalankan EA GoldHunter Garuda, dilaporkan otomatis oleh EA (dalam Rupiah, kurs terbaru).</p>
+    <div class="board-list" id="board-list"></div>
+    <div class="center" style="margin-top:26px"><a href="/profit" class="btn btn-outline">Lihat semua progress →</a></div>
+    <p class="center" style="margin-top:14px;color:#e3c3c6;font-size:.76rem">Hasil nyata akun member, bukan jaminan hasil Anda. Hasil tiap akun berbeda tergantung modal, setting dan kondisi market. <a href="#risiko" style="color:#ff8b95;text-decoration:underline">Peringatan risiko</a></p>
   </div>
 </section>
 
@@ -445,6 +464,7 @@
       </div>
       <div class="foot-links">
         <a href="#promo">Promo</a>
+      <a href="/profit">Progress</a>
       <a href="#fitur">Fitur</a><a href="#cara">Cara Kerja</a><a href="#spek">Spesifikasi</a><a href="#harga">Harga</a><a href="#faq">FAQ</a>
       </div>
     </div>
@@ -509,6 +529,18 @@
       document.querySelectorAll('[data-cap="idr"]').forEach(el => el.textContent = fmt(Math.round(usd * r.usd_idr / 1000) * 1000));
       document.querySelectorAll('[data-cap="rate"]').forEach(el => el.textContent = 'kurs hari ini ' + fmt(r.usd_idr) + '/USD');
     }
+  }).catch(() => {});
+
+  // Progress member bulan ini (dari laporan EA)
+  fetch('/api/board?period=month').then(r => r.json()).then(d => {
+    const top = Number(d.landing_top || 0);
+    if (!d.enabled || !top || !d.rows || !d.rows.length) return;
+    const rp = n => (n < 0 ? '- ' : '+ ') + 'Rp ' + Math.abs(Math.round(n)).toString().replace(/\B(?=(\d{3})+(?!\d))/g, '.');
+    const e = t => String(t ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+    document.getElementById('board-list').innerHTML = d.rows.slice(0, top).map((r, i) => `<div class="board-item"><span class="rk">${i + 1}</span>
+      <div><b>${e(r.name)}</b><small>${e(r.broker)} · ${e(r.account)}${r.month_pct != null ? ' · ' + (r.month_pct > 0 ? '+' : '') + r.month_pct + '%' : ''}</small></div>
+      <span class="pf ${r.month_idr < 0 ? 'neg' : ''}">${rp(r.month_idr)}</span></div>`).join('');
+    document.getElementById('progress').hidden = false;
   }).catch(() => {});
 
   // Paket & harga dari database (sama dengan member area)
