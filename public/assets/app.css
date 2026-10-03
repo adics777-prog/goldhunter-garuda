@@ -195,3 +195,5 @@ tbody tr.click:hover{background:var(--card-2)}
 .auth .sub{color:var(--muted);font-size:.88rem;margin-bottom:20px}
 .auth .links{text-align:center;margin-top:18px;font-size:.88rem;color:var(--muted)}
 label.row{flex-wrap:nowrap}
+.wa-float{position:fixed;right:18px;bottom:18px;width:56px;height:56px;border-radius:50%;background:#25d366;display:grid;place-items:center;box-shadow:0 8px 24px rgba(0,0,0,.45);z-index:90;transition:.2s}
+.wa-float:hover{transform:scale(1.08)}

@@ -6,7 +6,7 @@ import {
 } from '../../server/util.js';
 import {
   getSettings, putSetting, quote, notify, emailUser, emailAdmin, newOrderCode, getUser, getProduct,
-  processOrder, completeOrder, queueBuild, claimBuild, finishBuild, runDaily, orderStatusLabel,
+  processOrder, completeOrder, queueBuild, claimBuild, finishBuild, runDaily, orderStatusLabel, pickUniqueCode, ensureUniqueCode,
 } from '../../server/logic.js';
 import { layout, sendEmail } from '../../server/email.js';
 
@@ -75,7 +75,7 @@ route('POST', '/auth/register', 'public', async ({ request, env, base }) => {
   const r = await env.DB.prepare('INSERT INTO users (email, name, phone, address, pass_hash, pass_salt, role, created_at) VALUES (?,?,?,?,?,?,?,?)')
     .bind(email, name, phone, address, hash, salt, role, now()).run();
   const userId = r.meta.last_row_id;
-  await notify(env, userId, 'Selamat datang di GoldHunter Garuda!', 'Mulai dari menu Order, atau baca "Cara Jadi IB" untuk EA gratis.', '#/order');
+  await notify(env, userId, 'Selamat datang di GoldHunter Garuda!', 'Mulai dari menu Order, atau baca "Syarat EA Gratis" untuk EA gratis.', '#/order');
   const s = await getSettings(env);
   const pwRow = (pw) => `<tr><td style="padding:6px 0;color:#a3a3b2">Password</td><td style="padding:6px 0"><b style="font-family:monospace;font-size:16px">${pw}</b></td></tr>`;
   const welcome = (pw) => layout(env, 'Pendaftaran berhasil 🎉', `<p>Halo <b>${esc(name)}</b>,</p>
@@ -87,7 +87,7 @@ route('POST', '/auth/register', 'public', async ({ request, env, base }) => {
     <p><b style="color:#f5c542">Cara login:</b></p>
     <ol style="padding-left:20px;margin:6px 0 14px"><li>Buka <a href="${base}/masuk" style="color:#f5c542">${esc(base.replace(/^https?:\/\//, ''))}/masuk</a></li>
       <li>Masukkan email dan password di atas, lalu klik <b>Masuk</b>.</li>
-      <li>Pilih menu <b>Order</b> untuk memesan EA / paket VPS, atau <b>Cara Jadi IB</b> untuk EA gratis.</li></ol>
+      <li>Pilih menu <b>Order</b> untuk memesan EA / paket VPS, atau <b>Syarat EA Gratis</b> untuk EA gratis.</li></ol>
     <p style="color:#a3a3b2;font-size:13px">Lupa password? Klik "Lupa password?" di halaman masuk, link reset dikirim ke email ini. Demi keamanan, jangan bagikan password Anda kepada siapa pun, termasuk yang mengaku admin.</p>`,
     { text: 'Masuk Member Area', url: `${base}/masuk` });
   const withPw = s.welcome_email_password !== '0';
@@ -201,7 +201,7 @@ async function createOrder(env, base, user, fields) {
   if (!p || !p.active) fail(400, 'Produk tidak tersedia');
   const q = quote(p, fields.months, s);
   const free = p.billing === 'free';
-  const uniq = !free && s.unique_code === '1' ? 1 + Math.floor(Math.random() * 499) : 0;
+  let uniq = free ? 0 : await pickUniqueCode(env);
   const t = now();
   const code = await newOrderCode(env);
   const r = await env.DB.prepare(`INSERT INTO orders (code, user_id, kind, product_id, license_id, platform, account_number, broker, broker_server,
@@ -211,6 +211,8 @@ async function createOrder(env, base, user, fields) {
       fields.trading_pass_enc, q.months, q.unit_price, q.discount_pct, q.subtotal, uniq, q.subtotal + uniq,
       free ? 'awaiting_verification' : 'awaiting_payment', t, t + Number(s.pay_deadline_hours || 24) * 3600, free ? t : null).run();
   const id = r.meta.last_row_id;
+  if (!free) uniq = await ensureUniqueCode(env, id);
+  const total = q.subtotal + uniq;
   if (free) {
     await notify(env, user.id, `Pengajuan ${code} diterima`, `Admin akan mengecek akun ${fields.account_number} terdaftar di bawah IB kami, lalu memproses EA Anda.`, '#/pesanan/' + id);
     await emailUser(env, user, `Pengajuan EA gratis ${code} diterima`,
@@ -219,8 +221,18 @@ async function createOrder(env, base, user, fields) {
     await emailAdmin(env, base, `Pengajuan EA gratis IB ${code}`,
       `<p>${esc(user.name)} (${esc(user.email)}) mengajukan EA gratis untuk akun ${esc(fields.broker)} <b>${esc(fields.account_number)}</b>. Cek di portal partner bahwa akun ini di bawah IB Anda, lalu klik Proses.</p>`, '/admin#/pesanan/' + id);
   } else {
-    await notify(env, user.id, `Pesanan ${code} dibuat`, `Silakan transfer ${rupiah(q.subtotal + uniq)} lalu konfirmasi pembayaran.`
+    await notify(env, user.id, `Pesanan ${code} dibuat`, `Silakan transfer ${rupiah(total)} (termasuk kode unik ${uniq}) lalu konfirmasi pembayaran.`
       + (p.requires_ib ? ' Admin juga akan mengecek akun Anda terdaftar di bawah IB kami.' : ''), '#/pesanan/' + id);
+    const banks = String(s.bank_accounts || '').split(/\r?\n/).filter(Boolean).map((l) => `<li>${esc(l)}</li>`).join('');
+    const wa = s.whatsapp ? `https://wa.me/${String(s.whatsapp).replace(/\D/g, '').replace(/^0/, '62')}` : '';
+    await emailUser(env, user, `Pesanan ${code}: silakan transfer ${rupiah(total)}`,
+      `<p>Halo ${esc(user.name)},</p><p>Terima kasih atas pesanan <b>${esc(code)}</b> (${esc(p.name)}${q.months ? `, ${q.months} bulan` : ''}) untuk akun <b>${esc(fields.account_number)}</b>.</p>
+       <p>Silakan transfer <b>tepat</b> sebesar:</p><p style="font-size:24px;font-weight:bold;color:#f5c542;margin:6px 0">${rupiah(total)}</p>
+       <p style="color:#a3a3b2;font-size:13px;margin-top:0">sudah termasuk 3 digit kode unik <b>${uniq}</b> agar pembayaran Anda mudah dikenali.</p>
+       ${banks ? `<p>Ke salah satu rekening berikut:</p><ul>${banks}</ul>` : ''}
+       <p>Setelah transfer, buka halaman <b>Konfirmasi Pembayaran</b> dan upload bukti transfer.</p>
+       ${wa ? `<p>Ada kendala? <a href="${wa}" style="color:#f5c542">Chat admin via WhatsApp</a>.</p>` : ''}`,
+      { text: 'Konfirmasi Pembayaran', url: `${base}/member#/bayar/${id}` });
   }
   return id;
 }
@@ -295,18 +307,18 @@ route('POST', '/orders/:id/confirm', 'member', async ({ request, env, user, para
   const f = await env.DB.prepare(`INSERT INTO files (user_id, kind, name, mime, size, data_b64, created_at) VALUES (?, 'proof', ?, ?, ?, ?, ?)`)
     .bind(user.id, str(proof.name, 100) || 'bukti', proof.mime, size, proof.data_b64, t).run();
   if (o.proof_file_id) await env.DB.prepare('DELETE FROM files WHERE id=?').bind(o.proof_file_id).run();
-  await env.DB.prepare(`UPDATE orders SET status='awaiting_verification', proof_file_id=?, payer_name=?, payer_bank=?, member_note=?, confirmed_at=? WHERE id=?`)
+  await env.DB.prepare(`UPDATE orders SET status='awaiting_verification', proof_file_id=?, payer_name=?, payer_bank=?, member_note=?, confirmed_at=?, admin_note='' WHERE id=?`)
     .bind(f.meta.last_row_id, payer_name, payer_bank, note, t, o.id).run();
-  await notify(env, user.id, `Konfirmasi pembayaran ${o.code} diterima`, 'Terima kasih! Pesanan Anda segera diproses oleh admin.', '#/pesanan/' + o.id);
-  await emailUser(env, user, `Pembayaran ${o.code} diterima, segera diproses`,
-    `<p>Halo ${esc(user.name)},</p><p>Konfirmasi pembayaran <b>${rupiah(o.total)}</b> untuk pesanan <b>${esc(o.code)}</b> sudah kami terima. Admin akan segera memverifikasi dan memproses pesanan Anda.</p>`,
+  await notify(env, user.id, `Bukti transfer ${o.code} diterima`, 'Terima kasih! Admin segera mengecek pembayaran dan memproses pesanan Anda.', '#/pesanan/' + o.id);
+  await emailUser(env, user, `Bukti transfer ${o.code} diterima, segera dicek admin`,
+    `<p>Halo ${esc(user.name)},</p><p>Bukti transfer <b>${rupiah(o.total)}</b> untuk pesanan <b>${esc(o.code)}</b> sudah kami terima. Admin akan segera mengecek pembayaran dan memproses pesanan Anda.</p>`,
     { text: 'Lihat Pesanan', url: `${base}/member#/pesanan/${o.id}` });
   await emailAdmin(env, base, `Konfirmasi pembayaran ${o.code}`,
-    `<p>${esc(user.name)} (${esc(user.email)}) mengonfirmasi transfer <b>${rupiah(o.total)}</b> dari ${esc(payer_bank)} a.n. ${esc(payer_name)} untuk akun ${esc(o.account_number)}.</p>`,
+    `<p>${esc(user.name)} (${esc(user.email)}) mengonfirmasi transfer <b>${rupiah(o.total)}</b> (kode unik <b>${o.unique_code}</b>) dari ${esc(payer_bank)} a.n. ${esc(payer_name)} untuk akun ${esc(o.account_number)}. Cek mutasi, lalu klik <b>Sudah Bayar</b>.</p>`,
     '/admin#/pesanan/' + o.id);
   // Auto mode (off by default while payments are manual transfers; a payment gateway will call the same path).
   const p = await getProduct(env, o.product_id);
-  if (s.auto_process_paid === '1' && !p.requires_ib) await processOrder(env, base, o.id);
+  if (s.auto_process_paid === '1' && !p.requires_ib) await processOrder(env, base, o.id, { paid: true });
   return json({ ok: true });
 });
 
@@ -498,11 +510,40 @@ route('POST', '/admin/orders/:id/ib', 'admin', async ({ request, env, params, ba
   }
   const note = str(b.note, 500) || `Akun ${o.account_number} belum terdaftar di bawah IB kami.`;
   await env.DB.prepare(`UPDATE orders SET ib_status='no', ib_checked_at=?, status='rejected', admin_note=? WHERE id=?`).bind(t, note, o.id).run();
-  await notify(env, o.user_id, `Akun ${o.account_number} belum di bawah IB kami`, note + ' Lihat menu "Cara Jadi IB", lalu ajukan lagi.', '#/ib');
+  await notify(env, o.user_id, `Akun ${o.account_number} belum di bawah IB kami`, note + ' Lihat menu "Syarat EA Gratis" (daftar akun baru / pindah partner), lalu ajukan lagi.', '#/ib');
   await emailUser(env, user, `Akun ${o.account_number} belum terdaftar di bawah IB kami`,
-    `<p>Halo ${esc(user.name)},</p><p>${esc(note)}</p><p>Untuk mendapatkan EA gratis, buat akun ${esc(o.broker)} melalui link IB kami (panduan lengkap di menu <b>Cara Jadi IB</b> di member area), lalu ajukan lagi dengan nomor akun yang baru.</p>`
+    `<p>Halo ${esc(user.name)},</p><p>${esc(note)}</p><p>Untuk mendapatkan EA gratis, akun trading Anda harus terdaftar di bawah partner GoldHunter Garuda: daftar akun baru lewat link kami, atau ajukan pindah partner lalu buat akun trading baru. Panduan lengkap ada di menu <b>Syarat EA Gratis</b> di member area. Setelah itu ajukan lagi dengan nomor akun yang baru.</p>`
     + (o.proof_file_id ? '<p>Untuk pembayaran yang sudah Anda transfer, admin akan menghubungi Anda.</p>' : ''),
-    { text: 'Lihat Cara Jadi IB', url: `${base}/member#/ib` });
+    { text: 'Lihat Panduan', url: `${base}/member#/ib` });
+  return json({ ok: true });
+});
+
+// Admin checked the bank statement: payment is in -> process right away (EA build starts).
+route('POST', '/admin/orders/:id/paid', 'admin', async ({ env, params, base }) => {
+  const o = await env.DB.prepare('SELECT o.*, p.billing FROM orders o JOIN products p ON p.id=o.product_id WHERE o.id=?').bind(int(params.id)).first();
+  if (!o) fail(404, 'Order tidak ditemukan');
+  if (o.billing === 'free') fail(400, 'Order gratis tidak perlu pembayaran');
+  const licenseId = await processOrder(env, base, o.id, { paid: true });
+  return json({ ok: true, license_id: licenseId });
+});
+
+// Proof cannot be accepted (wrong amount, unreadable...): member uploads a new one.
+route('POST', '/admin/orders/:id/proof-reject', 'admin', async ({ request, env, params, base }) => {
+  const b = await readJson(request);
+  const note = str(b.note, 500);
+  if (!note) fail(400, 'Tulis alasan agar member tahu apa yang harus diperbaiki');
+  const o = await env.DB.prepare('SELECT * FROM orders WHERE id=?').bind(int(params.id)).first();
+  if (!o || o.status !== 'awaiting_verification') fail(409, 'Order ini tidak sedang menunggu cek pembayaran');
+  const s = await getSettings(env);
+  const deadline = now() + Number(s.pay_deadline_hours || 24) * 3600;
+  await env.DB.prepare(`UPDATE orders SET status='awaiting_payment', admin_note=?, proof_file_id=NULL, pay_deadline=MAX(pay_deadline, ?) WHERE id=?`)
+    .bind(note, deadline, o.id).run();
+  if (o.proof_file_id) await env.DB.prepare('DELETE FROM files WHERE id=?').bind(o.proof_file_id).run();
+  const user = await getUser(env, o.user_id);
+  await notify(env, o.user_id, `Bukti transfer ${o.code} perlu dikirim ulang`, note, '#/bayar/' + o.id);
+  await emailUser(env, user, `Bukti transfer ${o.code} perlu dikirim ulang`,
+    `<p>Halo ${esc(user.name)},</p><p>Bukti transfer untuk pesanan <b>${esc(o.code)}</b> belum bisa kami terima.</p><p>Alasan: <b>${esc(note)}</b></p><p>Silakan kirim ulang bukti transfer yang benar (total <b>${rupiah(o.total)}</b>, termasuk kode unik ${o.unique_code}).</p>`,
+    { text: 'Kirim Ulang Bukti', url: `${base}/member#/bayar/${o.id}` });
   return json({ ok: true });
 });
 
@@ -686,7 +727,7 @@ route('PUT', '/admin/products/:id', 'admin', async ({ request, env, params }) =>
 });
 
 const EDITABLE_SETTINGS = ['durations', 'discounts', 'bank_accounts', 'admin_notify_email', 'whatsapp', 'pay_deadline_hours', 'reminder_days', 'mt4_enabled',
-  'unique_code', 'ib_brokers', 'auto_complete_ea', 'auto_process_paid', 'welcome_email_password', 'email_provider', 'email_from', 'email_from_name', 'vps_spec'];
+  'ib_brokers', 'auto_complete_ea', 'auto_process_paid', 'welcome_email_password', 'email_provider', 'email_from', 'email_from_name', 'vps_spec'];
 route('GET', '/admin/settings', 'admin', async ({ env }) => {
   const s = await getSettings(env);
   const out = Object.fromEntries(EDITABLE_SETTINGS.map((k) => [k, s[k] ?? '']));

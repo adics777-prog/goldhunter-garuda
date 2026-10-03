@@ -191,7 +191,7 @@ INSERT INTO products (code, name, kind, billing, includes_ea, includes_vps, requ
   'GRATIS tanpa biaya lisensi
 Syarat: akun Exness daftar lewat link IB kami
 File .ex5 terkunci di nomor akun Anda
-Lihat tutorial di menu "Cara Jadi IB"', 0),
+Panduan di menu "Syarat EA Gratis"', 0),
  ('ib_vps', 'VPS untuk EA Gratis (IB)', 'ib_vps', 'monthly', 1, 1, 1, 150000,
   'Khusus akun di bawah IB kami: EA gratis + VPS Windows pribadi 24 jam. Anda login lewat Remote Desktop dan mengatur EA sendiri.',
   'EA GRATIS, cukup bayar VPS

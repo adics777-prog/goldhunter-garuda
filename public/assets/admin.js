@@ -137,14 +137,20 @@
     }
     if (o.billing !== 'free') {
       steps.push(`<div class="card ${o.status === 'awaiting_verification' ? 'gold' : ''}"><h3>${steps.length + 1}. Pembayaran</h3>
-        <dl class="kv small"><dt>Total harus masuk</dt><dd><b style="font-size:1.1rem">${rupiah(o.total)}</b> <span class="tiny muted">(kode unik ${o.unique_code})</span></dd>
+        <div class="alert info small" style="margin-bottom:12px">Cek mutasi rekening: harus ada uang masuk <b style="font-size:1.15rem">${rupiah(o.total)}</b> (kode unik <b style="color:var(--green)">${o.unique_code}</b>).</div>
+        <dl class="kv small">${o.paid_at ? `<dt>Status</dt><dd><span class="badge b-green">✔ Sudah bayar</span> ${fmtDateTime(o.paid_at)}</dd>` : ''}
         ${o.confirmed_at && o.proof_file_id ? `<dt>Dari</dt><dd>${esc(o.payer_bank)} a.n. ${esc(o.payer_name)}</dd><dt>Dikonfirmasi</dt><dd>${fmtDateTime(o.confirmed_at)}</dd>
           ${o.member_note ? `<dt>Catatan</dt><dd>${esc(o.member_note)}</dd>` : ''}` : '<dt>Status</dt><dd>Belum ada konfirmasi dari member</dd>'}</dl>
         ${proof ? (proof.mime.startsWith('image/') ? `<a href="/api/files/${proof.id}" target="_blank"><img src="/api/files/${proof.id}" style="max-height:340px;border-radius:10px;margin-top:12px;border:1px solid var(--line)"></a>`
-          : `<a class="btn btn-ghost btn-sm" style="margin-top:12px" href="/api/files/${proof.id}" target="_blank">Buka bukti (PDF)</a>`) : ''}</div>`);
+          : `<a class="btn btn-ghost btn-sm" style="margin-top:12px" href="/api/files/${proof.id}" target="_blank">Buka bukti (PDF)</a>`) : ''}
+        ${open ? `<div class="row" style="margin-top:14px"><button class="btn btn-green" id="paid" ${needIb ? 'disabled title="Cek IB dulu"' : ''}>✔ Sudah Bayar</button>
+          ${o.status === 'awaiting_verification' ? '<button class="btn btn-red btn-sm" id="proof-no">✖ Bukti tidak valid</button>' : ''}</div>
+          <p class="tiny muted" style="margin-top:8px">"Sudah Bayar" langsung memproses pesanan${o.includes_ea ? ' (EA otomatis di-compile)' : ''} dan member mendapat email.${!o.proof_file_id ? ' Member belum upload bukti: klik hanya jika uang sudah Anda pastikan masuk.' : ''}</p>` : ''}</div>`);
     }
     let procHtml = '';
-    if (open) {
+    if (open && o.billing !== 'free') {
+      procHtml = `<p class="small muted">Klik <b>✔ Sudah Bayar</b> di atas setelah uang masuk.</p><button class="btn btn-red btn-sm" id="reject" style="margin-top:10px">Tolak pesanan</button>`;
+    } else if (open) {
       procHtml = `<p class="small muted">${o.includes_ea ? 'EA otomatis di-compile dan dikunci ke nomor akun ini.' : ''}${o.kind === 'renew' ? ' Masa aktif diperpanjang ' + o.months + ' bulan.' : ''}</p>
         <div class="row" style="margin-top:12px"><button class="btn btn-gold" id="process" ${needIb ? 'disabled title="Cek IB dulu"' : ''}>▶ Proses</button>
         <button class="btn btn-red btn-sm" id="reject">Tolak</button></div>
@@ -192,7 +198,7 @@
     const act = (sel, fn) => { const el = $(sel); if (el) el.onclick = (e) => fn(e.currentTarget); };
     act('#ib-yes', async (btn) => { await busy(btn, () => post(`/admin/orders/${o.id}/ib`, { verified: true })); toast('Ditandai under IB'); render(); counts(); });
     act('#ib-no', async () => {
-      const m = modal('Bukan under IB', `<p class="small muted" style="margin-bottom:12px">Order ditolak dan member diberi panduan cara jadi IB.</p>
+      const m = modal('Bukan under IB', `<p class="small muted" style="margin-bottom:12px">Order ditolak dan member diberi panduan daftar akun baru / pindah partner.</p>
         <div class="field"><label>Pesan untuk member</label><textarea id="ibn">Akun ${esc(o.account_number)} belum terdaftar di bawah IB kami.</textarea></div>
         <button class="btn btn-red btn-block" id="ibn-ok">Tolak &amp; kirim pesan</button>`);
       $('#ibn-ok', m.el).onclick = async (e) => { await busy(e.target, () => post(`/admin/orders/${o.id}/ib`, { verified: false, note: $('#ibn', m.el).value })); m.close(); render(); counts(); };
@@ -200,6 +206,16 @@
     act('#process', async (btn) => {
       if (!(await confirmBox('Proses order?', `Lisensi dibuat untuk akun <b>${esc(o.account_number)}</b>${o.includes_ea ? ' dan file EA langsung di-compile' : ''}. Member mendapat email "sedang diproses".`, 'Proses'))) return;
       await busy(btn, () => post(`/admin/orders/${o.id}/process`)); toast('Diproses. EA sedang di-compile…'); render(); counts();
+    });
+    act('#paid', async (btn) => {
+      if (!(await confirmBox('Pembayaran sudah masuk?', `Pastikan mutasi rekening menunjukkan <b>${rupiah(o.total)}</b> (kode unik ${o.unique_code}). Pesanan langsung diproses${o.includes_ea ? ' dan EA di-compile' : ''}.`, '✔ Sudah Bayar'))) return;
+      await busy(btn, () => post(`/admin/orders/${o.id}/paid`)); toast('Pembayaran dikonfirmasi. Pesanan diproses.'); render(); counts();
+    });
+    act('#proof-no', async () => {
+      const m = modal('Bukti transfer tidak valid', `<p class="small muted" style="margin-bottom:12px">Member diminta mengirim ulang bukti transfer.</p>
+        <div class="field"><label>Alasan (dikirim ke member)</label><textarea id="pn">Nominal transfer tidak sesuai (harus ${rupiah(o.total)} termasuk kode unik ${o.unique_code}).</textarea></div>
+        <button class="btn btn-red btn-block" id="pn-ok">Kirim ke member</button>`);
+      $('#pn-ok', m.el).onclick = async (e) => { await busy(e.target, () => post(`/admin/orders/${o.id}/proof-reject`, { note: $('#pn', m.el).value })); m.close(); render(); counts(); };
     });
     act('#reject', async () => {
       const m = modal('Tolak order', `<div class="field"><label>Alasan (dikirim ke member)</label><textarea id="rr"></textarea></div><button class="btn btn-red btn-block" id="rr-ok">Tolak</button>`);
@@ -392,7 +408,7 @@
         <div class="card"><h3>Pembayaran</h3>
           <div class="field"><label>Rekening / e-wallet tujuan transfer (satu per baris)</label><textarea name="bank_accounts" style="min-height:110px">${esc(s.bank_accounts)}</textarea></div>
           <div class="grid c2" style="gap:0 12px"><div class="field"><label>Batas waktu bayar (jam)</label><input name="pay_deadline_hours" type="number" min="1" value="${esc(s.pay_deadline_hours)}"></div>
-          <div class="field"><label>Kode unik 3 digit</label><select name="unique_code"><option value="1">Aktif</option><option value="0" ${s.unique_code === '0' ? 'selected' : ''}>Mati</option></select></div></div>
+          <div class="field"><label>Kode unik</label><input value="Selalu aktif: 3 digit, berbeda tiap order (30 hari)" disabled></div></div>
           <h3 style="margin-top:8px">Durasi sewa &amp; diskon</h3>
           <div class="field"><label>Pilihan durasi (bulan, pisahkan koma)</label><input name="durations" value="${s.durations.join(', ')}"></div>
           <div class="field"><label>Diskon per durasi (format bulan=persen, pisahkan koma)</label><input name="discounts" value="${Object.entries(s.discounts).map(([m, d]) => `${m}=${d}`).join(', ')}">
@@ -434,7 +450,7 @@
           </div></div>
         <div class="card" style="grid-column:1/-1"><h3>Link IB broker (EA gratis)</h3><div id="ibl">${s.ib_brokers.map(brokerRow).join('')}</div>
           <button type="button" class="btn btn-ghost btn-sm" id="addib">+ Broker</button>
-          <p class="help">QR code di halaman "Cara Jadi IB" dibuat otomatis dari link ini.</p></div>
+          <p class="help">QR code di halaman member "Syarat EA Gratis" dibuat otomatis dari link ini.</p></div>
         <div class="card"><h3>Status server</h3><dl class="kv small">
           <dt>Alamat web</dt><dd>${esc(env.site_url)}</dd>
           <dt>Kunci enkripsi</dt><dd>${env.data_key_set ? '✔' : '<span class="badge b-red">belum diatur</span>'}</dd>
@@ -453,7 +469,7 @@
       e.preventDefault();
       const d = Object.fromEntries(new FormData(e.target));
       const body = {
-        bank_accounts: d.bank_accounts, pay_deadline_hours: d.pay_deadline_hours, unique_code: d.unique_code,
+        bank_accounts: d.bank_accounts, pay_deadline_hours: d.pay_deadline_hours,
         durations: d.durations.split(/[,\s]+/).filter(Boolean).map(Number),
         discounts: Object.fromEntries(d.discounts.split(',').map((x) => x.split('=').map((y) => y.trim())).filter((x) => x.length === 2)),
         reminder_days: d.reminder_days.split(/[,\s]+/).filter(Boolean).map(Number),

@@ -68,8 +68,31 @@ export async function getProduct(env, id) {
   return env.DB.prepare('SELECT * FROM products WHERE id=?').bind(id).first();
 }
 
-// Admin clicks "Proses": create/extend the license and queue the EA build.
-export async function processOrder(env, base, orderId) {
+// 3-digit unique transfer code (100-999), never shared by two orders created within 30 days.
+export async function pickUniqueCode(env, excludeId = 0) {
+  const { results } = await env.DB.prepare(`SELECT unique_code FROM orders WHERE created_at > ? AND unique_code > 0 AND id <> ?`)
+    .bind(now() - 30 * DAY, excludeId).all();
+  const used = new Set(results.map((r) => r.unique_code));
+  let free = [];
+  for (let c = 100; c <= 999; c++) if (!used.has(c)) free.push(c);
+  if (!free.length) for (let c = 1000; c <= 9999; c++) if (!used.has(c)) free.push(c); // >900 orders/month
+  return free[Math.floor(Math.random() * free.length)];
+}
+// Two orders created at the same moment could draw the same code: re-draw until it is unique.
+export async function ensureUniqueCode(env, orderId) {
+  for (let i = 0; i < 5; i++) {
+    const o = await env.DB.prepare('SELECT id, unique_code, subtotal, created_at FROM orders WHERE id=?').bind(orderId).first();
+    if (!o.unique_code) return o.unique_code;
+    const dup = await env.DB.prepare(`SELECT id FROM orders WHERE unique_code=? AND id<>? AND created_at > ? AND id < ? LIMIT 1`)
+      .bind(o.unique_code, o.id, now() - 30 * DAY, o.id).first();
+    if (!dup) return o.unique_code;
+    const code = await pickUniqueCode(env, o.id);
+    await env.DB.prepare('UPDATE orders SET unique_code=?, total=subtotal+? WHERE id=?').bind(code, code, o.id).run();
+  }
+}
+
+// Admin clicks "Proses" (or "Sudah Bayar"): create/extend the license and queue the EA build.
+export async function processOrder(env, base, orderId, { paid = false } = {}) {
   const o = await env.DB.prepare('SELECT * FROM orders WHERE id=?').bind(orderId).first();
   if (!o) fail(404, 'Order tidak ditemukan');
   if (!['awaiting_payment', 'awaiting_verification'].includes(o.status)) fail(409, 'Order ini tidak bisa diproses (status: ' + o.status + ')');
@@ -94,13 +117,15 @@ export async function processOrder(env, base, orderId) {
     licenseId = r.meta.last_row_id;
   }
   await env.DB.prepare(`UPDATE orders SET status='processing', license_id=?, processed_at=?,
-      confirmed_at=COALESCE(confirmed_at, ?) WHERE id=?`).bind(licenseId, t, t, o.id).run();
+      confirmed_at=COALESCE(confirmed_at, ?), paid_at=CASE WHEN ? THEN ? ELSE paid_at END WHERE id=?`)
+    .bind(licenseId, t, t, paid ? 1 : 0, t, o.id).run();
   if (p.includes_ea) await queueBuild(env, licenseId, o.kind === 'renew' ? 'Perpanjangan ' + o.code : 'Order ' + o.code);
 
   const user = await getUser(env, o.user_id);
-  await notify(env, o.user_id, `Pesanan ${o.code} sedang diproses`, 'Admin sedang menyiapkan pesanan Anda.', '#/pesanan/' + o.id);
-  await emailUser(env, user, `Pesanan ${o.code} sedang diproses`,
-    `<p>Halo ${esc(user.name)},</p><p>Pesanan <b>${esc(o.code)}</b> (${esc(p.name)}) untuk akun <b>${esc(o.account_number)}</b> sedang diproses oleh admin. Kami akan mengabari Anda lagi begitu selesai.</p>`,
+  const subj = paid ? `Pembayaran ${o.code} diterima, pesanan diproses` : `Pesanan ${o.code} sedang diproses`;
+  await notify(env, o.user_id, subj, paid ? `Pembayaran ${rupiah(o.total)} sudah kami terima. Admin sedang menyiapkan pesanan Anda.` : 'Admin sedang menyiapkan pesanan Anda.', '#/pesanan/' + o.id);
+  await emailUser(env, user, subj,
+    `<p>Halo ${esc(user.name)},</p>${paid ? `<p>Pembayaran <b>${rupiah(o.total)}</b> untuk pesanan <b>${esc(o.code)}</b> sudah kami terima. Terima kasih!</p>` : ''}<p>Pesanan <b>${esc(o.code)}</b> (${esc(p.name)}) untuk akun <b>${esc(o.account_number)}</b> sedang diproses oleh admin. Kami akan mengabari Anda lagi begitu selesai.</p>`,
     { text: 'Lihat Pesanan', url: `${base}/member#/pesanan/${o.id}` });
   return licenseId;
 }

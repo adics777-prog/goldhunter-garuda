@@ -11,6 +11,18 @@
   const priceText = (p) => p.billing === 'free' ? 'GRATIS' : p.billing === 'lifetime' ? rupiah(p.price) : `${rupiah(p.price)}<span class="small muted"> /bulan</span>`;
   const waLink = (num, text) => num ? `https://wa.me/${String(num).replace(/\D/g, '').replace(/^0/, '62')}?text=${encodeURIComponent(text)}` : '';
 
+  async function setupWhatsApp() {
+    const c = await getCatalog().catch(() => null);
+    const wa = c && waLink(c.whatsapp, 'Halo admin GoldHunter Garuda, saya butuh bantuan');
+    if (!wa) return;
+    $('#wa-side').href = wa;
+    $('#wa-side').classList.remove('hidden');
+    const f = document.createElement('a');
+    f.className = 'wa-float'; f.href = wa; f.target = '_blank'; f.rel = 'noopener'; f.title = 'Chat admin via WhatsApp';
+    f.innerHTML = '<svg viewBox="0 0 24 24" width="28" height="28" fill="#fff"><path d="M17.5 14.4c-.3-.1-1.8-.9-2-1-.3-.1-.5-.1-.7.1-.2.3-.8 1-.9 1.2-.2.2-.3.2-.6.1-.3-.1-1.3-.5-2.4-1.5-.9-.8-1.5-1.8-1.7-2.1-.2-.3 0-.5.1-.6l.4-.5c.1-.2.2-.3.3-.5.1-.2 0-.4 0-.5l-.9-2.2c-.2-.6-.5-.5-.7-.5h-.6c-.2 0-.5.1-.8.4-.3.3-1 1-1 2.5s1.1 2.9 1.2 3.1c.1.2 2.1 3.2 5.1 4.5.7.3 1.3.5 1.7.6.7.2 1.4.2 1.9.1.6-.1 1.8-.7 2-1.4.2-.7.2-1.3.2-1.4-.1-.2-.3-.3-.6-.4zM12 2C6.5 2 2 6.5 2 12c0 1.8.5 3.5 1.3 4.9L2 22l5.2-1.4c1.4.8 3.1 1.2 4.8 1.2 5.5 0 10-4.5 10-10S17.5 2 12 2z"/></svg>';
+    document.body.appendChild(f);
+  }
+
   async function refreshMe() {
     const r = await api('/me');
     if (!r.user) { location.href = '/masuk?next=/member'; return; }
@@ -18,6 +30,10 @@
     $('#me-name').textContent = me.name;
     $('#me-email').textContent = me.email;
     $('#admin-link').classList.toggle('hidden', me.role !== 'admin');
+    api('/orders').then((r) => {
+      const n = r.orders.filter((o) => o.status === 'awaiting_payment' && o.total > 0).length;
+      const b = $('#unpaid'); b.textContent = n; b.classList.toggle('hidden', !n);
+    }).catch(() => {});
     const u = $('#unread');
     u.textContent = r.unread;
     u.classList.toggle('hidden', !r.unread);
@@ -25,7 +41,7 @@
 
   // ------------------------------------------------------------------ router
   const routes = {
-    '': home, order: orderPage, pesanan: ordersPage, lisensi: licensesPage, ib: ibPage, notifikasi: notifPage, profil: profilePage,
+    '': home, order: orderPage, pesanan: ordersPage, bayar: payPage, lisensi: licensesPage, ib: ibPage, notifikasi: notifPage, profil: profilePage,
   };
   async function render() {
     clearInterval(timer);
@@ -56,8 +72,8 @@
       <div class="card gold" style="margin-bottom:22px">
         <div class="row between">
           <div style="max-width:620px"><h3 class="gold-text cinzel" style="font-size:1.3rem;margin-bottom:6px">EA GRATIS lewat IB Exness</h3>
-            <p class="muted">Buat akun Exness lewat link IB kami, maka EA GoldHunter Garuda <b style="color:var(--text)">gratis</b> untuk akun itu. Mau jalan 24 jam? Sewa VPS pribadi kami${vpsP ? ` <b style="color:var(--text)">${rupiah(vpsP.price)}/bulan</b>` : ''}.</p></div>
-          <div class="row"><a class="btn btn-outline" href="#/ib">Cara Jadi IB</a><a class="btn btn-gold" href="#/order">Order Sekarang</a></div>
+            <p class="muted">Akun Exness Anda terdaftar di bawah partner GoldHunter Garuda? Maka EA GoldHunter Garuda <b style="color:var(--text)">gratis</b> untuk akun itu. Mau jalan 24 jam? Sewa VPS pribadi kami${vpsP ? ` <b style="color:var(--text)">${rupiah(vpsP.price)}/bulan</b>` : ''}.</p></div>
+          <div class="row"><a class="btn btn-outline" href="#/ib">Syarat &amp; Panduan</a><a class="btn btn-gold" href="#/order">Order Sekarang</a></div>
         </div>
       </div>
       <div class="grid c2">
@@ -89,7 +105,7 @@
     const ib = c.products.filter((p) => p.requires_ib), paid = c.products.filter((p) => !p.requires_ib);
     view.innerHTML = `${title('Order')}
       ${ib.length ? `<h2 class="cinzel" style="font-size:1.15rem;margin-bottom:6px">🎁 EA Gratis untuk Akun IB</h2>
-        <p class="muted small" style="margin-bottom:14px">Syarat: akun trading dibuat lewat link IB kami. Belum punya? <a href="#/ib">Lihat caranya</a>.</p>
+        <p class="muted small" style="margin-bottom:14px">Syarat: akun trading dibuat lewat link IB kami. Belum? <a href="#/ib">Lihat panduan daftar akun baru atau pindah partner</a>.</p>
         <div class="grid c3" style="margin-bottom:34px">${ib.map(card).join('')}</div>` : ''}
       <h2 class="cinzel" style="font-size:1.15rem;margin-bottom:14px">💳 Paket Berbayar (semua broker)</h2>
       <div class="grid c3">${paid.map(card).join('')}</div>`;
@@ -100,7 +116,7 @@
     const ibBrokers = c.ib_brokers;
     const brokerField = p.requires_ib
       ? `<select name="broker">${ibBrokers.map((b) => `<option>${esc(b.name)}</option>`).join('')}</select>
-         <div class="help">Akun harus terdaftar di bawah IB kami. <a href="#/ib">Cara jadi IB →</a></div>`
+         <div class="help">Akun harus terdaftar di bawah partner GoldHunter Garuda. <a href="#/ib">Panduan daftar / pindah partner →</a></div>`
       : `<select name="broker_sel"><option>Exness</option><option>HFM</option><option value="">Lainnya…</option></select>
          <input name="broker_other" class="hidden" placeholder="Nama broker" style="margin-top:8px">`;
     const durations = c.durations.map((m, i) => {
@@ -178,48 +194,56 @@
       </tbody></table></div>` : '<div class="card empty">Belum ada pesanan. <a href="#/order">Order sekarang</a></div>'}`;
   }
 
+  // Total with the 3-digit unique code highlighted, e.g. Rp 450.123
+  const totalHtml = (o) => {
+    const t = rupiah(o.total);
+    if (!o.unique_code) return t;
+    const tail = String(o.unique_code).padStart(3, '0');
+    return t.endsWith(tail) ? `${t.slice(0, -3)}<span style="color:var(--green);text-decoration:underline">${tail}</span>` : t;
+  };
+  const bankList = (bank_accounts) => String(bank_accounts || '').split(/\r?\n/).filter(Boolean).map((l) => {
+    const num = (l.match(/\d[\d\s-]{5,}\d/) || [''])[0].replace(/[\s-]/g, '');
+    return `<div class="row between" style="padding:8px 0;border-bottom:1px solid var(--line)"><span>${esc(l)}</span>${num ? `<button class="btn btn-ghost btn-sm" data-copy="${esc(num)}">Salin</button>` : ''}</div>`;
+  }).join('') || '<div class="muted">Rekening belum diatur admin. Silakan hubungi admin.</div>';
+  const waButton = (whatsapp, text, label = '💬 Ada kendala? Chat admin via WhatsApp') => {
+    const wa = waLink(whatsapp, text);
+    return wa ? `<a class="btn btn-ghost btn-sm" target="_blank" rel="noopener" href="${wa}">${label}</a>` : '';
+  };
+
   async function orderDetail(id) {
     const { order: o, bank_accounts, whatsapp } = await api('/orders/' + id);
     const free = o.billing === 'free';
     const steps = [
       ['Pesanan dibuat', o.created_at],
-      [free ? 'Pengajuan diterima' : 'Pembayaran dikonfirmasi', o.confirmed_at],
+      [free ? 'Pengajuan diterima' : 'Bukti transfer dikirim', o.confirmed_at],
+      ...(free ? [] : [['Pembayaran dicek admin (sudah bayar)', o.paid_at]]),
       ...(o.requires_ib ? [['Akun dicek di bawah IB kami', o.ib_status === 'yes' ? o.ib_checked_at || 1 : null]] : []),
       ['Diproses admin', o.processed_at], ['Selesai', o.completed_at],
     ];
-    const bankLines = String(bank_accounts || '').split(/\r?\n/).filter(Boolean).map((l) => {
-      const num = (l.match(/\d[\d\s-]{5,}\d/) || [''])[0].replace(/[\s-]/g, '');
-      return `<div class="row between" style="padding:8px 0;border-bottom:1px solid var(--line)"><span>${esc(l)}</span>${num ? `<button class="btn btn-ghost btn-sm" data-copy="${esc(num)}">Salin</button>` : ''}</div>`;
-    }).join('');
     let action = '';
     if (o.status === 'awaiting_payment') {
       action = `<div class="card gold"><h3>Instruksi Pembayaran</h3>
-        <p class="muted small">Transfer <b>tepat</b> sesuai nominal (termasuk 3 digit kode unik) sebelum <b>${fmtDateTime(o.pay_deadline)}</b>.</p>
-        <div class="summary" style="margin:14px 0"><div class="muted small">Total transfer</div>
-          <div class="row between"><span class="total">${rupiah(o.total)}</span><button class="btn btn-outline btn-sm" data-copy="${o.total}">Salin nominal</button></div></div>
-        <div style="margin-bottom:18px">${bankLines || '<div class="muted">Rekening belum diatur admin.</div>'}</div>
-        <h3>Konfirmasi Pembayaran</h3>
-        <form id="cf" novalidate>
-          <div class="grid c2" style="gap:0 14px"><div class="field"><label>Nama pengirim</label><input name="payer_name" required></div>
-          <div class="field"><label>Dari bank / e-wallet</label><input name="payer_bank" placeholder="BCA / DANA / ..." required></div></div>
-          <div class="field"><label>Foto / screenshot bukti transfer</label><input type="file" name="proof" accept="image/*,application/pdf" required></div>
-          <div class="field"><label>Catatan (opsional)</label><input name="note"></div>
-          <div class="row"><button class="btn btn-gold" type="submit">Saya Sudah Transfer</button><button class="btn btn-red btn-sm" type="button" id="cancel">Batalkan pesanan</button></div>
-        </form></div>`;
+        ${o.admin_note && o.confirmed_at ? `<div class="alert err small" style="margin-bottom:12px">Bukti transfer sebelumnya belum bisa kami terima: ${esc(o.admin_note)}. Silakan kirim ulang.</div>` : ''}
+        <p class="muted small">Transfer <b>tepat</b> sesuai nominal, <b>termasuk 3 digit kode unik</b>, sebelum <b>${fmtDateTime(o.pay_deadline)}</b>.</p>
+        <div class="summary" style="margin:14px 0"><div class="muted small">Total transfer (kode unik <b>${o.unique_code}</b>)</div>
+          <div class="row between"><span class="total">${totalHtml(o)}</span><button class="btn btn-outline btn-sm" data-copy="${o.total}">Salin nominal</button></div></div>
+        <div style="margin-bottom:18px">${bankList(bank_accounts)}</div>
+        <div class="row"><a class="btn btn-gold" href="#/bayar/${o.id}">Saya Sudah Transfer → Konfirmasi Pembayaran</a>
+          ${o.proof_file_id ? '' : '<button class="btn btn-red btn-sm" type="button" id="cancel">Batalkan pesanan</button>'}</div>
+        <div style="margin-top:12px">${waButton(whatsapp, `Halo admin GoldHunter Garuda, saya ada kendala pembayaran pesanan ${o.code}`)}</div></div>`;
     } else if (o.status === 'awaiting_verification') {
       action = `<div class="alert ok">${free
         ? '✅ Pengajuan diterima. Admin sedang mengecek bahwa akun Anda terdaftar di bawah IB kami, lalu <b>segera memproses</b>.'
-        : '✅ Konfirmasi pembayaran diterima. Pesanan Anda <b>segera diproses</b> oleh admin.'}</div>`;
+        : `✅ Bukti transfer diterima. Admin sedang mengecek pembayaran Anda, lalu pesanan <b>segera diproses</b>. <a href="#/bayar/${o.id}">Ganti bukti transfer</a>`}</div>`;
     } else if (o.status === 'processing') {
-      action = `<div class="alert info">⚙️ Pesanan sedang diproses admin${o.includes_ea ? ' (file EA dikunci ke nomor akun Anda)' : ''}${o.includes_vps ? ' dan VPS pribadi Anda disiapkan' : ''}.</div>`;
+      action = `<div class="alert info">⚙️ ${o.paid_at ? 'Pembayaran sudah diterima. ' : ''}Pesanan sedang diproses admin${o.includes_ea ? ' (file EA dikunci ke nomor akun Anda)' : ''}${o.includes_vps ? ' dan VPS pribadi Anda disiapkan' : ''}.</div>`;
     } else if (o.status === 'completed') {
       action = `<div class="alert ok">🎉 Pesanan selesai. <a href="#/lisensi">Buka Lisensi &amp; VPS →</a></div>`;
     } else if (o.status === 'rejected') {
-      action = `<div class="alert err">Pesanan ditolak. ${o.admin_note ? 'Alasan: ' + esc(o.admin_note) : ''}${o.requires_ib ? ' <a href="#/ib">Lihat cara jadi IB</a>.' : ''}</div>`;
+      action = `<div class="alert err">Pesanan ditolak. ${o.admin_note ? 'Alasan: ' + esc(o.admin_note) : ''}${o.requires_ib ? ' <a href="#/ib">Lihat panduan daftar / pindah partner</a>.' : ''}</div>`;
     } else {
       action = `<div class="alert">Pesanan ${o.status === 'expired' ? 'kedaluwarsa karena belum dibayar' : 'dibatalkan'}.</div>`;
     }
-    const wa = waLink(whatsapp, `Halo admin GoldHunter Garuda, saya mau tanya pesanan ${o.code}`);
     view.innerHTML = `
       <div class="crumb"><a href="#/pesanan">← Pesanan saya</a></div>
       ${title(`Pesanan <span class="mono" style="font-family:monospace">${esc(o.code)}</span>`, orderBadge(o.status, o.status_label))}
@@ -232,30 +256,72 @@
             <dt>Broker</dt><dd>${esc(o.broker)}${o.broker_server ? ' · ' + esc(o.broker_server) : ''}</dd>
             <dt>Nomor akun</dt><dd><b>${esc(o.account_number)}</b></dd>
             ${o.total ? `<dt>Harga</dt><dd>${o.months ? rupiah(o.unit_price) + ' × ' + o.months + ' bln' : rupiah(o.unit_price)}${o.discount_pct ? ` <span class="badge b-green">-${o.discount_pct}%</span>` : ''}</dd>
-            <dt>Kode unik</dt><dd>${o.unique_code}</dd><dt>Total</dt><dd><b>${rupiah(o.total)}</b></dd>` : '<dt>Biaya</dt><dd><b>GRATIS</b></dd>'}
+            <dt>Subtotal</dt><dd>${rupiah(o.subtotal)}</dd><dt>Kode unik</dt><dd><b style="color:var(--green)">${o.unique_code}</b></dd>
+            <dt>Total transfer</dt><dd><b>${totalHtml(o)}</b></dd>` : '<dt>Biaya</dt><dd><b>GRATIS</b></dd>'}
           </dl></div>
         </div>
         <div class="card"><h3>Status</h3><ul class="timeline">${steps.map(([t, at]) => `<li class="${at ? 'done' : ''}">${t}${at > 1 ? `<div class="tiny muted">${fmtDateTime(at)}</div>` : ''}</li>`).join('')}</ul>
-          ${wa ? `<a class="btn btn-ghost btn-sm" target="_blank" rel="noopener" href="${wa}">💬 Tanya admin via WhatsApp</a>` : ''}</div>
+          ${waButton(whatsapp, `Halo admin GoldHunter Garuda, saya mau tanya pesanan ${o.code}`, '💬 Tanya admin via WhatsApp')}</div>
+      </div>`;
+    const cancel = $('#cancel');
+    if (cancel) cancel.onclick = async () => {
+      if (!(await confirmBox('Batalkan pesanan?', `Pesanan ${esc(o.code)} akan dibatalkan.`, 'Ya, batalkan', true))) return;
+      await api(`/orders/${o.id}/cancel`, { method: 'POST', body: {} }).then(() => { toast('Pesanan dibatalkan'); render(); refreshMe(); }, (e) => toast(e.message, 'err'));
+    };
+  }
+
+  // ------------------------------------------------------------------ konfirmasi pembayaran
+  async function payPage(id) {
+    const c = await getCatalog();
+    if (!id) {
+      const { orders } = await api('/orders');
+      const unpaid = orders.filter((o) => o.total > 0 && ['awaiting_payment', 'awaiting_verification'].includes(o.status));
+      if (unpaid.length === 1 && unpaid[0].status === 'awaiting_payment') { location.replace('#/bayar/' + unpaid[0].id); return; }
+      view.innerHTML = `${title('Konfirmasi Pembayaran')}
+        ${unpaid.length ? `<p class="muted" style="margin-bottom:14px">Pilih pesanan yang sudah Anda transfer:</p><div class="table-wrap"><table><thead><tr><th>Kode</th><th>Paket</th><th>Akun</th><th>Total transfer</th><th>Status</th><th></th></tr></thead><tbody>
+          ${unpaid.map((o) => `<tr><td class="mono">${esc(o.code)}</td><td>${esc(o.product_name)}</td><td>${esc(o.account_number)}</td><td class="nowrap"><b>${totalHtml(o)}</b></td>
+            <td>${orderBadge(o.status)}</td><td><a class="btn btn-gold btn-sm" href="#/bayar/${o.id}">${o.status === 'awaiting_payment' ? 'Konfirmasi' : 'Ganti bukti'}</a></td></tr>`).join('')}</tbody></table></div>`
+          : '<div class="card empty">Tidak ada pesanan yang menunggu pembayaran. <a href="#/pesanan">Lihat pesanan saya</a></div>'}
+        <div style="margin-top:16px">${waButton(c.whatsapp, 'Halo admin GoldHunter Garuda, saya ada kendala pembayaran')}</div>`;
+      return;
+    }
+    const { order: o, bank_accounts, whatsapp } = await api('/orders/' + id);
+    if (!['awaiting_payment', 'awaiting_verification'].includes(o.status) || !o.total) { location.replace('#/pesanan/' + o.id); return; }
+    view.innerHTML = `
+      <div class="crumb"><a href="#/pesanan/${o.id}">← Pesanan ${esc(o.code)}</a></div>
+      ${title('Konfirmasi Pembayaran')}
+      <div class="grid c2" style="align-items:start">
+        <form class="card gold" id="cf" novalidate>
+          ${o.status === 'awaiting_verification' ? '<div class="alert info small" style="margin-bottom:14px">Bukti transfer sudah Anda kirim dan sedang dicek admin. Isi form ini hanya jika ingin mengganti bukti.</div>' : ''}
+          ${o.status === 'awaiting_payment' && o.admin_note && o.confirmed_at ? `<div class="alert err small" style="margin-bottom:14px">Bukti sebelumnya belum bisa kami terima: ${esc(o.admin_note)}</div>` : ''}
+          <div class="summary" style="margin-bottom:16px"><div class="muted small">Pesanan ${esc(o.code)} · ${esc(o.product_name)} · akun ${esc(o.account_number)}</div>
+            <div class="row between"><span class="total">${totalHtml(o)}</span><span class="tiny muted">kode unik <b style="color:var(--green)">${o.unique_code}</b></span></div></div>
+          <div class="grid c2" style="gap:0 14px"><div class="field"><label>Nama pemilik rekening pengirim</label><input name="payer_name" value="${esc(o.payer_name || me.name)}" required></div>
+          <div class="field"><label>Dari bank / e-wallet</label><input name="payer_bank" value="${esc(o.payer_bank)}" placeholder="BCA / BRI / DANA / ..." required></div></div>
+          <div class="field"><label>Foto / screenshot bukti transfer</label><input type="file" name="proof" accept="image/*,application/pdf" required>
+            <div class="help">Pastikan nominal, tanggal dan rekening tujuan terlihat jelas. Foto otomatis dikecilkan.</div></div>
+          <div class="field"><label>Catatan untuk admin (opsional)</label><input name="note" value="${esc(o.member_note)}"></div>
+          <button class="btn btn-gold btn-block" type="submit">Kirim Bukti Transfer</button>
+        </form>
+        <div class="stack">
+          <div class="card"><h3>Rekening tujuan</h3>${bankList(bank_accounts)}
+            <p class="tiny muted" style="margin-top:10px">Batas pembayaran: ${fmtDateTime(o.pay_deadline)}</p></div>
+          <div class="card"><h3>Ada kendala?</h3><p class="small muted" style="margin-bottom:12px">Salah nominal, transfer gagal, atau bukti tidak bisa diupload? Hubungi admin, sebutkan kode pesanan <b>${esc(o.code)}</b>.</p>
+            ${waButton(whatsapp, `Halo admin GoldHunter Garuda, saya ada kendala pembayaran pesanan ${o.code} (total ${rupiah(o.total)})`, '💬 Chat Admin via WhatsApp') || '<span class="muted small">Kontak admin belum diatur.</span>'}</div>
+        </div>
       </div>`;
     const cf = $('#cf');
-    if (cf) {
-      cf.onsubmit = async (e) => {
-        e.preventDefault();
-        const d = new FormData(cf);
-        await busy($('button[type=submit]', cf), async () => {
-          const proof = await readProof(d.get('proof') && d.get('proof').size ? d.get('proof') : null);
-          await api(`/orders/${o.id}/confirm`, { method: 'POST', body: { payer_name: d.get('payer_name'), payer_bank: d.get('payer_bank'), note: d.get('note'), proof } });
-        });
-        toast('Terima kasih! Konfirmasi diterima, pesanan segera diproses.');
-        render();
-        refreshMe();
-      };
-      $('#cancel').onclick = async () => {
-        if (!(await confirmBox('Batalkan pesanan?', `Pesanan ${esc(o.code)} akan dibatalkan.`, 'Ya, batalkan', true))) return;
-        await api(`/orders/${o.id}/cancel`, { method: 'POST', body: {} }).then(() => { toast('Pesanan dibatalkan'); render(); }, (e) => toast(e.message, 'err'));
-      };
-    }
+    cf.onsubmit = async (e) => {
+      e.preventDefault();
+      const d = new FormData(cf);
+      await busy($('button[type=submit]', cf), async () => {
+        const proof = await readProof(d.get('proof') && d.get('proof').size ? d.get('proof') : null);
+        await api(`/orders/${o.id}/confirm`, { method: 'POST', body: { payer_name: d.get('payer_name'), payer_bank: d.get('payer_bank'), note: d.get('note'), proof } });
+      });
+      toast('Terima kasih! Bukti transfer terkirim, admin segera mengecek.');
+      location.hash = '#/pesanan/' + o.id;
+      refreshMe();
+    };
   }
 
   // ------------------------------------------------------------------ lisensi
@@ -359,44 +425,58 @@
     };
   }
 
-  // ------------------------------------------------------------------ IB tutorial
-  async function ibPage() {
+  // ------------------------------------------------------------------ syarat EA gratis (akun di bawah IB GoldHunter Garuda)
+  async function ibPage(tab) {
     const c = await getCatalog();
-    const ibProducts = c.products.filter((p) => p.requires_ib);
-    const vps = ibProducts.find((p) => p.includes_vps);
+    const vps = c.products.find((p) => p.requires_ib && p.includes_vps);
     const brokers = c.ib_brokers;
-    const brokerCard = (b) => `
+    const b = brokers[0];
+    const link = b ? b.link : '';
+    const name = b ? b.name : 'Exness';
+    tab = tab === 'pindah' ? 'pindah' : 'baru';
+    const linkBox = b ? `
       <div class="card gold"><div class="row" style="align-items:flex-start;gap:24px">
-        <div class="qr" title="Scan untuk daftar ${esc(b.name)}">${qrSvg(b.link)}</div>
-        <div style="flex:1;min-width:240px"><h3 class="cinzel" style="font-size:1.3rem">Daftar ${esc(b.name)} lewat link IB kami</h3>
-          <p class="muted small" style="margin-bottom:14px">Scan QR dengan kamera HP, atau klik tombol di bawah. Akun yang dibuat lewat link ini otomatis tercatat di bawah IB GoldHunter Garuda.</p>
-          <div class="row"><a class="btn btn-gold" href="${esc(b.link)}" target="_blank" rel="noopener">Daftar ${esc(b.name)} →</a>
-          <button class="btn btn-ghost btn-sm" data-copy="${esc(b.link)}">Salin link</button></div>
-          <p class="tiny muted mono" style="margin-top:10px;word-break:break-all">${esc(b.link)}</p></div>
-      </div></div>`;
-    view.innerHTML = `${title('Cara Jadi IB &amp; Dapat EA Gratis')}
-      <div class="alert ok" style="margin-bottom:20px">🎁 <b>EA GoldHunter Garuda GRATIS</b> untuk akun trading yang terdaftar di bawah IB (Introducing Broker) kami.
-        ${vps ? `Ingin EA berjalan 24 jam tanpa menyalakan komputer? Sewa VPS pribadi${c.vps_spec ? ` (${esc(c.vps_spec)})` : ""} cukup <b>${rupiah(vps.price)}/bulan</b>.` : ''}</div>
-      ${brokers.length ? brokers.map(brokerCard).join('') : '<div class="alert">Link IB belum tersedia.</div>'}
-      <p class="small muted" style="margin:10px 0 24px">Saat ini tersedia broker: <b>${brokers.map((b) => esc(b.name)).join(', ') || '-'}</b>. HFM segera menyusul.</p>
-      <div class="grid c2" style="align-items:start">
-        <div class="card"><h3>Langkah-langkah (akun baru)</h3><ol class="steps small">
-          <li><b>Daftar lewat link / QR di atas</b>Gunakan email yang belum pernah dipakai di Exness.</li>
-          <li><b>Lengkapi verifikasi</b>Di Personal Area Exness: verifikasi email, nomor HP, identitas (KTP) dan alamat.</li>
-          <li><b>Buat akun trading MT5 Standard Cent</b>Personal Area → Akun Saya → Buka akun baru → pilih <b>Standard Cent</b>, platform <b>MT5</b>. Catat nomor akun dan servernya.</li>
-          <li><b>Deposit</b>Deposit sesuai modal yang Anda rencanakan (akun cent: saldo tampil dalam USC).</li>
-          <li><b>Ajukan EA gratis di sini</b><a href="#/order">Order</a> → <i>EA Gratis (Akun IB Exness)</i>, isi nomor akun. ${vps ? 'Mau jalan 24 jam? Pilih juga <i>VPS untuk EA Gratis</i> (VPS pribadi, Anda pasang sendiri).' : ''}</li>
-          <li><b>Admin cek &amp; kirim EA</b>Admin memastikan akun Anda di bawah IB kami, lalu file EA (terkunci di nomor akun Anda) bisa diunduh di menu <a href="#/lisensi">Lisensi &amp; VPS</a>.</li>
-        </ol></div>
-        <div class="stack">
-          <div class="card"><h3>Sudah punya akun Exness?</h3><p class="small muted">Akun yang dibuat <b>tanpa</b> link IB kami (atau lewat partner lain) tidak tercatat di bawah IB kami, jadi belum bisa mendapat EA gratis. Pilihannya:</p>
-            <ul class="small" style="margin:10px 0 0 18px;color:#d6d6de"><li>Daftar ulang lewat link kami memakai <b>email baru</b>, atau</li>
-            <li>Hubungi Live Chat Exness dan minta pindah partner ke link IB kami (keputusan ada di pihak Exness).</li>
-            <li>Atau pilih paket berbayar yang berlaku untuk semua broker.</li></ul></div>
-          <div class="card"><h3>Kenapa gratis?</h3><p class="small muted">Sebagai IB, kami mendapat komisi dari broker atas aktivitas trading akun Anda, <b>tanpa biaya tambahan</b> untuk Anda: spread dan komisi Anda sama seperti mendaftar langsung.</p></div>
-          <div class="alert warn small">Trading emas dengan EA tetap berisiko. Gunakan dana yang siap Anda tanggung risikonya.</div>
-        </div>
-      </div>`;
+        <div class="qr" title="Scan untuk daftar ${esc(name)}">${qrSvg(link)}</div>
+        <div style="flex:1;min-width:240px"><h3 class="cinzel" style="font-size:1.25rem">Link partner GoldHunter Garuda di ${esc(name)}</h3>
+          <p class="muted small" style="margin-bottom:14px">Scan QR dengan kamera HP atau klik tombol di bawah. Link ini dipakai untuk <b>daftar akun baru</b> dan juga untuk <b>formulir pindah partner</b>.</p>
+          <div class="row"><a class="btn btn-gold" href="${esc(link)}" target="_blank" rel="noopener">Buka link ${esc(name)} →</a>
+          <button class="btn btn-ghost btn-sm" data-copy="${esc(link)}">Salin link</button></div>
+          <p class="tiny muted mono" style="margin-top:10px;word-break:break-all">${esc(link)}</p></div>
+      </div></div>` : '<div class="alert">Link partner belum diatur admin.</div>';
+    const tabs = `<div class="choice" style="margin:22px 0 14px">
+      <label><input type="radio" name="t" value="baru" ${tab === 'baru' ? 'checked' : ''}><span>① Belum punya akun ${esc(name)}</span></label>
+      <label><input type="radio" name="t" value="pindah" ${tab === 'pindah' ? 'checked' : ''}><span>② Sudah punya akun ${esc(name)} (pindah partner)</span></label></div>`;
+    const finish = `<li><b>Ajukan EA gratis di sini</b>Menu <a href="#/order">Order</a> → <i>EA Gratis (Akun IB ${esc(name)})</i>, isi nomor akun trading Anda.${vps ? ` Ingin jalan 24 jam? Pilih <i>${esc(vps.name)}</i> (VPS pribadi ${rupiah(vps.price)}/bulan).` : ''}</li>
+      <li><b>Admin cek &amp; kirim EA</b>Admin memastikan akun Anda terdaftar di bawah partner GoldHunter Garuda, lalu file EA (terkunci di nomor akun Anda) bisa diunduh di menu <a href="#/lisensi">Lisensi &amp; VPS</a>.</li>`;
+    const guideNew = `<div class="card"><h3>Panduan ①: Daftar akun ${esc(name)} baru lewat link kami</h3><ol class="steps small">
+      <li><b>Buka link / scan QR di atas</b>Halaman pendaftaran ${esc(name)} terbuka. Pastikan Anda mendaftar dari link ini agar akun otomatis tercatat di bawah partner GoldHunter Garuda.</li>
+      <li><b>Isi data pendaftaran</b>Pilih negara Indonesia, isi email dan buat password. Gunakan email yang <b>belum pernah</b> dipakai di ${esc(name)}.</li>
+      <li><b>Verifikasi profil</b>Di Personal Area: verifikasi email, nomor HP, lalu upload KTP dan bukti alamat.</li>
+      <li><b>Buat akun trading MT5 Standard Cent</b>Personal Area → <i>Akun Saya</i> → <i>Buka akun baru</i> → pilih <b>Standard Cent</b>, platform <b>MT5</b>. Catat <b>nomor akun</b> dan <b>servernya</b>.</li>
+      <li><b>Deposit</b>Deposit sesuai modal yang Anda rencanakan (akun cent: saldo tampil dalam USC).</li>
+      ${finish}</ol></div>`;
+    const guideMove = `<div class="card"><h3>Panduan ②: Sudah punya akun ${esc(name)}, pindah ke partner GoldHunter Garuda</h3>
+      <div class="alert warn small" style="margin-bottom:16px"><b>Penting:</b> setelah pindah partner disetujui, hanya akun trading yang <b>dibuat sesudahnya</b> yang tercatat di bawah GoldHunter Garuda. Akun trading lama tetap di partner lama, jadi Anda perlu <b>membuat akun trading baru</b> (langkah 5).</div>
+      <ol class="steps small">
+      <li><b>Login ke Personal Area ${esc(name)}</b>Di web atau aplikasi ${esc(name)}.</li>
+      <li><b>Buka Live Chat / Support</b>Klik ikon chat (pojok kanan bawah), lalu ketik <b class="copy" data-copy="Change partner">Change partner</b>.</li>
+      <li><b>Isi formulir pindah partner</b>
+        <ul style="margin:6px 0 0 18px;color:#d6d6de"><li>Alasan: pilih yang sesuai (misalnya <i>Education</i> / edukasi dan tools trading)</li>
+        <li>Link partner baru: <span class="copy mono" data-copy="${esc(link)}">${esc(link) || '(link partner)'}</span> <span class="tiny muted">(klik untuk salin)</span></li>
+        <li>Tempat Anda menemukan partner: <span class="copy mono" data-copy="https://goldhuntergaruda.com">https://goldhuntergaruda.com</span></li></ul></li>
+      <li><b>Konfirmasi &amp; tunggu</b>Masukkan kode keamanan yang dikirim ${esc(name)} bila diminta. Proses biasanya 1–3 hari kerja dan keputusan sepenuhnya ada di pihak ${esc(name)}. Anda akan menerima email bila disetujui.</li>
+      <li><b>Buat akun trading BARU</b>Setelah disetujui: Personal Area → <i>Buka akun baru</i> → <b>Standard Cent</b>, <b>MT5</b>. Pindahkan dana dari akun lama lewat <i>Transfer antar akun</i> bila perlu.</li>
+      ${finish}</ol>
+      <p class="tiny muted" style="margin-top:6px">Kalau permintaan pindah partner ditolak ${esc(name)}, Anda tetap bisa memakai Panduan ① dengan email lain, atau memilih paket berbayar yang berlaku untuk semua broker.</p></div>`;
+    view.innerHTML = `${title('Syarat EA Gratis')}
+      <div class="alert ok">🎁 <b>EA GoldHunter Garuda GRATIS</b> dengan satu syarat: akun trading ${esc(name)} Anda <b>terdaftar di bawah partner (IB) GoldHunter Garuda</b>.
+        Tidak ada biaya tambahan: spread dan komisi Anda sama seperti mendaftar langsung.</div>
+      ${tabs}
+      ${linkBox}
+      <div style="margin-top:16px">${tab === 'baru' ? guideNew : guideMove}</div>
+      <p class="small muted" style="margin-top:14px">Broker yang tersedia: <b>${brokers.map((x) => esc(x.name)).join(', ') || '-'}</b>. HFM segera menyusul.</p>
+      <div class="alert warn small" style="margin-top:14px">Trading emas dengan EA tetap berisiko. Gunakan dana yang siap Anda tanggung risikonya.</div>`;
+    $$('input[name=t]').forEach((r) => r.onchange = () => { location.hash = '#/ib/' + r.value; });
   }
 
   // ------------------------------------------------------------------ notifikasi & profil
@@ -435,5 +515,6 @@
   }
 
   refreshMe().then(render);
+  setupWhatsApp();
   setInterval(() => refreshMe().catch(() => {}), 60000);
 })();
