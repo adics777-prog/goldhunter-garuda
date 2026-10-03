@@ -192,17 +192,17 @@ INSERT INTO products (code, name, kind, billing, includes_ea, includes_vps, requ
 Syarat: akun Exness daftar lewat link IB kami
 File .ex5 terkunci di nomor akun Anda
 Lihat tutorial di menu "Cara Jadi IB"', 0),
- ('ib_vps', 'VPS untuk EA Gratis (IB)', 'ib_vps', 'monthly', 1, 1, 1, 50000,
-  'Khusus akun di bawah IB kami: EA gratis dipasang dan dijalankan admin di VPS 24 jam. Anda hanya membayar sewa VPS.',
+ ('ib_vps', 'VPS untuk EA Gratis (IB)', 'ib_vps', 'monthly', 1, 1, 1, 150000,
+  'Khusus akun di bawah IB kami: EA gratis + VPS Windows pribadi 24 jam. Anda login lewat Remote Desktop dan mengatur EA sendiri.',
   'EA GRATIS, cukup bayar VPS
-VPS Windows 24/5 disiapkan admin
-Syarat: akun Exness di bawah IB kami
+VPS pribadi: RAM 2 GB, 2 core, disk 40 GB
+Akses Remote Desktop, setting EA bebas
 Pengingat sebelum masa sewa VPS habis', 1),
  ('vps_ea', 'Paket VPS + EA', 'vps_ea', 'monthly', 1, 1, 0, 500000,
-  'EA dipasang dan dijalankan oleh admin di VPS 24 jam. Anda cukup memberikan nomor akun dan password trading.',
-  'VPS Windows 24/5 disiapkan admin
-EA GoldHunter Garuda terpasang
-Lisensi terkunci di nomor akun Anda
+  'File EA berlisensi + VPS Windows pribadi 24 jam untuk broker apa pun. Anda login lewat Remote Desktop dan mengatur EA sendiri.',
+  'VPS pribadi: RAM 2 GB, 2 core, disk 40 GB
+File .ex5 terkunci di nomor akun Anda
+Akses Remote Desktop, setting EA bebas
 Pengingat sebelum masa sewa habis', 2),
  ('ea_rent', 'Sewa EA Bulanan', 'ea_rent', 'monthly', 1, 0, 0, 300000,
   'File EA (.ex5) berlisensi atas nomor akun Anda, berlaku sesuai masa sewa.',

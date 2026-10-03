@@ -237,10 +237,6 @@ function parseAccount(b, product, settings) {
     const ok = settings.ib_brokers.some((x) => x.active && x.link && x.name === broker);
     if (!ok) fail(400, 'EA gratis hanya untuk akun broker yang terdaftar di bawah IB kami');
   }
-  if (product.includes_vps) {
-    if (!broker_server) fail(400, 'Server broker wajib diisi untuk paket VPS (contoh: Exness-MT5Real25)');
-    if (!String(b.trading_password || '')) fail(400, 'Password trading wajib diisi untuk paket VPS');
-  }
   return { platform, account_number, broker, broker_server };
 }
 
@@ -262,7 +258,7 @@ route('POST', '/orders', 'member', async ({ request, env, user, base }) => {
   }
   const id = await createOrder(env, base, user, {
     kind: 'new', product_id: p.id, months: int(b.months), ...acc,
-    trading_pass_enc: p.includes_vps ? await encrypt(env, String(b.trading_password)) : null,
+    trading_pass_enc: null,
   });
   return json({ ok: true, id });
 });
@@ -381,10 +377,9 @@ route('POST', '/licenses/:id/change-account', 'member', async ({ request, env, u
   if (!/^\d{4,15}$/.test(new_account)) fail(400, 'Nomor akun baru harus angka (4-15 digit)');
   if (new_account === l.account_number) fail(400, 'Nomor akun baru sama dengan yang lama');
   const new_server = str(b.new_server, 80);
-  if (l.includes_vps && (!new_server || !b.new_password)) fail(400, 'Paket VPS: isi server dan password trading akun baru');
   await env.DB.prepare(`INSERT INTO account_changes (license_id, user_id, old_account, new_account, new_server, new_pass_enc, reason, created_at)
       VALUES (?,?,?,?,?,?,?,?)`).bind(l.id, user.id, l.account_number, new_account, new_server,
-    b.new_password ? await encrypt(env, String(b.new_password)) : null, str(b.reason, 500), now()).run();
+    null, str(b.reason, 500), now()).run();
   await notify(env, user.id, 'Pengajuan ganti nomor akun terkirim', `${l.account_number} → ${new_account}. Menunggu persetujuan admin.`, '#/lisensi');
   await emailAdmin(env, base, 'Pengajuan ganti nomor akun',
     `<p>${esc(user.name)} (${esc(user.email)}) minta ganti akun ${esc(l.account_number)} → <b>${esc(new_account)}</b> (${esc(l.product_name)}).</p><p>Alasan: ${esc(str(b.reason, 500)) || '-'}</p>`,

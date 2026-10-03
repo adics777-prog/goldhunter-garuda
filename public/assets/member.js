@@ -43,7 +43,8 @@
 
   // ------------------------------------------------------------------ beranda
   async function home() {
-    const [s, lic, n] = await Promise.all([api('/member/summary'), api('/licenses'), api('/notifications')]);
+    const [s, lic, n, c] = await Promise.all([api('/member/summary'), api('/licenses'), api('/notifications'), getCatalog()]);
+    const vpsP = c.products.find((p) => p.requires_ib && p.includes_vps) || c.products.find((p) => p.includes_vps);
     const active = lic.licenses.filter((l) => l.status !== 'suspended').slice(0, 3);
     view.innerHTML = `
       ${title(`Halo, ${esc(me.name.split(' ')[0])} 👋`)}
@@ -55,7 +56,7 @@
       <div class="card gold" style="margin-bottom:22px">
         <div class="row between">
           <div style="max-width:620px"><h3 class="gold-text cinzel" style="font-size:1.3rem;margin-bottom:6px">EA GRATIS lewat IB Exness</h3>
-            <p class="muted">Buat akun Exness lewat link IB kami, maka EA GoldHunter Garuda <b style="color:var(--text)">gratis</b> untuk akun itu. Mau dijalankan 24 jam? Cukup sewa VPS <b style="color:var(--text)">Rp 50.000/bulan</b>.</p></div>
+            <p class="muted">Buat akun Exness lewat link IB kami, maka EA GoldHunter Garuda <b style="color:var(--text)">gratis</b> untuk akun itu. Mau jalan 24 jam? Sewa VPS pribadi kami${vpsP ? ` <b style="color:var(--text)">${rupiah(vpsP.price)}/bulan</b>` : ''}.</p></div>
           <div class="row"><a class="btn btn-outline" href="#/ib">Cara Jadi IB</a><a class="btn btn-gold" href="#/order">Order Sekarang</a></div>
         </div>
       </div>
@@ -121,8 +122,7 @@
             <div class="help">EA akan dikunci hanya untuk nomor akun ini. Ganti nomor akun hanya bisa lewat pengajuan ke admin.</div></div>
           <div class="field"><label>Server broker ${p.includes_vps ? '' : '<span class="muted">(opsional)</span>'}</label><input name="broker_server" placeholder="contoh: Exness-MT5Real25">
             <div class="help">Terlihat di MetaTrader: File → Login to Trade Account, atau di email pembukaan akun dari broker.</div></div>
-          ${p.includes_vps ? `<div class="field"><label>Password trading (master)</label><div class="pw-wrap"><input name="trading_password" type="password" autocomplete="off" required><button type="button" data-toggle-pw>lihat</button></div>
-            <div class="help">Dipakai admin untuk login MetaTrader di VPS dan menjalankan EA. Disimpan terenkripsi. Bukan password investor dan bukan password Personal Area broker.</div></div>` : ''}
+          ${p.includes_vps ? `<div class="alert info small" style="margin-bottom:16px">🖥️ <b>VPS pribadi untuk Anda</b> (RAM 2 GB, 2 core, disk 40 GB, Windows). Setelah pesanan selesai, IP, username dan password Remote Desktop muncul di menu <b>Lisensi &amp; VPS</b>. Anda login sendiri lalu memasang MetaTrader dan EA, dan bisa mengatur setting EA sesuka Anda.</div>` : ''}
           ${p.billing === 'monthly' ? `<div class="field"><label>Lama sewa</label><div class="choice">${durations}</div></div>` : ''}
           <div class="alert info small" style="margin-bottom:16px">EA GoldHunter Garuda dirancang untuk akun <b>Standard Cent (USC)</b> dengan mode <b>hedging</b>, pair XAUUSDc.</div>
           <button class="btn btn-gold btn-block" type="submit">${p.billing === 'free' ? 'Ajukan EA Gratis' : 'Buat Pesanan'}</button>
@@ -148,7 +148,7 @@
         ${total ? '<p class="tiny muted" style="margin-top:8px">Kode unik 3 digit ditambahkan ke nominal transfer agar pembayaran mudah dicocokkan.</p>' : ''}
         <hr><ol class="steps small">${p.billing === 'free'
           ? '<li><b>Ajukan</b>Isi nomor akun Exness Anda.</li><li><b>Admin cek IB</b>Akun dicek di portal partner.</li><li><b>EA dikirim</b>File .ex5 terkunci di akun Anda, unduh di menu Lisensi.</li>'
-          : `<li><b>Transfer</b>Sesuai nominal di halaman pesanan.</li><li><b>Konfirmasi</b>Upload bukti transfer.</li>${p.requires_ib ? '<li><b>Admin cek IB</b>Akun dicek di portal partner.</li>' : ''}<li><b>Diproses</b>${p.includes_vps ? 'Admin memasang EA di VPS.' : 'File EA dikunci ke akun Anda.'}</li>`}</ol>`;
+          : `<li><b>Transfer</b>Sesuai nominal di halaman pesanan.</li><li><b>Konfirmasi</b>Upload bukti transfer.</li>${p.requires_ib ? '<li><b>Admin cek IB</b>Akun dicek di portal partner.</li>' : ''}<li><b>Diproses</b>${p.includes_vps ? 'Admin menyiapkan VPS pribadi Anda' + (p.includes_ea ? ' + file EA dikunci ke akun Anda' : '') + '.' : 'File EA dikunci ke akun Anda.'}</li>`}</ol>`;
     };
     f.onchange = calc;
     calc();
@@ -156,7 +156,7 @@
       e.preventDefault();
       const d = Object.fromEntries(new FormData(f));
       const body = { product_id: p.id, platform: d.platform, account_number: (d.account_number || '').trim(), broker_server: d.broker_server,
-        trading_password: d.trading_password, months: Number(d.months) || null,
+        months: Number(d.months) || null,
         broker: p.requires_ib ? d.broker : (d.broker_sel || d.broker_other || '').trim() };
       if (!/^\d{4,15}$/.test(body.account_number)) return toast('Nomor akun harus angka', 'err');
       const r = await busy($('button[type=submit]', f), () => api('/orders', { method: 'POST', body }));
@@ -211,7 +211,7 @@
         ? '✅ Pengajuan diterima. Admin sedang mengecek bahwa akun Anda terdaftar di bawah IB kami, lalu <b>segera memproses</b>.'
         : '✅ Konfirmasi pembayaran diterima. Pesanan Anda <b>segera diproses</b> oleh admin.'}</div>`;
     } else if (o.status === 'processing') {
-      action = `<div class="alert info">⚙️ Pesanan sedang diproses admin${o.includes_ea ? ' (file EA dikunci ke nomor akun Anda)' : ''}${o.includes_vps ? ' dan EA dipasang di VPS' : ''}.</div>`;
+      action = `<div class="alert info">⚙️ Pesanan sedang diproses admin${o.includes_ea ? ' (file EA dikunci ke nomor akun Anda)' : ''}${o.includes_vps ? ' dan VPS pribadi Anda disiapkan' : ''}.</div>`;
     } else if (o.status === 'completed') {
       action = `<div class="alert ok">🎉 Pesanan selesai. <a href="#/lisensi">Buka Lisensi &amp; VPS →</a></div>`;
     } else if (o.status === 'rejected') {
@@ -280,7 +280,12 @@
             <dt>IP / Host</dt><dd><span class="copy mono" data-copy="${esc(l.vps_ip)}">${esc(l.vps_ip)}</span></dd>
             ${l.vps_user ? `<dt>Username</dt><dd><span class="copy mono" data-copy="${esc(l.vps_user)}">${esc(l.vps_user)}</span></dd>` : ''}
             ${l.vps_pass ? `<dt>Password</dt><dd><span class="copy mono" data-copy="${esc(l.vps_pass)}">••••••••</span> <span class="tiny muted">(klik untuk salin)</span></dd>` : ''}
-            ${l.vps_note ? `<dt>Catatan</dt><dd>${esc(l.vps_note)}</dd>` : ''}</dl></div>`
+            ${l.vps_note ? `<dt>Catatan</dt><dd>${esc(l.vps_note)}</dd>` : ''}</dl>
+            <details class="small" style="margin-top:10px"><summary style="cursor:pointer;color:var(--gold)">Cara masuk VPS (Remote Desktop)</summary>
+              <ol style="margin:8px 0 0 18px;color:#d6d6de"><li><b>Laptop/PC Windows:</b> tekan <span class="mono">Win + R</span>, ketik <span class="mono">mstsc</span>, Enter. Isi IP, klik Connect, lalu masukkan username &amp; password di atas.</li>
+              <li><b>HP Android / iPhone / Mac:</b> pasang aplikasi <b>Windows App</b> (Microsoft Remote Desktop), tambah PC dengan IP di atas, lalu login.</li>
+              <li>Di dalam VPS: pasang MetaTrader dari broker Anda, login akun trading, salin file EA ke folder MQL5 → Experts, lalu pasang di chart (lihat panduan di bawah).</li>
+              <li>Jangan pilih <i>Shut down</i> di VPS. Cukup tutup jendela Remote Desktop, VPS tetap menyala 24 jam.</li></ol></details></div>`
         : `<div class="alert info small" style="margin-top:14px">VPS sedang disiapkan admin.</div>`) : '';
       return `<div class="card license ${l.status}">
         <div class="row between"><div><div class="tiny muted">${esc(l.product_name)}</div>
@@ -341,7 +346,6 @@
       <form id="chf" novalidate>
         <div class="field"><label>Nomor akun baru</label><input name="new_account" inputmode="numeric" required></div>
         <div class="field"><label>Server broker akun baru ${l.includes_vps ? '' : '<span class="muted">(opsional)</span>'}</label><input name="new_server" placeholder="contoh: Exness-MT5Real25"></div>
-        ${l.includes_vps ? `<div class="field"><label>Password trading akun baru</label><div class="pw-wrap"><input name="new_password" type="password" autocomplete="off"><button type="button" data-toggle-pw>lihat</button></div></div>` : ''}
         <div class="field"><label>Alasan</label><textarea name="reason" placeholder="contoh: akun lama ditutup / pindah ke akun cent baru"></textarea></div>
         <button class="btn btn-gold btn-block" type="submit">Kirim Pengajuan</button></form>`);
     const f = $('#chf', m.el);
@@ -371,7 +375,7 @@
       </div></div>`;
     view.innerHTML = `${title('Cara Jadi IB &amp; Dapat EA Gratis')}
       <div class="alert ok" style="margin-bottom:20px">🎁 <b>EA GoldHunter Garuda GRATIS</b> untuk akun trading yang terdaftar di bawah IB (Introducing Broker) kami.
-        ${vps ? `Ingin EA berjalan 24 jam tanpa menyalakan komputer? Sewa VPS kami cukup <b>${rupiah(vps.price)}/bulan</b>.` : ''}</div>
+        ${vps ? `Ingin EA berjalan 24 jam tanpa menyalakan komputer? Sewa VPS pribadi (RAM 2 GB, 2 core, disk 40 GB) cukup <b>${rupiah(vps.price)}/bulan</b>.` : ''}</div>
       ${brokers.length ? brokers.map(brokerCard).join('') : '<div class="alert">Link IB belum tersedia.</div>'}
       <p class="small muted" style="margin:10px 0 24px">Saat ini tersedia broker: <b>${brokers.map((b) => esc(b.name)).join(', ') || '-'}</b>. HFM segera menyusul.</p>
       <div class="grid c2" style="align-items:start">
@@ -380,7 +384,7 @@
           <li><b>Lengkapi verifikasi</b>Di Personal Area Exness: verifikasi email, nomor HP, identitas (KTP) dan alamat.</li>
           <li><b>Buat akun trading MT5 Standard Cent</b>Personal Area → Akun Saya → Buka akun baru → pilih <b>Standard Cent</b>, platform <b>MT5</b>. Catat nomor akun dan servernya.</li>
           <li><b>Deposit</b>Deposit sesuai modal yang Anda rencanakan (akun cent: saldo tampil dalam USC).</li>
-          <li><b>Ajukan EA gratis di sini</b><a href="#/order">Order</a> → <i>EA Gratis (Akun IB Exness)</i>, isi nomor akun. ${vps ? 'Atau pilih <i>VPS untuk EA Gratis</i> agar admin yang memasang di VPS.' : ''}</li>
+          <li><b>Ajukan EA gratis di sini</b><a href="#/order">Order</a> → <i>EA Gratis (Akun IB Exness)</i>, isi nomor akun. ${vps ? 'Mau jalan 24 jam? Pilih juga <i>VPS untuk EA Gratis</i> (VPS pribadi, Anda pasang sendiri).' : ''}</li>
           <li><b>Admin cek &amp; kirim EA</b>Admin memastikan akun Anda di bawah IB kami, lalu file EA (terkunci di nomor akun Anda) bisa diunduh di menu <a href="#/lisensi">Lisensi &amp; VPS</a>.</li>
         </ol></div>
         <div class="stack">

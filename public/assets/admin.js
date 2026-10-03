@@ -155,13 +155,11 @@
           <div class="row" id="bact">${b && b.status === 'done' && b.file_id ? `<a class="btn btn-ghost btn-sm" href="/api/files/${b.file_id}">⬇ Unduh .${o.platform === 'mt4' ? 'ex4' : 'ex5'}</a>` : ''}
           <button class="btn btn-ghost btn-sm" id="rebuild">↻ Generate ulang</button></div>
           ${b && b.status === 'failed' ? `<div class="alert err tiny" style="margin-top:10px;white-space:pre-wrap">${esc((b.log || '').slice(-600))}</div>` : ''}` : ''}
-        ${o.includes_vps && l ? `<hr><form id="vpsf"><div class="small muted" style="margin-bottom:10px">Login MT member untuk dipasang di VPS:
-            <b class="copy" data-copy="${esc(l.account_number)}">${esc(l.account_number)}</b> · <span class="copy" data-copy="${esc(l.broker_server)}">${esc(l.broker_server)}</span> ·
-            password <span class="copy mono" data-copy="${esc(o.trading_pass)}">${esc(o.trading_pass) || '-'}</span></div>
+        ${o.includes_vps && l ? `<hr><form id="vpsf"><div class="small muted" style="margin-bottom:10px">VPS pribadi untuk member (RAM 2 GB, 2 core, 40 GB). Isi akses Remote Desktop-nya; member memasang MetaTrader &amp; EA sendiri.</div>
           <div class="grid c2" style="gap:0 12px"><div class="field"><label>IP / host VPS</label><input name="vps_ip" value="${esc(l.vps_ip)}"></div>
           <div class="field"><label>Username VPS</label><input name="vps_user" value="${esc(l.vps_user)}"></div></div>
           <div class="field"><label>Password VPS ${l.vps_pass ? '(kosongkan = tidak diubah)' : ''}</label><input name="vps_pass" placeholder="${l.vps_pass ? '••••••' : ''}"></div>
-          <div class="field"><label>Catatan untuk member</label><input name="vps_note" value="${esc(l.vps_note)}" placeholder="contoh: EA sudah jalan di chart XAUUSDc M1"></div>
+          <div class="field"><label>Catatan untuk member</label><input name="vps_note" value="${esc(l.vps_note)}" placeholder="contoh: Windows Server 2022, lokasi Singapura"></div>
           <button class="btn btn-ghost btn-sm" type="submit">Simpan detail VPS</button></form>` : ''}
         ${o.status === 'processing' ? `<hr><div class="field"><label>Catatan untuk member (opsional)</label><input id="anote"></div>
           <button class="btn btn-green" id="complete">✔ Oke, Selesai</button>` : `<div class="alert ok small" style="margin-top:12px">Selesai ${fmtDateTime(o.completed_at)}${o.admin_note ? ' · ' + esc(o.admin_note) : ''}</div>`}`;
@@ -286,7 +284,7 @@
             <div class="field"><label>Nomor akun</label><input name="account_number" value="${esc(l.account_number)}"></div>
             <div class="field"><label>Server broker</label><input name="broker_server" value="${esc(l.broker_server)}"></div>
           </div>
-          ${l.includes_vps ? `<div class="small muted" style="margin:4px 0 10px">Password trading member: <span class="mono copy" data-copy="${esc(l.trading_pass)}">${esc(l.trading_pass) || '-'}</span></div>
+          ${l.includes_vps ? `<div class="small muted" style="margin:4px 0 10px">Akses Remote Desktop VPS pribadi member:</div>
           <div class="grid c2" style="gap:0 12px"><div class="field"><label>IP VPS</label><input name="vps_ip" value="${esc(l.vps_ip)}"></div>
             <div class="field"><label>Username VPS</label><input name="vps_user" value="${esc(l.vps_user)}"></div></div>
           <div class="field"><label>Password VPS ${l.vps_pass ? '(sekarang: <span class="mono copy" data-copy="' + esc(l.vps_pass) + '">' + esc(l.vps_pass) + '</span>)' : ''}</label><input name="vps_pass" placeholder="kosongkan = tidak diubah"></div>
