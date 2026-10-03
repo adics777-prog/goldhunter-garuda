@@ -6,3 +6,4 @@ builder/work/
 builder/*.log
 builder/*.ex5
 builder/*.ex4
+builder/config.local.json

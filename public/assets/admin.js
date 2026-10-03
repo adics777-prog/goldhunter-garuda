@@ -73,7 +73,7 @@
           <a class="btn btn-ghost btn-sm" style="margin-top:12px" href="#/build">Lihat riwayat generate</a></div>
         <div class="card"><h3>Pengingat &amp; pembersihan harian</h3>
           <p class="small muted">Kirim email pengingat masa sewa (7/3/1 hari), tandai lisensi yang habis, dan batalkan order yang tidak dibayar. Berjalan otomatis setiap hari.</p>
-          <p class="small" style="margin-top:8px">${s.daily ? `Terakhir: ${fmtDateTime(s.daily.at)}, ${s.daily.reminders} pengingat, ${s.daily.expired} habis, ${s.daily.unpaid_expired} order kedaluwarsa` : 'Belum pernah berjalan.'}</p>
+          <p class="small" style="margin-top:8px">${s.daily ? `Terakhir: ${fmtDateTime(s.daily.at)}, ${s.daily.reminders ?? 0} pengingat, ${s.daily.expired ?? 0} habis, ${s.daily.unpaid_expired ?? 0} order kedaluwarsa` : 'Belum pernah berjalan.'}</p>
           <button class="btn btn-outline btn-sm" style="margin-top:12px" id="run-daily">Jalankan sekarang</button></div>
       </div>`;
     $('#run-daily').onclick = async (e) => {

@@ -27,7 +27,7 @@ export async function onRequest(context) {
       const m = path.match(r.re);
       if (!m) continue;
       const params = Object.fromEntries(r.keys.map((k, i) => [k, decodeURIComponent(m[i + 1])]));
-      const ctx = { request, env, url, params, base: siteUrl(env, request), user: null };
+      const ctx = { request, env, url, params, base: siteUrl(env, request), user: null, waitUntil: (p) => context.waitUntil(p) };
       if (r.auth === 'builder') {
         if (!env.BUILDER_TOKEN || request.headers.get('x-builder-token') !== env.BUILDER_TOKEN) fail(401, 'Token builder salah');
       } else if (r.auth === 'cron') {
@@ -749,8 +749,17 @@ route('POST', '/admin/run-daily', 'admin', async ({ env, base }) => json({ ok: t
 // =====================================================================
 // BUILDER (Windows PC with MetaEditor) and CRON
 // =====================================================================
-route('POST', '/builder/claim', 'builder', async ({ request, env }) => {
+route('POST', '/builder/claim', 'builder', async ({ request, env, base, waitUntil }) => {
   const b = await readJson(request);
+  // The builder polls every few seconds, so it also drives the daily job (reminders, expiries)
+  // in case the GitHub Action cron is not configured.
+  const s = await getSettings(env);
+  let last = 0;
+  try { last = JSON.parse(s.daily_last_run || '{}').at || 0; } catch {}
+  if (now() - last > 20 * 3600) {
+    await putSetting(env, 'daily_last_run', JSON.stringify({ at: now(), running: true }));
+    waitUntil(runDaily(env, base).catch((e) => console.error('daily', e)));
+  }
   return json({ job: await claimBuild(env, str(b.builder_id, 60) || 'builder') });
 });
 route('POST', '/builder/result', 'builder', async ({ request, env, base }) => {

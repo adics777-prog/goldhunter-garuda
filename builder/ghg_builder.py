@@ -10,6 +10,7 @@ Cara kerja:
 Jalankan:  python ghg_builder.py          (terus berjalan, cek tiap beberapa detik)
            python ghg_builder.py --once   (cek sekali lalu keluar)
            python ghg_builder.py --test 12345678 [YYYY-MM-DD]   (tes compile lokal tanpa web)
+           python ghg_builder.py --config config.local.json    (pakai web lokal localhost:8788)
 Hanya pakai library bawaan Python 3.
 """
 import base64, datetime, glob, json, os, re, shutil, socket, subprocess, sys, time, traceback, urllib.request, urllib.error
@@ -20,7 +21,8 @@ ICON = os.path.join(HERE, 'GoldHunter_Garuda.ico')
 
 
 def load_config():
-    path = os.path.join(HERE, 'config.json')
+    name = sys.argv[sys.argv.index('--config') + 1] if '--config' in sys.argv else 'config.json'
+    path = name if os.path.isabs(name) else os.path.join(HERE, name)
     if not os.path.exists(path):
         sys.exit('config.json belum ada. Salin config.example.json menjadi config.json lalu isi.')
     with open(path, encoding='utf-8') as f:
