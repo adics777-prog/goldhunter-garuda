@@ -289,11 +289,12 @@
       <input id="lq" placeholder="Cari akun / email / IP" value="${esc(st.q)}" style="max-width:260px"></div><div id="ll"></div>`;
     const load = async () => {
       const { licenses } = await api('/admin/licenses?' + new URLSearchParams(st));
-      $('#ll').innerHTML = licenses.length ? `<div class="table-wrap"><table><thead><tr><th>Akun</th><th>Member</th><th>Paket</th><th>Berlaku</th><th>VPS</th><th>Status</th></tr></thead><tbody>
+      $('#ll').innerHTML = licenses.length ? `<div class="table-wrap"><table><thead><tr><th>Akun</th><th>Member</th><th>Paket</th><th>Berlaku</th><th>VPS</th><th>Status</th><th>File EA</th></tr></thead><tbody>
         ${licenses.map((l) => `<tr class="click" onclick="location.hash='#/lisensi/${l.id}'"><td><b>${esc(l.account_number)}</b><div class="tiny muted">${esc(l.broker)} · ${l.platform.toUpperCase()}</div></td>
           <td>${esc(l.user_name)}<div class="tiny muted">${esc(l.user_email)}</div></td><td class="small">${esc(l.product_name)}</td>
           <td class="nowrap small">${fmtDate(l.expires_at)}${l.expires_at ? `<div class="tiny ${l.days_left <= 7 ? '' : 'muted'}" style="${l.days_left <= 7 ? 'color:var(--orange)' : ''}">${l.days_left > 0 ? l.days_left + ' hari lagi' : 'habis'}</div>` : ''}</td>
-          <td class="small mono">${l.includes_vps ? esc(l.vps_ip || '— belum diisi') : '-'}</td><td>${licenseBadge(l.status)}</td></tr>`).join('')}</tbody></table></div>` : '<div class="card empty">Belum ada lisensi.</div>';
+          <td class="small mono">${l.includes_vps ? esc(l.vps_ip || '— belum diisi') : '-'}</td><td>${licenseBadge(l.status)}</td>
+          <td>${l.ea_file_id ? `<a class="btn btn-ghost btn-sm" href="/api/files/${l.ea_file_id}" onclick="event.stopPropagation()" title="Unduh file EA member">⬇ .${l.platform === 'mt4' ? 'ex4' : 'ex5'}</a>` : l.includes_ea ? '<span class="tiny muted">belum ada</span>' : '-'}</td></tr>`).join('')}</tbody></table></div>` : '<div class="card empty">Belum ada lisensi.</div>';
     };
     $('#lt').onchange = (e) => { st.status = e.target.value; sessionStorage.setItem('lic', JSON.stringify(st)); load(); };
     let t; $('#lq').oninput = (e) => { clearTimeout(t); t = setTimeout(() => { st.q = e.target.value; sessionStorage.setItem('lic', JSON.stringify(st)); load(); }, 300); };
@@ -401,7 +402,10 @@
             .map(([v, l]) => `<option value="${v}" ${(s.board_name_mode || 'first_initial') === v ? 'selected' : ''}>${l}</option>`).join('')}</select></div>
         <div class="field"><label>Jumlah akun di slide halaman utama (0 = sembunyikan)</label><input name="board_landing_top" type="number" min="0" max="200" value="${esc(s.board_landing_top || 50)}"></div>
         <div class="field"><label>Sembunyikan jika tidak lapor (hari)</label><input name="board_stale_days" type="number" min="1" max="30" value="${esc(s.board_stale_days || 3)}"></div>
-      </div><button class="btn btn-gold btn-sm" type="submit">Simpan</button>
+        <div class="field"><label>EA kirim laporan tiap (menit)</label><input name="report_interval_min" id="ri" type="number" min="5" max="1440" value="${esc(s.report_interval_min || 30)}"></div>
+      </div>
+      <p class="help" id="ri-est" style="margin:-4px 0 12px"></p>
+      <button class="btn btn-gold btn-sm" type="submit">Simpan</button>
       <span class="tiny muted" style="margin-left:10px">Profit dalam Rupiah: akun cent (USC) ÷ 100 × kurs ${usd_idr ? rupiah(usd_idr) + '/USD' : '-'}.</span></form>
       ${rows.length ? `<div class="table-wrap"><table><thead><tr><th>Member (asli)</th><th>Tampil sebagai</th><th>Akun</th><th class="right">Hari ini</th><th class="right">Minggu ini</th><th class="right">Bulan ini</th><th>Balance</th><th>Laporan</th><th>Tampil</th><th>Samarkan nama</th></tr></thead><tbody>
         ${rows.map((r) => `<tr style="${r.board_show ? '' : 'opacity:.55'}">
@@ -416,6 +420,14 @@
           <td><input type="checkbox" data-show="${r.license_id}" ${r.board_show ? 'checked' : ''}></td>
           <td><input type="checkbox" data-hide="${r.license_id}" ${r.board_hide_name ? 'checked' : ''}></td></tr>`).join('')}</tbody></table></div>`
         : `<div class="card empty">Belum ada laporan dari EA member.<br><span class="small">Laporan masuk otomatis dari file EA yang dibuat builder (versi dengan pelapor). Member perlu mengizinkan WebRequest untuk https://goldhuntergaruda.com di MetaTrader.</span></div>`}`;
+    const est = () => {
+      const m = Math.max(5, Number($('#ri').value) || 30), n = Math.max(rows.length, 1);
+      const perDay = Math.round(1440 / m);
+      const at = (k) => (k * perDay).toLocaleString('id-ID');
+      $('#ri-est').innerHTML = `Tiap EA mengirim ±${perDay}×/hari. Perkiraan: 100 akun ≈ ${at(100)}, 1.000 akun ≈ ${at(1000)} request/hari
+        (paket gratis Cloudflare: 100.000 request/hari untuk seluruh web; paket Workers $5/bulan: ±330.000/hari). EA yang sudah terpasang otomatis mengikuti interval baru, tanpa download ulang.`;
+    };
+    $('#ri').oninput = est; est();
     $('#bf').onsubmit = async (e) => {
       e.preventDefault();
       await busy($('#bf button'), () => api('/admin/settings', { method: 'PUT', body: Object.fromEntries(new FormData(e.target)) }));

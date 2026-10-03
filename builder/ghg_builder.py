@@ -124,14 +124,17 @@ def inject_license(src, build_id, account, expiry):
 REPORT_BLOCK = r"""
 //+------------------------------------------------------------------+
 //| LAPORAN PROFIT ke goldhuntergaruda.com - disisipkan GHG Builder
-//| Mengirim balance, equity & profit tertutup hari/minggu/bulan tiap 5 menit.
+//| Mengirim balance, equity & profit tertutup hari/minggu/bulan secara berkala.
+//| Interval awal dari admin saat compile; sesudahnya mengikuti balasan server ("next").
 //| Butuh: Tools > Options > Expert Advisors > Allow WebRequest > https://goldhuntergaruda.com
 //+------------------------------------------------------------------+
 #define GHG_REPORT_URL   "__URL__"
 #define GHG_LIC_ID       __LIC__
 #define GHG_REPORT_TOKEN "__TOKEN__"
+#define GHG_REPORT_EVERY __EVERY__
 #define GHG_EA_VERSION   "__VERSION__"
 datetime g_ghgNextReport = 0;
+int      g_ghgEvery      = GHG_REPORT_EVERY;   // seconds; updated from the server reply
 bool     g_ghgWebWarned  = false;
 
 void GHG_Report()
@@ -140,7 +143,7 @@ void GHG_Report()
       return;
    if(TimeLocal() < g_ghgNextReport)
       return;
-   g_ghgNextReport = TimeLocal() + 300;
+   g_ghgNextReport = TimeLocal() + g_ghgEvery;
    long login = AccountInfoInteger(ACCOUNT_LOGIN);
    if(login == 0)
       return;
@@ -180,6 +183,21 @@ void GHG_Report()
    ArrayResize(data, len > 0 ? len - 1 : 0);
    ResetLastError();
    int code = WebRequest("POST", GHG_REPORT_URL, "Content-Type: application/json\r\n", 5000, data, res, resHeaders);
+   if(code == 200)
+     {
+      // server reply e.g. {"ok":true,"next":1800} -> report interval set by the admin
+      string reply = CharArrayToString(res, 0, WHOLE_ARRAY, CP_UTF8);
+      int k = StringFind(reply, "\"next\":");
+      if(k >= 0)
+        {
+         long next = StringToInteger(StringSubstr(reply, k + 7, 8));
+         if(next >= 60 && next <= 86400)
+           {
+            g_ghgEvery = (int)next;
+            g_ghgNextReport = TimeLocal() + g_ghgEvery;
+           }
+        }
+     }
    if(code == -1)
      {
       int err = GetLastError();
@@ -188,7 +206,7 @@ void GHG_Report()
          g_ghgWebWarned = true;
          PrintFormat("GoldHunter Garuda: laporan profit belum terkirim (error %d). Izinkan WebRequest: Tools > Options > Expert Advisors > centang Allow WebRequest, tambahkan https://goldhuntergaruda.com", err);
         }
-      g_ghgNextReport = TimeLocal() + 1800;   // retry later, trading is not affected
+      g_ghgNextReport = TimeLocal() + (g_ghgEvery > 1800 ? g_ghgEvery : 1800);   // retry later, trading is not affected
      }
   }
 """
@@ -200,7 +218,8 @@ def inject_report(src, job, version, api_base):
         return src
     url = api_base.rstrip('/') + '/api/ea/report'
     block = (REPORT_BLOCK.replace('__URL__', url).replace('__LIC__', str(int(job['license_id'])))
-             .replace('__TOKEN__', re.sub(r'[^A-Za-z0-9_-]', '', token)).replace('__VERSION__', re.sub(r'[^0-9A-Za-z.]', '', version or '')))
+             .replace('__TOKEN__', re.sub(r'[^A-Za-z0-9_-]', '', token)).replace('__VERSION__', re.sub(r'[^0-9A-Za-z.]', '', version or ''))
+             .replace('__EVERY__', str(max(60, min(86400, int(job.get('report_interval') or 1800))))))
     m = re.search(r'^\s*int\s+OnInit\s*\(\s*(void)?\s*\)\s*\{', src, re.M)
     src = src[:m.start()] + block + '\n' + src[m.start():]
     # live-only timer is the best place (no extra work in the tester); otherwise OnTick

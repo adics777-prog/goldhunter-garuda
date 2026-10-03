@@ -314,6 +314,8 @@ export async function queueBuild(env, licenseId, reason = '') {
   return r.meta.last_row_id;
 }
 
+export const reportInterval = (s) => Math.max(5, Math.min(1440, Number(s.report_interval_min || 30))) * 60;   // seconds
+
 // Every active EA licence of a platform gets a fresh build (new EA version or admin "rebuild all").
 export async function rebuildAll(env, platform, reason) {
   const { results } = await env.DB.prepare(`SELECT l.id FROM licenses l JOIN products p ON p.id=l.product_id
@@ -353,7 +355,8 @@ export async function claimBuild(env, builderId, versions = {}) {
     token = randomToken(24);
     await env.DB.prepare('UPDATE licenses SET report_token=? WHERE id=?').bind(token, job.license_id).run();
   }
-  return { id: job.id, license_id: job.license_id, platform: job.platform, account_number: job.account_number, expires_at: job.expires_at || 0, report_token: token };
+  return { id: job.id, license_id: job.license_id, platform: job.platform, account_number: job.account_number, expires_at: job.expires_at || 0,
+    report_token: token, report_interval: reportInterval(s) };
 }
 
 export async function finishBuild(env, base, { id, ok, log, filename, data_b64, ea_version }) {

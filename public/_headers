@@ -1,7 +1,15 @@
 /assets/brand/*
   Cache-Control: public, max-age=2592000, stale-while-revalidate=604800
-/assets/*
-  Cache-Control: public, max-age=300, stale-while-revalidate=86400
+/assets/app.css
+  Cache-Control: no-cache
+/assets/common.js
+  Cache-Control: no-cache
+/assets/auth.js
+  Cache-Control: no-cache
+/assets/member.js
+  Cache-Control: no-cache
+/assets/admin.js
+  Cache-Control: no-cache
 /*
   X-Content-Type-Options: nosniff
   Referrer-Policy: strict-origin-when-cross-origin

@@ -6,7 +6,7 @@ import {
 } from '../../server/util.js';
 import {
   getSettings, putSetting, quote, notify, emailUser, emailAdmin, newOrderCode, getUser, getProduct,
-  processOrder, completeOrder, queueBuild, claimBuild, rebuildAll, finishBuild, runDaily, orderStatusLabel, pickUniqueCode, ensureUniqueCode, createOrder, changeOrderMonths, getUsdIdr, toIdr, boardName, maskAccount,
+  processOrder, completeOrder, queueBuild, claimBuild, rebuildAll, finishBuild, runDaily, orderStatusLabel, pickUniqueCode, ensureUniqueCode, createOrder, changeOrderMonths, getUsdIdr, toIdr, boardName, maskAccount, reportInterval,
 } from '../../server/logic.js';
 import { layout, sendEmail } from '../../server/email.js';
 
@@ -210,10 +210,14 @@ route('POST', '/ea/report', 'public', async ({ request, env }) => {
   if (String(b.login || '') !== String(l.account_number)) fail(403, 'Nomor akun tidak cocok dengan lisensi');
   const t = now();
   const num = (v) => { const n = Number(v); return Number.isFinite(n) ? Math.round(n * 100) / 100 : 0; };
+  const next = reportInterval(await getSettings(env));      // the EA follows this, no recompile needed
   const last = await env.DB.prepare('SELECT updated_at FROM ea_stats WHERE license_id=?').bind(l.id).first();
-  if (last && t - last.updated_at < 60) return json({ ok: true, throttled: true });
+  if (last && t - last.updated_at < 60) return json({ ok: true, throttled: true, next });
   const cur = str(b.currency, 8).toUpperCase();
   const wib = new Date((t + 7 * 3600) * 1000).toISOString().slice(0, 10);
+  const wibOf = (x) => new Date((x + 7 * 3600) * 1000).toISOString().slice(0, 10);
+  // Save writes: the daily history row is refreshed at most every 30 minutes (and at each new day)
+  const writeDaily = !last || wibOf(last.updated_at) !== wib || t - last.updated_at >= 1800 || next >= 1800;
   await env.DB.batch([
     env.DB.prepare(`INSERT INTO ea_stats (license_id, login, server, currency, balance, equity, profit_day, profit_week, profit_month, positions, ea_version, updated_at)
         VALUES (?,?,?,?,?,?,?,?,?,?,?,?) ON CONFLICT(license_id) DO UPDATE SET login=excluded.login, server=excluded.server, currency=excluded.currency,
@@ -223,8 +227,8 @@ route('POST', '/ea/report', 'public', async ({ request, env }) => {
     env.DB.prepare(`INSERT INTO ea_stats_daily (license_id, day, profit, balance, currency) VALUES (?,?,?,?,?)
         ON CONFLICT(license_id, day) DO UPDATE SET profit=excluded.profit, balance=excluded.balance, currency=excluded.currency`)
       .bind(l.id, wib, num(b.day), num(b.balance), cur),
-  ]);
-  return json({ ok: true });
+  ].slice(0, writeDaily ? 2 : 1));
+  return json({ ok: true, next });
 });
 
 async function boardRows(env, rate, { includeHidden = false } = {}) {
@@ -644,7 +648,7 @@ route('POST', '/admin/orders/:id/reject', 'admin', async ({ request, env, params
 route('GET', '/admin/licenses', 'admin', async ({ env, url }) => {
   const q = str(url.searchParams.get('q'), 60);
   const status = url.searchParams.get('status') || '';
-  let sql = LICENSE_SQL + ' WHERE 1=1';
+  let sql = LICENSE_SQL.replace('FROM licenses l', 'FROM licenses l LEFT JOIN builds cb ON cb.id = l.current_build_id').replace('SELECT l.*', 'SELECT l.*, cb.file_id AS ea_file_id, cb.status AS ea_build_status') + ' WHERE 1=1';
   const args = [];
   if (status) { sql += ' AND l.status=?'; args.push(status); }
   if (q) { sql += ' AND (l.account_number LIKE ? OR u.email LIKE ? OR u.name LIKE ? OR l.vps_ip LIKE ?)'; args.push(...Array(4).fill(`%${q}%`)); }
@@ -656,6 +660,7 @@ route('GET', '/admin/licenses', 'admin', async ({ env, url }) => {
       id: l.id, user_name: l.user_name, user_email: l.user_email, product_name: l.product_name, includes_vps: l.includes_vps,
       platform: l.platform, account_number: l.account_number, broker: l.broker, status: l.status, expires_at: l.expires_at,
       days_left: l.expires_at ? Math.ceil((l.expires_at - t) / DAY) : null, vps_ip: l.vps_ip, current_build_id: l.current_build_id,
+      ea_file_id: l.ea_build_status === 'done' ? l.ea_file_id : null, includes_ea: l.includes_ea,
     })),
   });
 });
@@ -812,7 +817,7 @@ route('PUT', '/admin/products/:id', 'admin', async ({ request, env, params }) =>
 
 const EDITABLE_SETTINGS = ['durations', 'discounts', 'bank_accounts', 'admin_notify_email', 'whatsapp', 'pay_deadline_hours', 'reminder_days', 'mt4_enabled',
   'ib_brokers', 'auto_complete_ea', 'auto_process_paid', 'welcome_email_password', 'email_provider', 'email_from', 'email_from_name', 'vps_spec',
-  'min_capital_usd', 'invoice_days_before', 'auto_rebuild_on_version', 'board_enabled', 'board_name_mode', 'board_landing_top', 'board_stale_days', 'profit_est_enabled', 'profit_est_min_idr', 'profit_est_max_idr', 'profit_est_basis'];
+  'min_capital_usd', 'invoice_days_before', 'auto_rebuild_on_version', 'report_interval_min', 'board_enabled', 'board_name_mode', 'board_landing_top', 'board_stale_days', 'profit_est_enabled', 'profit_est_min_idr', 'profit_est_max_idr', 'profit_est_basis'];
 route('GET', '/admin/settings', 'admin', async ({ env }) => {
   const s = await getSettings(env);
   const out = Object.fromEntries(EDITABLE_SETTINGS.map((k) => [k, s[k] ?? '']));
