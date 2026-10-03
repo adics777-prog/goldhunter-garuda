@@ -187,13 +187,13 @@ CREATE TABLE emails (
 -- Contoh harga (ubah dari Admin > Produk & Harga)
 INSERT INTO products (code, name, kind, billing, includes_ea, includes_vps, requires_ib, price, description, features, sort) VALUES
  ('ea_ib', 'EA Gratis (Akun IB Exness)', 'ea_ib', 'free', 1, 0, 1, 0,
-  'EA GRATIS untuk akun Exness yang didaftarkan lewat link IB kami. Admin mengecek akun Anda, lalu file EA dikirim.',
+  'EA GRATIS untuk akun Exness yang terdaftar di bawah partner (IB) GoldHunter Garuda. Admin mengecek akun Anda, lalu file EA dikirim.',
   'GRATIS tanpa biaya lisensi
-Syarat: akun Exness daftar lewat link IB kami
+Syarat: akun Exness di bawah partner GoldHunter Garuda (daftar baru / pindah partner)
 File .ex5 terkunci di nomor akun Anda
 Panduan di menu "Syarat EA Gratis"', 0),
  ('ib_vps', 'VPS untuk EA Gratis (IB)', 'ib_vps', 'monthly', 1, 1, 1, 150000,
-  'Khusus akun di bawah IB kami: EA gratis + VPS Windows pribadi 24 jam. Anda login lewat Remote Desktop dan mengatur EA sendiri.',
+  'Khusus akun di bawah partner (IB) GoldHunter Garuda: EA gratis + VPS Windows pribadi 24 jam. Anda login lewat Remote Desktop dan mengatur EA sendiri.',
   'EA GRATIS, cukup bayar VPS
 VPS pribadi: RAM 2 GB, 2 core, disk 40 GB
 Akses Remote Desktop, setting EA bebas
