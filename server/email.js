@@ -30,7 +30,7 @@ export function layout(env, title, bodyHtml, cta) {
 <table width="100%" cellpadding="0" cellspacing="0" style="background:#07070a"><tr><td align="center" style="padding:28px 12px">
 <table width="100%" cellpadding="0" cellspacing="0" style="max-width:580px">
 <tr><td align="center" style="padding:0 0 20px">
-  <a href="${base}" style="text-decoration:none"><img src="${base}/assets/brand/goldhunter-garuda-logo-512.png" width="64" height="64" alt="" style="display:block;margin:0 auto 8px">
+  <a href="${base}" style="text-decoration:none"><img src="${base}/assets/brand/goldhunter-garuda-logo-128.png" width="64" height="64" alt="" style="display:block;margin:0 auto 8px">
   <span style="font-family:Cinzel,Georgia,serif;font-weight:900;font-size:22px;letter-spacing:2px;color:#f5c542">GOLDHUNTER GARUDA</span></a></td></tr>
 <tr><td style="background:#14141c;border:1px solid #2a2a36;border-top:3px solid #f5c542;border-radius:14px;padding:30px 28px;font-size:15px;line-height:1.65;color:#ececf1">
 <h2 style="margin:0 0 16px;font-size:20px;color:#f5c542;font-family:Cinzel,Georgia,serif">${esc(title)}</h2>

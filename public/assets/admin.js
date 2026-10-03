@@ -314,6 +314,8 @@
             <dt>Paket</dt><dd>${esc(l.product_name)}</dd><dt>Broker</dt><dd>${esc(l.broker)} · ${l.platform.toUpperCase()}</dd>
             <dt>Order</dt><dd>${orders.map((o) => `<a href="#/${l.requires_ib ? 'ib' : 'pesanan'}/${o.id}" class="mono">${esc(o.code)}</a> ${orderBadge(o.status)}`).join('<br>')}</dd></dl></div>
           ${l.includes_ea ? `<div class="card"><div class="row between" style="margin-bottom:10px"><h3 style="margin:0">File EA</h3><button class="btn btn-outline btn-sm" id="rb">↻ Generate ulang</button></div>
+            <div class="row small" style="margin-bottom:12px"><input type="file" id="upf" accept=".ex4,.ex5" style="max-width:260px"><button class="btn btn-ghost btn-sm" id="upb">⬆ Upload file manual</button></div>
+            <p class="tiny muted" style="margin:-6px 0 12px">Untuk MT4 (.ex4) atau file khusus. File langsung bisa diunduh member${l.platform === 'mt4' ? ' — <b>akun ini MT4</b>: builder belum bisa membuat .ex4, upload di sini' : ''}.</p>
             ${builds.length ? `<div class="table-wrap"><table><thead><tr><th>#</th><th>Akun</th><th>Berlaku</th><th>Status</th><th></th></tr></thead><tbody>${builds.map((b) => `<tr>
               <td>${b.id}<div class="tiny muted">${ago(b.created_at)}</div></td><td>${esc(b.account_number)}</td><td class="small">${fmtDate(b.expires_at)}</td>
               <td>${buildBadge(b.status)}<div class="tiny muted">${esc(b.reason)}</div></td>
@@ -328,6 +330,16 @@
       if (l.expires_at && dateInput(l.expires_at) === dateInput(d.expires_at)) d.expires_at = l.expires_at;
       const r = await busy($('#lf button[type=submit]'), () => api('/admin/licenses/' + l.id, { method: 'PUT', body: d }));
       toast(r.rebuilt ? 'Disimpan. File EA baru sedang di-compile.' : 'Disimpan'); render();
+    };
+    const upb = $('#upb');
+    if (upb) upb.onclick = async () => {
+      const f = $('#upf').files[0];
+      if (!f) return toast('Pilih file .ex4 / .ex5 dulu', 'err');
+      await busy(upb, async () => {
+        const data_b64 = await new Promise((res, rej) => { const r = new FileReader(); r.onload = () => res(String(r.result).split(',')[1]); r.onerror = rej; r.readAsDataURL(f); });
+        await post(`/admin/licenses/${l.id}/upload`, { filename: f.name, data_b64 });
+      });
+      toast('File EA terpasang di lisensi ini'); render();
     };
     const rb = $('#rb');
     if (rb) rb.onclick = async () => { await busy(rb, () => post(`/admin/licenses/${l.id}/build`)); toast('Masuk antrean compile'); render(); };
@@ -366,7 +378,7 @@
   }
 
   // ------------------------------------------------------------------ products
-  const KINDS = { ea_ib: 'EA gratis (IB)', ib_vps: 'VPS pribadi + EA gratis (IB)', ib_vps_shared: 'VPS share dikelola admin + EA gratis (IB)', vps_ea_shared: 'VPS share dikelola admin + EA (bulanan)', ea_lifetime: 'EA beli selamanya', ea_rent: 'EA sewa bulanan', vps_ea: 'VPS pribadi + EA (bulanan)', vps: 'VPS saja (bulanan)' };
+  const KINDS = { ea_ib: 'EA gratis (IB)', ib_vps: 'VPS pribadi + EA gratis (IB)', ib_vps_shared: 'VPS share dikelola admin + EA gratis (IB)', vps_ea_shared: 'VPS share dikelola admin + EA (bulanan)', vps_shared: 'VPS share dikelola admin saja (bulanan)', ea_lifetime: 'EA beli selamanya', ea_rent: 'EA sewa bulanan', vps_ea: 'VPS pribadi + EA (bulanan)', vps: 'VPS pribadi saja (bulanan)' };
   async function productsPage() {
     const { products } = await api('/admin/products');
     view.innerHTML = `${title('🏷️ Produk &amp; Harga', '<button class="btn btn-gold btn-sm" id="np">+ Produk</button>')}
@@ -423,6 +435,8 @@
           <div class="help" style="margin-bottom:14px">⚠️ Selama pembayaran masih transfer manual, sebaiknya dibiarkan mati (bukti bisa palsu). Aktifkan setelah memakai payment gateway.</div>
           <h3>Notifikasi</h3>
           <div class="field"><label>Email admin untuk notifikasi (pisahkan koma)</label><input name="admin_notify_email" value="${esc(s.admin_notify_email)}" placeholder="kosong = email admin"></div>
+          <div class="field"><label>Tagihan perpanjangan dibuat otomatis (hari sebelum habis)</label><input name="invoice_days_before" type="number" min="1" max="30" value="${esc(s.invoice_days_before || 7)}">
+            <div class="help">Berlaku untuk semua paket bulanan (sewa EA / VPS). EA sekali beli &amp; EA gratis tidak pernah ditagih.</div></div>
           <div class="field"><label>Modal minimal akun cent (USD)</label><input name="min_capital_usd" type="number" min="1" value="${esc(s.min_capital_usd || 100)}">
             <div class="help">Ditampilkan ke member &amp; landing page beserta konversi Rupiah otomatis (×100 = USC).</div></div>
           <div class="field"><label>Spesifikasi VPS (ditampilkan ke member)</label><input name="vps_spec" value="${esc(s.vps_spec)}" placeholder="RAM 2 GB, 2 core, disk 40 GB, Windows"></div>
@@ -452,6 +466,14 @@
               <li>Menu <b>API Keys → Create API Key</b> (permission: Sending access), salin key-nya.</li>
               <li>Di sini: pilih <b>Resend</b>, email pengirim <span class="mono">no-reply@goldhuntergaruda.com</span>, tempel API key, <b>Simpan</b>, lalu <b>Kirim email tes</b>.</li></ol></div>
           </div></div>
+        <div class="card" style="grid-column:1/-1"><h3>📈 Potensi profit di promo (landing page)</h3>
+          <div class="grid" style="grid-template-columns:repeat(auto-fit,minmax(min(220px,100%),1fr));gap:0 14px">
+            <div class="field"><label>Potensi profit minimum / bulan (Rp)</label><input name="profit_est_min_idr" type="number" min="0" step="1000" value="${esc(s.profit_est_min_idr)}" placeholder="contoh 150000"></div>
+            <div class="field"><label>Potensi profit maksimum / bulan (Rp)</label><input name="profit_est_max_idr" type="number" min="0" step="1000" value="${esc(s.profit_est_max_idr)}" placeholder="contoh 500000"></div>
+          </div>
+          <div class="field"><label>Dasar perhitungan (wajib, tampil di bawah angka)</label><input name="profit_est_basis" value="${esc(s.profit_est_basis)}" placeholder="contoh: backtest Jan–Sep 2026, setup Cent 10rb, modal $100"></div>
+          <label class="row small" style="color:var(--text)"><input type="checkbox" name="profit_est_enabled" ${s.profit_est_enabled === '1' ? 'checked' : ''}> Tampilkan di landing page</label>
+          <p class="help">Tampil sebagai "Potensi profit Rp … – Rp … / bulan (±…% dari modal minimal)" disertai keterangan dasar perhitungan dan "bukan jaminan, trading bisa rugi". Hanya tampil jika ketiga kolom terisi. Ubah kapan saja sesuai setup &amp; kondisi market.</p></div>
         <div class="card" style="grid-column:1/-1"><h3>Link IB broker (EA gratis)</h3><div id="ibl">${s.ib_brokers.map(brokerRow).join('')}</div>
           <button type="button" class="btn btn-ghost btn-sm" id="addib">+ Broker</button>
           <p class="help">QR code di halaman member "Syarat EA Gratis" dibuat otomatis dari link ini.</p></div>
@@ -477,7 +499,8 @@
         durations: d.durations.split(/[,\s]+/).filter(Boolean).map(Number),
         discounts: Object.fromEntries(d.discounts.split(',').map((x) => x.split('=').map((y) => y.trim())).filter((x) => x.length === 2)),
         reminder_days: d.reminder_days.split(/[,\s]+/).filter(Boolean).map(Number),
-        admin_notify_email: d.admin_notify_email, whatsapp: d.whatsapp, vps_spec: d.vps_spec, min_capital_usd: d.min_capital_usd, mt4_enabled: d.mt4_enabled ? '1' : '0',
+        admin_notify_email: d.admin_notify_email, whatsapp: d.whatsapp, vps_spec: d.vps_spec, min_capital_usd: d.min_capital_usd, invoice_days_before: d.invoice_days_before,
+        profit_est_enabled: d.profit_est_enabled ? '1' : '0', profit_est_min_idr: d.profit_est_min_idr, profit_est_max_idr: d.profit_est_max_idr, profit_est_basis: d.profit_est_basis, mt4_enabled: d.mt4_enabled ? '1' : '0',
         auto_complete_ea: d.auto_complete_ea ? '1' : '0', auto_process_paid: d.auto_process_paid ? '1' : '0',
         ib_brokers: $$('.ibr').map((r) => ({ name: $('.ib-name', r).value, link: $('.ib-link', r).value, active: $('.ib-act', r).checked })),
         email_provider: d.email_provider, email_from: d.email_from, email_from_name: d.email_from_name, email_api_key: d.email_api_key,

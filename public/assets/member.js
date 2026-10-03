@@ -63,8 +63,10 @@
     const [s, lic, n, c] = await Promise.all([api('/member/summary'), api('/licenses'), api('/notifications'), getCatalog()]);
     const vpsP = c.products.find((p) => p.requires_ib && p.includes_vps) || c.products.find((p) => p.includes_vps);
     const active = lic.licenses.filter((l) => l.status !== 'suspended').slice(0, 3);
+    const bills = (await api('/orders')).orders.filter((o) => o.status === 'awaiting_payment' && o.total > 0);
     view.innerHTML = `
       ${title(`Halo, ${esc(me.name.split(' ')[0])} 👋`)}
+      ${bills.length ? `<div class="alert warn" style="margin-bottom:18px">💳 Anda punya <b>${bills.length} tagihan</b> menunggu pembayaran${bills.length === 1 ? `: <b>${rupiah(bills[0].total)}</b>, jatuh tempo ${fmtDate(bills[0].pay_deadline)}` : ''}. <a href="#/bayar${bills.length === 1 ? '/' + bills[0].id : ''}">Bayar sekarang →</a></div>` : ''}
       <div class="grid c4" style="margin-bottom:22px">
         <a class="stat" href="#/lisensi"><b>${s.active_licenses}</b><span>Lisensi aktif</span></a>
         <a class="stat" href="#/pesanan"><b>${s.open_orders}</b><span>Pesanan berjalan</span></a>
@@ -72,7 +74,7 @@
       </div>
       <div class="card gold" style="margin-bottom:22px">
         <div class="row between">
-          <div style="max-width:620px"><h3 class="gold-text cinzel" style="font-size:1.3rem;margin-bottom:6px">EA GRATIS lewat IB Exness</h3>
+          <div style="max-width:620px"><h3 class="gold-text cinzel" style="font-size:1.3rem;margin-bottom:6px">EA GRATIS untuk akun Exness partner kami</h3>
             <p class="muted">Akun Exness Anda terdaftar di bawah partner GoldHunter Garuda? Maka EA GoldHunter Garuda <b style="color:var(--text)">gratis</b> untuk akun itu. Cukup modal <b data-cap="usd" style="color:var(--text)">$100</b> <span data-cap="idr"></span> di akun cent. Mau jalan 24 jam? Sewa VPS kami${vpsP ? ` <b style="color:var(--text)">${rupiah(vpsP.price)}/bulan</b>` : ''}.</p></div>
           <div class="row"><a class="btn btn-outline" href="#/ib">Syarat &amp; Panduan</a><a class="btn btn-gold" href="#/order">Order Sekarang</a></div>
         </div>
@@ -281,11 +283,12 @@
       const { orders } = await api('/orders');
       const unpaid = orders.filter((o) => o.total > 0 && ['awaiting_payment', 'awaiting_verification'].includes(o.status));
       if (unpaid.length === 1 && unpaid[0].status === 'awaiting_payment') { location.replace('#/bayar/' + unpaid[0].id); return; }
-      view.innerHTML = `${title('Konfirmasi Pembayaran')}
-        ${unpaid.length ? `<p class="muted" style="margin-bottom:14px">Pilih pesanan yang sudah Anda transfer:</p><div class="table-wrap"><table><thead><tr><th>Kode</th><th>Paket</th><th>Akun</th><th>Total transfer</th><th>Status</th><th></th></tr></thead><tbody>
-          ${unpaid.map((o) => `<tr><td class="mono">${esc(o.code)}</td><td>${esc(o.product_name)}</td><td>${esc(o.account_number)}</td><td class="nowrap"><b>${totalHtml(o)}</b></td>
-            <td>${orderBadge(o.status)}</td><td><a class="btn btn-gold btn-sm" href="#/bayar/${o.id}">${o.status === 'awaiting_payment' ? 'Konfirmasi' : 'Ganti bukti'}</a></td></tr>`).join('')}</tbody></table></div>`
-          : '<div class="card empty">Tidak ada pesanan yang menunggu pembayaran. <a href="#/pesanan">Lihat pesanan saya</a></div>'}
+      view.innerHTML = `${title('Tagihan &amp; Pembayaran')}
+        ${unpaid.length ? `<p class="muted" style="margin-bottom:14px">Tagihan perpanjangan bulanan dibuat otomatis sebelum masa sewa habis. EA sekali beli tidak pernah ditagih.</p>
+          <div class="table-wrap"><table><thead><tr><th>Tagihan</th><th>Paket</th><th>Akun</th><th>Total transfer</th><th>Jatuh tempo</th><th>Status</th><th></th></tr></thead><tbody>
+          ${unpaid.map((o) => `<tr><td class="mono small">${esc(o.code)}<div class="tiny muted">${o.kind === 'renew' ? 'Perpanjangan ' + o.months + ' bln' : 'Pesanan baru'}</div></td><td>${esc(o.product_name)}</td><td>${esc(o.account_number)}</td><td class="nowrap"><b>${totalHtml(o)}</b></td>
+            <td class="small nowrap">${fmtDate(o.pay_deadline)}</td><td>${orderBadge(o.status)}</td><td><a class="btn btn-gold btn-sm" href="#/bayar/${o.id}">${o.status === 'awaiting_payment' ? 'Bayar' : 'Ganti bukti'}</a></td></tr>`).join('')}</tbody></table></div>`
+          : '<div class="card empty">Tidak ada tagihan. <a href="#/pesanan">Lihat pesanan saya</a></div>'}
         <div style="margin-top:16px">${waButton(c.whatsapp, 'Halo admin GoldHunter Garuda, saya ada kendala pembayaran')}</div>`;
       return;
     }
@@ -293,9 +296,13 @@
     if (!['awaiting_payment', 'awaiting_verification'].includes(o.status) || !o.total) { location.replace('#/pesanan/' + o.id); return; }
     view.innerHTML = `
       <div class="crumb"><a href="#/pesanan/${o.id}">← Pesanan ${esc(o.code)}</a></div>
-      ${title('Konfirmasi Pembayaran')}
+      ${title(o.kind === 'renew' ? 'Tagihan Perpanjangan' : 'Konfirmasi Pembayaran')}
       <div class="grid c2" style="align-items:start">
         <form class="card gold" id="cf" novalidate>
+          ${o.kind === 'renew' && o.status === 'awaiting_payment' && !o.proof_file_id ? `<div class="field"><label>Lama perpanjangan (bisa diganti sebelum bayar)</label><div class="choice" id="inv-months">${c.durations.map((m) => {
+            const d = Number(c.discounts[m] || 0);
+            return `<label><input type="radio" name="inv_m" value="${m}" ${m === o.months ? 'checked' : ''}><span>${m === 12 ? '1 tahun' : m + ' bulan'} ${d ? `<small>-${d}%</small>` : ''}</span></label>`;
+          }).join('')}</div></div>` : ''}
           ${o.status === 'awaiting_verification' ? '<div class="alert info small" style="margin-bottom:14px">Bukti transfer sudah Anda kirim dan sedang dicek admin. Isi form ini hanya jika ingin mengganti bukti.</div>' : ''}
           ${o.status === 'awaiting_payment' && o.admin_note && o.confirmed_at ? `<div class="alert err small" style="margin-bottom:14px">Bukti sebelumnya belum bisa kami terima: ${esc(o.admin_note)}</div>` : ''}
           <div class="summary" style="margin-bottom:16px"><div class="muted small">Pesanan ${esc(o.code)} · ${esc(o.product_name)} · akun ${esc(o.account_number)}</div>
@@ -314,6 +321,11 @@
             ${waButton(whatsapp, `Halo admin GoldHunter Garuda, saya ada kendala pembayaran pesanan ${o.code} (total ${rupiah(o.total)})`, '💬 Chat Admin via WhatsApp') || '<span class="muted small">Kontak admin belum diatur.</span>'}</div>
         </div>
       </div>`;
+    const im = $('#inv-months');
+    if (im) im.onchange = async (e) => {
+      try { await api(`/orders/${o.id}/months`, { method: 'POST', body: { months: Number(e.target.value) } }); toast('Durasi tagihan diganti'); render(); }
+      catch (err) { toast(err.message, 'err'); }
+    };
     const cf = $('#cf');
     cf.onsubmit = async (e) => {
       e.preventDefault();
@@ -383,7 +395,9 @@
         <div class="row">${ea}</div>${vps}
         <div class="row" style="margin-top:16px">
           ${l.billing === 'monthly' && ['active', 'expired'].includes(l.status) ? (renewing
-            ? `<a class="btn btn-outline btn-sm" href="#/pesanan/${renewing.id}">Perpanjangan ${esc(renewing.code)} →</a>`
+            ? (renewing.status === 'awaiting_payment'
+              ? `<a class="btn btn-gold btn-sm" href="#/bayar/${renewing.id}">💳 Bayar tagihan ${rupiah(renewing.total)}</a> <span class="tiny muted">jatuh tempo ${fmtDate(renewing.pay_deadline)}</span>`
+              : `<a class="btn btn-outline btn-sm" href="#/pesanan/${renewing.id}">Perpanjangan ${esc(renewing.code)} →</a>`)
             : `<button class="btn btn-gold btn-sm" data-renew="${l.id}">↻ Perpanjang</button>`) : ''}
           ${l.status === 'active' ? `<button class="btn btn-ghost btn-sm" data-change="${l.id}" ${ch.some((x) => x.status === 'pending') ? 'disabled title="Menunggu admin"' : ''}>Ajukan ganti nomor akun</button>` : ''}
         </div>
@@ -421,7 +435,7 @@
       e.preventDefault();
       const r = await busy($('button[type=submit]', f), () => api(`/licenses/${l.id}/renew`, { method: 'POST', body: { months: Number(new FormData(f).get('months')) } }));
       m.close();
-      location.hash = '#/pesanan/' + r.id;
+      location.hash = '#/bayar/' + r.id;
     };
   }
 

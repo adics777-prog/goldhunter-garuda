@@ -88,7 +88,8 @@ export async function decrypt(env, value) {
 
 // ---------- sessions ----------
 export const SESSION_COOKIE = 'ghg_session';
-const SESSION_DAYS = 30;
+// Browsers cap cookie lifetime at ~400 days; the session is renewed on every visit, so it never runs out in practice.
+const SESSION_DAYS = 400;
 
 export function getCookie(request, name) {
   const c = request.headers.get('cookie') || '';
@@ -115,16 +116,24 @@ export async function destroySession(env, request) {
   if (token) await env.DB.prepare('DELETE FROM sessions WHERE token_hash=?').bind(await sha256(token)).run();
   return cookieHeader(request, '', 0);
 }
+// Returns { user, cookie }: cookie is a refreshed Set-Cookie header (sliding expiry) or null.
 export async function sessionUser(env, request) {
   const token = getCookie(request, SESSION_COOKIE);
-  if (!token) return null;
+  if (!token) return { user: null, cookie: null };
+  const th = await sha256(token);
   const row = await env.DB.prepare(
-    `SELECT u.id, u.email, u.name, u.phone, u.address, u.role, u.status, u.created_at
+    `SELECT u.id, u.email, u.name, u.phone, u.address, u.role, u.status, u.created_at, s.expires_at AS sess_exp
        FROM sessions s JOIN users u ON u.id = s.user_id
       WHERE s.token_hash=? AND s.expires_at > ?`
-  ).bind(await sha256(token), now()).first();
-  if (!row || row.status !== 'active') return null;
-  return row;
+  ).bind(th, now()).first();
+  if (!row || row.status !== 'active') return { user: null, cookie: null };
+  let cookie = null;
+  if (row.sess_exp - now() < (SESSION_DAYS - 1) * DAY) {   // renew at most once a day
+    await env.DB.prepare('UPDATE sessions SET expires_at=? WHERE token_hash=?').bind(now() + SESSION_DAYS * DAY, th).run();
+    cookie = cookieHeader(request, token, SESSION_DAYS * DAY);
+  }
+  delete row.sess_exp;
+  return { user: row, cookie };
 }
 
 export function isAdminEmail(env, email) {

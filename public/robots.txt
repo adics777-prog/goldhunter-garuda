@@ -1,0 +1,10 @@
+User-agent: *
+Allow: /
+Disallow: /member
+Disallow: /admin
+Disallow: /api/
+Disallow: /masuk
+Disallow: /lupa-password
+Disallow: /reset-password
+
+Sitemap: https://goldhuntergaruda.com/sitemap.xml
