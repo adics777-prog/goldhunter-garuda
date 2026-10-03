@@ -281,11 +281,12 @@
             ${l.vps_user ? `<dt>Username</dt><dd><span class="copy mono" data-copy="${esc(l.vps_user)}">${esc(l.vps_user)}</span></dd>` : ''}
             ${l.vps_pass ? `<dt>Password</dt><dd><span class="copy mono" data-copy="${esc(l.vps_pass)}">••••••••</span> <span class="tiny muted">(klik untuk salin)</span></dd>` : ''}
             ${l.vps_note ? `<dt>Catatan</dt><dd>${esc(l.vps_note)}</dd>` : ''}</dl>
-            <details class="small" style="margin-top:10px"><summary style="cursor:pointer;color:var(--gold)">Cara masuk VPS (Remote Desktop)</summary>
-              <ol style="margin:8px 0 0 18px;color:#d6d6de"><li><b>Laptop/PC Windows:</b> tekan <span class="mono">Win + R</span>, ketik <span class="mono">mstsc</span>, Enter. Isi IP, klik Connect, lalu masukkan username &amp; password di atas.</li>
+            <div class="small" style="margin-top:14px;padding-top:12px;border-top:1px solid var(--line)"><b style="color:var(--gold)">Cara masuk &amp; memantau VPS (Remote Desktop)</b>
+              <ol style="margin:8px 0 0 18px;color:#d6d6de;line-height:1.7"><li><b>Laptop/PC Windows:</b> tekan <span class="mono">Win + R</span>, ketik <span class="mono">mstsc</span>, Enter. Isi IP, klik Connect, lalu masukkan username &amp; password di atas.</li>
               <li><b>HP Android / iPhone / Mac:</b> pasang aplikasi <b>Windows App</b> (Microsoft Remote Desktop), tambah PC dengan IP di atas, lalu login.</li>
               <li>Di dalam VPS: pasang MetaTrader dari broker Anda, login akun trading, salin file EA ke folder MQL5 → Experts, lalu pasang di chart (lihat panduan di bawah).</li>
-              <li>Jangan pilih <i>Shut down</i> di VPS. Cukup tutup jendela Remote Desktop, VPS tetap menyala 24 jam.</li></ol></details></div>`
+              <li>Untuk memantau, login kapan saja dengan cara yang sama dan lihat MetaTrader yang berjalan di dalam VPS.</li>
+              <li>Jangan pilih <i>Shut down</i> atau <i>Sign out</i> di VPS. Cukup tutup jendela Remote Desktop (tombol ✕), VPS dan MetaTrader tetap jalan 24 jam.</li></ol></div></div>`
         : `<div class="alert info small" style="margin-top:14px">VPS sedang disiapkan admin.</div>`) : '';
       return `<div class="card license ${l.status}">
         <div class="row between"><div><div class="tiny muted">${esc(l.product_name)}</div>
