@@ -30,6 +30,6 @@ CREATE TABLE ea_stats_daily (
 INSERT OR IGNORE INTO settings (key, value) VALUES
  ('board_enabled', '1'),
  ('board_name_mode', 'first_initial'),  -- full | first_initial | first | hidden
- ('board_landing_top', '10'),
+ ('board_landing_top', '50'),
  ('board_stale_days', '3'),
  ('auto_rebuild_on_version', '1');      -- new #property version in the .mq5/.mq4 -> rebuild every active licence

@@ -356,10 +356,10 @@
     if (!r) return `<div class="small muted" style="margin-top:12px">📈 Laporan profit: <b>belum masuk</b>. Izinkan WebRequest di MetaTrader agar progress Anda tampil (panduan di bawah).</div>`;
     const cur = esc(r.currency);
     const f = (v) => `${v < 0 ? '-' : '+'}${Math.abs(v).toLocaleString('id-ID', { maximumFractionDigits: 2 })} ${cur}`;
-    return `<div class="small" style="margin-top:12px">📈 Laporan EA ${ago(r.updated_at)}: hari ini <b>${f(r.profit_day)}</b> · minggu ini <b>${f(r.profit_week)}</b> · bulan ini <b>${f(r.profit_month)}</b> <a href="/profit" target="_blank" class="tiny">papan progress ↗</a></div>`;
+    return `<div class="small" style="margin-top:12px">📈 Laporan EA ${ago(r.updated_at)}: hari ini <b>${f(r.profit_day)}</b> · minggu ini <b>${f(r.profit_week)}</b> · bulan ini <b>${f(r.profit_month)}</b></div>`;
   };
   const reportGuide = () => `<div class="card"><h3>📈 Aktifkan laporan profit ke web (sekali saja)</h3>
-      <p class="small muted" style="margin-bottom:12px">EA mengirim profit harian, mingguan dan bulanan ke papan <a href="/profit" target="_blank">Progress Member</a>. EA tetap trading normal walaupun langkah ini belum dilakukan.</p>
+      <p class="small muted" style="margin-bottom:12px">EA mengirim profit harian, mingguan dan bulanan ke slide "Profit Member" di halaman utama web. EA tetap trading normal walaupun langkah ini belum dilakukan.</p>
       <ol class="steps small">
         <li><b>Buka pengaturan MetaTrader</b>Menu <i>Tools → Options</i> (atau tekan <span class="mono">Ctrl+O</span>), tab <i>Expert Advisors</i>.</li>
         <li><b>Izinkan alamat web</b>Centang <i>Allow WebRequest for listed URL</i>, klik tanda <b>+</b>, ketik <span class="copy mono" data-copy="https://goldhuntergaruda.com">https://goldhuntergaruda.com</span>, lalu <b>OK</b>.</li>

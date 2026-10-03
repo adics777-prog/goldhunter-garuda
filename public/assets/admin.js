@@ -393,13 +393,13 @@
     const [{ rows, usd_idr }, s] = await Promise.all([api('/admin/board'), api('/admin/settings')]);
     const money = (n) => n == null ? '-' : (n < 0 ? '- ' : '') + rupiah(Math.abs(n));
     const cls = (n) => (n || 0) < 0 ? 'color:#ff8b95' : 'color:#6ee7a2';
-    view.innerHTML = `${title('📈 Papan Profit', '<a class="btn btn-ghost btn-sm" href="/profit" target="_blank">Lihat halaman publik ↗</a>')}
+    view.innerHTML = `${title('📈 Papan Profit', '<a class="btn btn-ghost btn-sm" href="/#progress" target="_blank">Lihat di halaman utama ↗</a>')}
       <form class="card" id="bf" style="margin-bottom:18px"><div class="grid" style="grid-template-columns:repeat(auto-fit,minmax(min(200px,100%),1fr));gap:0 14px;align-items:end">
         <div class="field"><label>Papan profit publik</label><select name="board_enabled"><option value="1">Tampil</option><option value="0" ${s.board_enabled === '0' ? 'selected' : ''}>Disembunyikan</option></select></div>
         <div class="field"><label>Nama yang ditampilkan</label><select name="board_name_mode">
           ${[['first_initial', 'Nama depan + inisial (Budi S****)'], ['first', 'Nama depan saja (Budi)'], ['full', 'Nama lengkap'], ['hidden', 'Samarkan semua (Member Anonim)']]
             .map(([v, l]) => `<option value="${v}" ${(s.board_name_mode || 'first_initial') === v ? 'selected' : ''}>${l}</option>`).join('')}</select></div>
-        <div class="field"><label>Jumlah di landing page</label><input name="board_landing_top" type="number" min="0" max="50" value="${esc(s.board_landing_top || 10)}"></div>
+        <div class="field"><label>Jumlah akun di slide halaman utama (0 = sembunyikan)</label><input name="board_landing_top" type="number" min="0" max="200" value="${esc(s.board_landing_top || 50)}"></div>
         <div class="field"><label>Sembunyikan jika tidak lapor (hari)</label><input name="board_stale_days" type="number" min="1" max="30" value="${esc(s.board_stale_days || 3)}"></div>
       </div><button class="btn btn-gold btn-sm" type="submit">Simpan</button>
       <span class="tiny muted" style="margin-left:10px">Profit dalam Rupiah: akun cent (USC) ÷ 100 × kurs ${usd_idr ? rupiah(usd_idr) + '/USD' : '-'}.</span></form>
