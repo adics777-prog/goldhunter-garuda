@@ -722,6 +722,15 @@
             ${keyBox('Kunci MASTER (input 0.4, hanya di MT5 master)', d.keys.master, 'Rahasia. EA master memakai kunci ini untuk mengambil semua pengaturan di halaman ini (termasuk API key) dan mengirim sinyal.')}
             ${keyBox('Kunci CLIENT (input 0.3, untuk EA member)', d.keys.client, 'Dipakai EA client untuk mengambil sinyal.')}</div>
           <p class="help">EA master cukup diisi: 0.1 = MASTER, 0.2 = alamat web, 0.4 = kunci master. Pengaturan Telegram ada di <a href="#/pengaturan">Pengaturan</a>.</p></div>
+        <div class="card" style="grid-column:1/-1"><h3>⬇️ Unduh EA Garuda AI</h3>
+          ${d.ea ? `<p class="small" style="margin-bottom:12px">Versi <b>${esc(d.ea.version)}</b> · ${(d.ea.size / 1024).toFixed(0)} KB · diperbarui ${fmtDateTime(d.ea.at)}</p>
+          <div class="row" style="gap:8px;flex-wrap:wrap">
+            <a class="btn btn-gold btn-sm" href="/api/admin/ai/ea">⬇ EA Garuda AI (.ex5)</a>
+            <a class="btn btn-outline btn-sm" href="/api/admin/ai/preset?mode=master">Preset MASTER (.set)</a>
+            <a class="btn btn-outline btn-sm" href="/api/admin/ai/preset?mode=client">Preset CLIENT (.set)</a></div>`
+            : '<p class="small muted">File EA belum ada. Builder di PC admin meng-upload EA terbaru secara otomatis begitu menyala.</p>'}
+          <p class="help" style="margin-top:12px">Satu file untuk master dan client. Pasang: MT5 › File › Open Data Folder › MQL5 › Experts, salin file .ex5, lalu Navigator › Refresh.
+            Saat EA ditaruh di chart, tab Inputs › <b>Load</b> › pilih preset supaya mode dan kunci langsung terisi. Preset MASTER berisi kunci master: jangan dibagikan.</p></div>
         <div style="grid-column:1/-1"><button class="btn btn-gold" type="submit">Simpan Pengaturan Garuda AI</button></div>
       </form>
       <h3 style="margin:24px 0 10px">Sinyal terakhir</h3>

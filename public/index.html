@@ -493,8 +493,13 @@
     el.href = `https://wa.me/${num}?text=${encodeURIComponent(waMsg(el.dataset.plan))}`;
     el.target = '_blank'; el.rel = 'noopener';
   });
-  setWa('6281234567890');
-  fetch('/api/catalog').then(r => r.json()).then(c => { if (c.whatsapp) setWa(c.whatsapp.replace(/\D/g, '').replace(/^0/, '62')); }).catch(() => {});
+  // Sembunyikan tombol WhatsApp sampai nomor admin diisi di Admin > Pengaturan
+  document.querySelectorAll('.order').forEach(el => { el.style.display = 'none'; });
+  fetch('/api/catalog').then(r => r.json()).then(c => {
+    if (!c.whatsapp) return;
+    setWa(c.whatsapp.replace(/\D/g, '').replace(/^0/, '62'));
+    document.querySelectorAll('.order').forEach(el => { el.style.display = ''; });
+  }).catch(() => {});
 
   // Navbar scroll + burger
   const nav = document.getElementById('nav'), menu = document.getElementById('menu');

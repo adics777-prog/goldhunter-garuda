@@ -553,6 +553,7 @@ route('GET', '/admin/ai', 'admin', async ({ env }) => {
     master: { seen: Number(s.ai_master_seen || 0), info: s.ai_master_info || '' },
     keys: { master: env.SIGNAL_SECRET || '', client: env.SIGNAL_KEY || '' },
     stats30: stat, today, recent: recent.results, markets, research30: research, research_symbol: s.ai_research_symbol || 'XAUUSD',
+    ea: garudaEa(s),
   });
 });
 
@@ -600,6 +601,52 @@ route('PUT', '/admin/ai', 'admin', async ({ request, env }) => {
 });
 
 // Test the Claude connection with the saved key and model (a tiny request)
+// ---- EA Garuda AI file: uploaded by the builder on the admin's PC whenever the compiled .ex5 changes ----
+function garudaEa(s) {
+  let v = s.garuda_ai_ea;
+  if (typeof v === 'string') { try { v = JSON.parse(v); } catch { v = null; } }
+  return v && v.file_id ? v : null;
+}
+route('POST', '/builder/garuda-ai', 'builder', async ({ request, env }) => {
+  const b = await readJson(request);
+  const data = String(b.data_b64 || '');
+  if (!data || data.length > 2.6e6) fail(400, 'File EA kosong atau terlalu besar');
+  const bytes = unb64(data);
+  const sha = await sha256(data);
+  const name = `GarudaAI_OneShot_v${str(b.version, 12).replace(/[^0-9A-Za-z.]/g, '') || 'x'}.ex5`;
+  const r = await env.DB.prepare('INSERT INTO files (user_id, kind, name, mime, size, data_b64, created_at) VALUES (NULL, ?, ?, ?, ?, ?, ?)')
+    .bind('garuda_ai', name, 'application/octet-stream', bytes.length, data, now()).run();
+  const id = r.meta.last_row_id;
+  await env.DB.prepare("DELETE FROM files WHERE kind='garuda_ai' AND id<>?").bind(id).run();
+  await putSetting(env, 'garuda_ai_ea', JSON.stringify({ file_id: id, name, version: str(b.version, 12), size: bytes.length, sha, at: now() }));
+  return json({ ok: true, sha });
+});
+route('GET', '/admin/ai/ea', 'admin', async ({ env }) => {
+  const e = garudaEa(await getSettings(env));
+  const f = e ? await env.DB.prepare("SELECT name, data_b64 FROM files WHERE id=? AND kind='garuda_ai'").bind(e.file_id).first() : null;
+  if (!f) fail(404, 'File EA Garuda AI belum di-upload builder');
+  return new Response(unb64(f.data_b64), { headers: { 'content-type': 'application/octet-stream',
+    'content-disposition': `attachment; filename="${f.name}"`, 'cache-control': 'private, no-store' } });
+});
+// Ready-made input presets (.set, UTF-16 like MT5 saves them). MASTER carries the master key: keep it private
+route('GET', '/admin/ai/preset', 'admin', async ({ env, url }) => {
+  const master = url.searchParams.get('mode') === 'master';
+  const lines = [
+    `; Garuda AI preset ${master ? 'MASTER' : 'CLIENT'} - goldhuntergaruda.com`,
+    `InpMode=${master ? 1 : 0}`,
+    'InpServerUrl=https://goldhuntergaruda.com',
+    `InpSignalKey=${master ? '' : env.SIGNAL_KEY || ''}`,
+    `InpSignalSecret=${master ? env.SIGNAL_SECRET || '' : ''}`,
+    'InpUseServerFilters=true',
+    'InpRiskPct=1.0',
+  ];
+  const text = '\ufeff' + lines.join('\r\n') + '\r\n';
+  const buf = new Uint8Array(text.length * 2);
+  for (let i = 0; i < text.length; i++) { const c = text.charCodeAt(i); buf[i * 2] = c & 255; buf[i * 2 + 1] = c >> 8; }
+  return new Response(buf, { headers: { 'content-type': 'application/octet-stream',
+    'content-disposition': `attachment; filename="GarudaAI_${master ? 'MASTER' : 'CLIENT'}.set"`, 'cache-control': 'private, no-store' } });
+});
+
 route('POST', '/admin/ai/test', 'admin', async ({ env }) => {
   const s = await getSettings(env);
   if (!s.ai_claude_key_enc) fail(400, 'API key Claude belum disimpan');
@@ -1346,7 +1393,9 @@ route('POST', '/builder/claim', 'builder', async ({ request, env, base, waitUnti
     await putSetting(env, 'daily_last_run', JSON.stringify({ at: now(), running: true }));
     waitUntil(runDaily(env, base).catch((e) => console.error('daily', e)));
   }
-  return json({ job: await claimBuild(env, str(b.builder_id, 60) || 'builder', b.versions && typeof b.versions === 'object' ? b.versions : {}) });
+  const ea = garudaEa(s);
+  return json({ job: await claimBuild(env, str(b.builder_id, 60) || 'builder', b.versions && typeof b.versions === 'object' ? b.versions : {}),
+    garuda_ai_sha: ea ? ea.sha : '' });
 });
 route('POST', '/builder/result', 'builder', async ({ request, env, base }) => {
   const b = await readJson(request);

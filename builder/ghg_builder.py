@@ -13,7 +13,7 @@ Jalankan:  python ghg_builder.py          (terus berjalan, cek tiap beberapa det
            python ghg_builder.py --config config.local.json    (pakai web lokal localhost:8788)
 Hanya pakai library bawaan Python 3.
 """
-import base64, datetime, glob, json, os, re, shutil, socket, subprocess, sys, time, traceback, urllib.request, urllib.error
+import base64, datetime, glob, hashlib, json, os, re, shutil, socket, subprocess, sys, time, traceback, urllib.request, urllib.error
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 WORK = os.path.join(HERE, 'work')
@@ -314,6 +314,30 @@ def handle(cfg, job):
             log(f'  gagal melapor ke web: {e2}')
 
 
+def garuda_paths(cfg):
+    """Compiled Garuda AI EA (.ex5) and its source (for the version number)."""
+    g = cfg.get('garuda_ai') or {}
+    base = os.path.join(os.path.dirname((cfg.get('mt5') or {}).get('ea_source') or HERE), 'GarudaAI OneShot')
+    return g.get('ex5') or os.path.join(base, 'GarudaAI_OneShot.ex5'), g.get('mq5') or os.path.join(base, 'GarudaAI_OneShot.mq5')
+
+
+def sync_garuda_ai(cfg, server_sha):
+    """Upload the Garuda AI EA to the web (Admin > Garuda AI > Unduh) whenever the local .ex5 differs from the web copy."""
+    ex5, mq5 = garuda_paths(cfg)
+    if not os.path.exists(ex5):
+        return
+    data = base64.b64encode(open(ex5, 'rb').read()).decode()
+    sha = hashlib.sha256(data.encode()).hexdigest()
+    if sha == server_sha:
+        return
+    version = ''
+    if os.path.exists(mq5):
+        m = re.search(r'#property\s+version\s+"([^"]+)"', read_text(mq5))
+        version = m.group(1) if m else ''
+    api(cfg, '/api/builder/garuda-ai', {'version': version, 'data_b64': data})
+    log(f'EA Garuda AI v{version} di-upload ke web ({len(data) * 3 // 4:,} byte)')
+
+
 def main():
     cfg = load_config()
     if '--test' in sys.argv:
@@ -332,7 +356,13 @@ def main():
     log(f"GHG Builder aktif -> {cfg['api_base']} (cek tiap {cfg.get('poll_seconds', 15)} detik)")
     while True:
         try:
-            job = api(cfg, '/api/builder/claim', {'builder_id': builder_id, 'versions': source_versions(cfg)}).get('job')
+            res = api(cfg, '/api/builder/claim', {'builder_id': builder_id, 'versions': source_versions(cfg)})
+            job = res.get('job')
+            if 'garuda_ai_sha' in res:
+                try:
+                    sync_garuda_ai(cfg, res.get('garuda_ai_sha') or '')
+                except Exception as e:
+                    log(f'Gagal upload EA Garuda AI: {e}')
             if job:
                 handle(cfg, job)
                 continue          # look for the next job right away
