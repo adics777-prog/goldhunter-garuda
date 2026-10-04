@@ -321,9 +321,11 @@ def garuda_paths(cfg):
     return g.get('ex5') or os.path.join(base, 'GarudaAI_OneShot.ex5'), g.get('mq5') or os.path.join(base, 'GarudaAI_OneShot.mq5')
 
 
-def sync_garuda_ai(cfg, server_sha):
+def sync_garuda_ai(cfg, server_sha, variant='client'):
     """Upload the Garuda AI EA to the web (Admin > Garuda AI > Unduh) whenever the local .ex5 differs from the web copy."""
     ex5, mq5 = garuda_paths(cfg)
+    if variant == 'master':
+        ex5 = os.path.join(os.path.dirname(ex5), 'GarudaAI_MASTER.ex5')
     if not os.path.exists(ex5):
         return
     data = base64.b64encode(open(ex5, 'rb').read()).decode()
@@ -334,8 +336,8 @@ def sync_garuda_ai(cfg, server_sha):
     if os.path.exists(mq5):
         m = re.search(r'#property\s+version\s+"([^"]+)"', read_text(mq5))
         version = m.group(1) if m else ''
-    api(cfg, '/api/builder/garuda-ai', {'version': version, 'data_b64': data})
-    log(f'EA Garuda AI v{version} di-upload ke web ({len(data) * 3 // 4:,} byte)')
+    api(cfg, '/api/builder/garuda-ai', {'version': version, 'variant': variant, 'data_b64': data})
+    log(f'EA Garuda AI {variant.upper()} v{version} di-upload ke web ({len(data) * 3 // 4:,} byte)')
 
 
 def main():
@@ -361,6 +363,8 @@ def main():
             if 'garuda_ai_sha' in res:
                 try:
                     sync_garuda_ai(cfg, res.get('garuda_ai_sha') or '')
+                    if 'garuda_ai_master_sha' in res:
+                        sync_garuda_ai(cfg, res.get('garuda_ai_master_sha') or '', 'master')
                 except Exception as e:
                     log(f'Gagal upload EA Garuda AI: {e}')
             if job:
