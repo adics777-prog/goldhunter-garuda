@@ -1,0 +1,112 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Sinyal Garuda AI XAUUSD: BUY / SELL dan Hasil Pips</title>
+<meta name="description" content="Sinyal emas (XAUUSD) Garuda AI: analisis tiap candle H1 sesi London dan New York, lengkap dengan hasil setiap sinyal dalam pips.">
+<meta name="robots" content="index,follow">
+<meta name="theme-color" content="#07070a">
+<link rel="canonical" href="https://goldhuntergaruda.com/sinyal">
+<meta property="og:type" content="website">
+<meta property="og:url" content="https://goldhuntergaruda.com/sinyal">
+<meta property="og:title" content="Sinyal Garuda AI XAUUSD — GoldHunter Garuda">
+<meta property="og:description" content="Sinyal BUY / SELL emas dari Garuda AI beserta hasil setiap sinyal dalam pips.">
+<meta property="og:image" content="https://goldhuntergaruda.com/assets/brand/goldhunter-garuda-banner-1200x630.jpg">
+<link rel="icon" href="/assets/brand/favicon.ico">
+<link rel="apple-touch-icon" href="/assets/brand/apple-touch-icon.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@700;900&family=Poppins:wght@300;400;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/assets/app.css?v=1c3d3e1e">
+<style>
+  .pub-top{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:14px clamp(16px,4vw,40px);border-bottom:1px solid var(--line);background:var(--bg-2);position:sticky;top:0;z-index:20}
+  .pub-top .brand{padding:0}
+  .pub-wrap{max-width:1000px;margin:0 auto;padding:34px clamp(16px,4vw,32px) 60px}
+  .pub-hero{text-align:center;margin-bottom:26px}
+  .pub-hero h1{font-family:'Cinzel',serif;font-size:clamp(1.6rem,4.5vw,2.4rem);margin-bottom:8px}
+  .pub-hero p{color:var(--muted);max-width:640px;margin:0 auto}
+  .pos{color:#6ee7a2;font-weight:700}
+  .neg{color:#ff8b95;font-weight:700}
+  .now{border:1px solid var(--line);border-radius:var(--radius);background:var(--card);padding:16px 18px;margin-bottom:18px}
+  .now b{color:var(--gold)}
+  .sig td{vertical-align:top}
+  .sig .why{color:var(--muted);font-size:.78rem;margin-top:4px;max-width:420px;overflow-wrap:anywhere}
+  .lock{color:var(--muted);font-size:.78rem}
+  @media (max-width:600px){ .hide-sm{display:none} th,td{padding:10px 9px} }
+</style>
+</head>
+<body>
+<header class="pub-top">
+  <a class="brand" href="/"><img src="/assets/brand/goldhunter-garuda-logo-128.png" width="38" height="38" alt="GoldHunter Garuda"><span class="gold-text">GOLDHUNTER</span></a>
+  <div class="row" id="top-btn"><a class="btn btn-ghost btn-sm" href="/masuk">Masuk</a><a class="btn btn-gold btn-sm" href="/daftar">Daftar Gratis</a></div>
+</header>
+<main class="pub-wrap">
+  <div class="pub-hero">
+    <span class="badge b-gold">🤖 Garuda AI · XAUUSD</span>
+    <h1 style="margin-top:12px">Sinyal <span class="gold-text">Garuda AI</span></h1>
+    <p>Pasar emas dianalisis setiap candle H1 selama sesi London dan New York. Setiap sinyal BUY / SELL dipantau sampai kena TP atau SL, lalu hasilnya dicatat di sini dalam pips.</p>
+  </div>
+  <div class="now" id="now"></div>
+  <div class="grid c3" style="margin-bottom:18px" id="tiles"></div>
+  <div id="list"><div class="loading"><span class="spinner"></span></div></div>
+  <p class="center tiny muted" style="margin-top:12px">1 pip = $0,10 pergerakan harga emas. Waktu ditampilkan sesuai jam perangkat Anda. Halaman diperbarui otomatis tiap menit.</p>
+  <div class="alert err small center" style="line-height:1.7;margin-top:24px">
+    <b>⚠️ PERINGATAN RISIKO.</b> Sinyal dibuat otomatis oleh AI dan <b>bukan saran investasi atau jaminan hasil</b>. Hasil di atas adalah pergerakan harga dari titik sinyal, belum termasuk spread, slippage dan komisi, sehingga hasil akun tiap orang bisa berbeda.
+    Trading forex &amp; emas berisiko sangat tinggi dan dapat menyebabkan kehilangan sebagian atau seluruh modal.
+    <a href="/#risiko" style="color:#ff8b95;text-decoration:underline">Baca peringatan risiko lengkap</a>.
+  </div>
+</main>
+<script src="/assets/common.js?v=94a3104e"></script>
+<script>
+(() => {
+  const { $, esc, fmtDateTime, ago } = GHG;
+  const num = (v) => v == null ? '-' : Number(v).toFixed(2);
+  const pipsTxt = (p) => p == null ? '-' : (p > 0 ? '+' : '') + Number(p).toFixed(1) + ' pips';
+  const STATUS = { open: ['b-gold', 'BERJALAN'], TP: ['b-green', 'TP'], SL: ['b-red', 'SL'], BE: ['b-gold', 'BREAK EVEN'], CLOSE: ['b-gold', 'DITUTUP'] };
+  const side = (d) => `<span class="badge ${d === 'BUY' ? 'b-green' : 'b-red'}">${d === 'BUY' ? '▲ BUY' : '▼ SELL'}</span>`;
+
+  async function load() {
+    let d;
+    try { d = await (await fetch('/api/signal/feed?limit=60', { credentials: 'same-origin' })).json(); } catch { d = null; }
+    if (!d || !d.ok) { $('#list').innerHTML = '<div class="card empty">Data sinyal belum bisa dimuat. Coba muat ulang halaman.</div>'; return; }
+    if (d.member) $('#top-btn').innerHTML = '<a class="btn btn-gold btn-sm" href="/member">Member Area</a>';
+
+    const l = d.last;
+    $('#now').innerHTML = l
+      ? `<div class="small muted">Analisis terakhir · ${esc(ago(l.created_at))}</div>
+         <div style="margin-top:6px"><b>${l.decision === 'WAIT' ? '⏸ WAIT' : (l.decision === 'BUY' ? '▲ BUY' : '▼ SELL')}</b>
+         <span class="small muted"> · tren H4 ${esc(l.trend_h4 || '-')}, H1 ${esc(l.trend_h1 || '-')}</span></div>
+         ${l.decision === 'WAIT' && l.reason ? `<div class="small" style="margin-top:6px;overflow-wrap:anywhere">${esc(l.reason)}</div>` : ''}`
+      : '<div class="small muted">Belum ada analisis. Sinyal pertama muncul di awal candle H1 berikutnya pada jam sesi London / New York.</div>';
+
+    const s = d.stats30 || {};
+    const closed = s.closed || 0;
+    const wr = closed ? Math.round((s.wins / closed) * 100) : 0;
+    $('#tiles').innerHTML = `
+      <div class="stat"><b>${closed ? wr + '%' : '-'}</b><span>Win rate 30 hari (${s.wins || 0} TP / ${s.losses || 0} SL)</span></div>
+      <div class="stat"><b class="${(s.pips || 0) < 0 ? 'neg' : ''}">${closed ? pipsTxt(s.pips) : '-'}</b><span>Total pips 30 hari</span></div>
+      <div class="stat"><b>${closed}</b><span>Sinyal selesai 30 hari</span></div>`;
+
+    $('#list').innerHTML = d.signals.length ? `<div class="table-wrap"><table class="sig"><thead><tr>
+        <th>Waktu</th><th>Sinyal</th><th class="right">Entry</th><th class="right hide-sm">SL</th><th class="right hide-sm">TP</th><th class="right">Hasil</th></tr></thead><tbody>
+      ${d.signals.map((r) => {
+        const st = STATUS[r.status] || STATUS.open;
+        const res = r.status === 'open' ? `<span class="badge ${st[0]}">${st[1]}</span>`
+          : `<div class="${r.pips > 0 ? 'pos' : (r.pips < 0 ? 'neg' : '')} nowrap">${pipsTxt(r.pips)}</div><span class="badge ${st[0]}">${st[1]}</span>`;
+        return `<tr><td class="nowrap small">${esc(fmtDateTime(r.created_at))}</td>
+          <td>${side(r.decision)} <span class="tiny muted">${r.confidence}%</span>
+            ${r.locked ? '<div class="lock">🔒 Entry, SL, TP sinyal yang masih berjalan khusus member. <a href="/masuk">Masuk</a></div>' : (r.reason ? `<div class="why">${esc(r.reason)}</div>` : '')}</td>
+          <td class="right mono small">${num(r.price)}</td>
+          <td class="right mono small hide-sm">${num(r.sl)}</td>
+          <td class="right mono small hide-sm">${num(r.tp)}</td>
+          <td class="right">${res}</td></tr>`;
+      }).join('')}</tbody></table></div>`
+      : '<div class="card empty">Belum ada sinyal BUY / SELL.</div>';
+  }
+  load();
+  setInterval(load, 60000);
+})();
+</script>
+</body>
+</html>

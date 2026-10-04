@@ -32,6 +32,10 @@ export async function onRequest(context) {
         if (!env.BUILDER_TOKEN || request.headers.get('x-builder-token') !== env.BUILDER_TOKEN) fail(401, 'Token builder salah');
       } else if (r.auth === 'cron') {
         if (!env.CRON_SECRET || request.headers.get('x-cron-secret') !== env.CRON_SECRET) fail(401, 'Secret cron salah');
+      } else if (r.auth === 'signal_pub') {
+        if (!env.SIGNAL_SECRET || request.headers.get('x-signal-secret') !== env.SIGNAL_SECRET) fail(401, 'Secret sinyal salah');
+      } else if (r.auth === 'signal_read') {
+        if (!env.SIGNAL_KEY || request.headers.get('x-signal-key') !== env.SIGNAL_KEY) fail(401, 'Kunci sinyal salah');
       } else {
         const sess = await sessionUser(env, request);
         ctx.user = sess.user;
@@ -229,6 +233,98 @@ route('POST', '/ea/report', 'public', async ({ request, env }) => {
       .bind(l.id, wib, num(b.day), num(b.balance), cur),
   ].slice(0, writeDaily ? 2 : 1));
   return json({ ok: true, next });
+});
+
+// ======================= AI SIGNALS (MASTER EA -> server -> CLIENT EAs) =======================
+const signalView = (r) => r && ({
+  id: r.id, symbol: r.symbol, bar_time: r.bar_time, created_at: r.created_at, valid_until: r.valid_until,
+  decision: r.decision, confidence: r.confidence, price: r.price, sl: r.sl, tp: r.tp,
+  trend_h4: r.trend_h4, trend_h1: r.trend_h1, reason: r.reason, model: r.model,
+  status: r.status, close_price: r.close_price, closed_at: r.closed_at, pips: r.pips,
+});
+// Gold: 1 pip = 0.10 USD of price (e.g. 2,000.00 -> 2,001.50 = 15 pips)
+const PIP = 0.1;
+
+// When a client should ask again: signals arrive a few minutes after each H1 close, so clients come back
+// ~2.5 minutes after the next hour (plus a short retry window while this hour's signal is still missing).
+// Keeps Functions/D1 traffic to a few requests per client per hour.
+function nextSignalCheck(t, latest) {
+  const hourStart = t - (t % 3600);
+  const toNextHour = hourStart + 3600 + 150 - t;
+  const fresh = latest && latest.created_at >= hourStart;
+  if (!fresh && t - hourStart < 15 * 60) return 45;
+  return Math.max(30, Math.min(toNextHour, 3600));
+}
+
+route('POST', '/signal/publish', 'signal_pub', async ({ request, env }) => {
+  const b = await readJson(request);
+  const decision = str(b.decision, 8).toUpperCase();
+  if (!['BUY', 'SELL', 'WAIT'].includes(decision)) fail(400, 'decision harus BUY, SELL atau WAIT');
+  const symbol = str(b.symbol, 20);
+  if (!symbol) fail(400, 'symbol kosong');
+  const num = (v) => { const n = Number(v); return Number.isFinite(n) ? n : 0; };
+  const t = now();
+  const validMin = Math.max(1, Math.min(int(b.valid_min) || 10, 60));
+  const r = await env.DB.prepare(`INSERT INTO signals (symbol, bar_time, created_at, valid_until, decision, confidence, price, sl, tp, trend_h4, trend_h1, reason, model, cost_usd, tokens_in, tokens_out, status)
+      VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`)
+    .bind(symbol, int(b.bar_time) || 0, t, t + validMin * 60, decision, Math.max(0, Math.min(int(b.confidence) || 0, 100)),
+      num(b.price), num(b.sl), num(b.tp), str(b.trend_h4, 8), str(b.trend_h1, 8), str(b.reason, 600), str(b.model, 40),
+      num(b.cost_usd), int(b.tokens_in) || 0, int(b.tokens_out) || 0, decision === 'WAIT' ? 'wait' : 'open')
+    .run();
+  return json({ ok: true, id: r.meta.last_row_id, valid_until: t + validMin * 60 });
+});
+
+// The MASTER EA follows every BUY/SELL signal and reports how it ended; pips are computed here from the entry
+route('POST', '/signal/close', 'signal_pub', async ({ request, env }) => {
+  const b = await readJson(request);
+  const result = str(b.result, 8).toUpperCase();
+  if (!['TP', 'SL', 'BE', 'CLOSE'].includes(result)) fail(400, 'result harus TP, SL, BE atau CLOSE');
+  const row = await env.DB.prepare('SELECT id, decision, price, status FROM signals WHERE id=?').bind(int(b.id) || 0).first();
+  if (!row) fail(404, 'Sinyal tidak ditemukan');
+  if (row.status !== 'open') fail(409, 'Sinyal sudah ditutup');
+  const close = Number(b.close_price);
+  if (!Number.isFinite(close) || close <= 0) fail(400, 'close_price tidak valid');
+  const pips = Math.round(((row.decision === 'BUY' ? close - row.price : row.price - close) / PIP) * 10) / 10;
+  const t = now();
+  await env.DB.prepare('UPDATE signals SET status=?, close_price=?, closed_at=?, pips=? WHERE id=?').bind(result, close, t, pips, row.id).run();
+  return json({ ok: true, pips });
+});
+
+// Public page /sinyal: BUY/SELL signals with their outcome. Entry/SL/TP of a still-running signal are shown to
+// logged-in users only, so the page works as a track record without giving the live trade away.
+route('GET', '/signal/feed', 'public', async ({ env, url, user }) => {
+  const limit = Math.max(1, Math.min(int(url.searchParams.get('limit')) || 50, 200));
+  const t = now();
+  const [{ results }, last, stat] = await Promise.all([
+    env.DB.prepare(`SELECT * FROM signals WHERE decision IN ('BUY','SELL') ORDER BY id DESC LIMIT ?`).bind(limit).all(),
+    env.DB.prepare('SELECT decision, created_at, reason, trend_h4, trend_h1, confidence FROM signals ORDER BY id DESC LIMIT 1').first(),
+    env.DB.prepare(`SELECT COUNT(*) AS closed, COALESCE(SUM(CASE WHEN pips > 0 THEN 1 ELSE 0 END),0) AS wins,
+        COALESCE(SUM(CASE WHEN pips < 0 THEN 1 ELSE 0 END),0) AS losses, COALESCE(SUM(pips),0) AS pips
+        FROM signals WHERE decision IN ('BUY','SELL') AND status <> 'open' AND closed_at > ?`).bind(t - 30 * DAY).first(),
+  ]);
+  const member = !!user;
+  const signals = results.map((r) => {
+    const v = signalView(r);
+    if (r.status === 'open' && !member) { v.price = null; v.sl = null; v.tp = null; v.reason = ''; v.locked = true; }
+    return v;
+  });
+  const lastView = last ? { ...last, reason: last.decision === 'WAIT' || member ? last.reason : '' } : null;
+  return json({ ok: true, server_time: t, member, signals, last: lastView, stats30: stat });
+});
+
+route('GET', '/signal/latest', 'signal_read', async ({ env, url }) => {
+  const symbol = str(url.searchParams.get('symbol'), 20);
+  const row = await env.DB.prepare(symbol ? 'SELECT * FROM signals WHERE symbol=? ORDER BY id DESC LIMIT 1' : 'SELECT * FROM signals ORDER BY id DESC LIMIT 1')
+    .bind(...(symbol ? [symbol] : [])).first();
+  const t = now();
+  return json({ ok: true, server_time: t, signal: signalView(row) || null, next: nextSignalCheck(t, row) });
+});
+
+route('GET', '/admin/signals', 'admin', async ({ env, url }) => {
+  const limit = Math.max(1, Math.min(int(url.searchParams.get('limit')) || 100, 500));
+  const { results } = await env.DB.prepare('SELECT * FROM signals ORDER BY id DESC LIMIT ?').bind(limit).all();
+  const cost = await env.DB.prepare('SELECT COUNT(*) AS n, COALESCE(SUM(cost_usd),0) AS usd FROM signals WHERE created_at > ?').bind(now() - 30 * DAY).first();
+  return json({ signals: results.map((r) => ({ ...signalView(r), cost_usd: r.cost_usd, tokens_in: r.tokens_in, tokens_out: r.tokens_out })), last30: cost });
 });
 
 async function boardRows(env, rate, { includeHidden = false } = {}) {
