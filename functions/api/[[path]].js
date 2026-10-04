@@ -347,12 +347,16 @@ function tgCloseText(r, result, close, pips, m) {
 // When a client should ask again: signals arrive a few minutes after each H1 close, so clients come back
 // ~2.5 minutes after the next hour (plus a short retry window while this hour's signal is still missing).
 // Keeps Functions/D1 traffic to a few requests per client per hour.
-function nextSignalCheck(t, latest) {
-  const hourStart = t - (t % 3600);
-  const toNextHour = hourStart + 3600 + 150 - t;
-  const fresh = latest && latest.created_at >= hourStart;
-  if (!fresh && t - hourStart < 15 * 60) return 45;
-  return Math.max(30, Math.min(toNextHour, 3600));
+// When a CLIENT EA should ask again: often right after each analysis slot (Admin: every 60 / 30 / 15 min),
+// and at most every 2 minutes when quick re-analysis on Claude's levels is on (it can come at any time)
+function nextSignalCheck(t, latest, s = {}) {
+  const slot = (Number(s.ai_interval_min) || 60) * 60;
+  const slotStart = t - (t % slot);
+  const toNext = slotStart + slot + 150 - t;
+  const fresh = latest && latest.created_at >= slotStart;
+  if (!fresh && t - slotStart < Math.min(15 * 60, slot / 2)) return 45;
+  const n = Math.max(30, Math.min(toNext, 3600));
+  return s.ai_level_trigger === '1' ? Math.min(n, 120) : n;
 }
 
 route('POST', '/signal/publish', 'signal_pub', async ({ request, env, base, waitUntil }) => {
@@ -479,6 +483,7 @@ const AI_KEYS = {               // key: [type, min, max]
   ai_paused: ['bool'], ai_model: ['model'], ai_effort: ['effort'], ai_news: ['bool'], ai_news_effort: ['effort'],
   ai_news_max: ['int', 1, 10], ai_research_every: ['int', 1, 12], ai_web_tool: ['tool'], ai_intermarket: ['bool'], ai_vision: ['bool'], ai_chart: ['bool'],
   ai_session_start: ['int', 0, 23], ai_session_end: ['int', 1, 24], ai_friday_last: ['int', 0, 24],
+  ai_interval_min: ['int', 15, 60], ai_level_trigger: ['bool'],
   ai_min_conf: ['int', 0, 100], ai_min_rr: ['num', 0.5, 10], ai_min_sl: ['num', 0.5, 200], ai_max_sl: ['num', 1, 500], ai_valid_min: ['int', 1, 60],
   ai_cost_cap: ['num', 0, 1000], ai_master_trade: ['bool'],
 };
@@ -564,6 +569,7 @@ route('PUT', '/admin/ai', 'admin', async ({ request, env }) => {
     if (b[name] === undefined) continue;
     let v = b[name];
     if (t === 'bool') v = v === true || v === '1' || v === 'on' ? '1' : '0';
+    else if (k === 'ai_interval_min') { if (![15, 30, 60].includes(Number(v))) fail(400, 'Interval analisis harus 15, 30 atau 60 menit'); v = String(Number(v)); }
     else if (t === 'int' || t === 'num') {
       const n = Number(v);
       if (!Number.isFinite(n) || n < mn || n > mx) fail(400, `Nilai ${name} harus ${mn} sampai ${mx}`);
@@ -684,10 +690,11 @@ route('GET', '/signal/latest', 'signal_read', async ({ env, url }) => {
   const row = await env.DB.prepare('SELECT * FROM signals WHERE symbol=? ORDER BY id DESC LIMIT 1').bind(symbol).first();
   const t = now();
   const m = await getSymbol(env, symbol);
-  const f = signalFilters(await getSettings(env));
+  const st = await getSettings(env);
+  const f = signalFilters(st);
   f.min_sl = m.min_sl * m.pip;                 // price units, like the client's own checks
   f.max_sl = m.max_sl * m.pip;
-  return json({ ok: true, server_time: t, symbol, enabled: !!m.enabled, signal: signalView(row) || null, next: nextSignalCheck(t, row), filters: f,
+  return json({ ok: true, server_time: t, symbol, enabled: !!m.enabled, signal: signalView(row) || null, next: nextSignalCheck(t, row, st), filters: f,
     market: symView(m) });
 });
 
