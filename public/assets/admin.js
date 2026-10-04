@@ -651,6 +651,9 @@
     const alive = seenAgo !== null && seenAgo < 900;
     const st = d.stats30 || {};
     const wr = st.wins + st.losses ? Math.round(st.wins / (st.wins + st.losses) * 100) : null;
+    const MKT = Object.fromEntries(d.markets.map((m) => [m.symbol, m]));
+    const dg = (sym) => (MKT[sym] || { digits: 2 }).digits;
+    const lb = (sym) => (MKT[sym] || { pip_label: 'pips' }).pip_label;
     const opt = (v, cur, label) => `<option value="${esc(v)}" ${v === cur ? 'selected' : ''}>${esc(label)}</option>`;
     const effLabel = { low: 'low (cepat, murah)', medium: 'medium', high: 'high', xhigh: 'xhigh (sangat teliti, disarankan)', max: 'max (paling teliti, paling mahal)' };
     const chk = (name, on, label, help = '') => `<label class="row small" style="color:var(--text);margin-bottom:10px;align-items:flex-start"><input type="checkbox" name="${name}" ${on ? 'checked' : ''} style="margin-top:4px">
@@ -665,7 +668,7 @@
         <div class="stat"><b>${c.paused ? '⏸' : (d.key_set ? '✔' : '✖')}</b><span>${c.paused ? 'Analisis DIJEDA' : (d.key_set ? 'API key Claude tersimpan' : 'API key Claude belum diisi')}</span></div>
         <div class="stat"><b>$${Number(d.today.cost || 0).toFixed(2)}</b><span>Biaya Claude hari ini (${d.today.n} analisis)</span></div>
         <div class="stat"><b>$${Number(st.cost || 0).toFixed(2)}</b><span>Biaya 30 hari (${st.analyses || 0} analisis)</span></div>
-        <div class="stat"><b>${wr === null ? '-' : wr + '%'}</b><span>Win rate 30 hari · ${Number(st.pips || 0) >= 0 ? '+' : ''}${Number(st.pips || 0).toFixed(0)} pips</span></div>
+        <div class="stat"><b>${wr === null ? '-' : wr + '%'}</b><span>Win rate 30 hari · semua pasar (${Number(st.wins || 0)} TP / ${Number(st.losses || 0)} SL)</span></div>
       </div>
       <form id="aif" class="grid" style="align-items:start;grid-template-columns:repeat(auto-fit,minmax(min(380px,100%),1fr))">
         <div class="card"><h3>🔌 Koneksi Claude</h3>
@@ -685,14 +688,34 @@
           ${chk('chart', c.chart, '<b>Kirim gambar analisis</b> bersama sinyal (Telegram & website)')}</div>
         <div class="card"><h3>🕐 Jadwal (jam server broker)</h3>
           <div class="grid c2" style="gap:0 12px">${num('session_start', c.session_start, 'Mulai analisis (jam)', 'Awal sesi London')}${num('session_end', c.session_end, 'Berhenti analisis (jam)', 'Akhir sesi New York')}</div>
-          ${num('friday_last', c.friday_last, 'Jumat: tidak analisis lagi mulai jam', 'Menghindari posisi menginap akhir pekan')}
+          ${num('friday_last', c.friday_last, 'Jumat: tidak analisis lagi mulai jam', 'Menghindari posisi menginap akhir pekan (tidak berlaku untuk pasar Sabtu–Minggu)')}
+          <p class="help">Jam mulai / berhenti per pasar diatur di kartu Pasar di bawah; nilai di sini adalah cadangan.</p>
           ${chk('paused', c.paused, '<b>JEDA analisis</b> (Claude tidak dipanggil, tidak ada sinyal baru)', 'Sinyal yang sedang berjalan tetap dipantau sampai selesai.')}
           ${chk('master_trade', c.master_trade, 'EA master ikut membuka order di akunnya sendiri')}</div>
         <div class="card"><h3>🎯 Saringan sinyal (berlaku untuk semua EA client)</h3>
           <div class="grid c2" style="gap:0 12px">${num('min_conf', c.min_conf, 'Keyakinan minimal (%)')}${num('min_rr', c.min_rr, 'Reward : risk minimal', '', '0.1')}
-            ${num('min_sl', c.min_sl, 'Jarak SL minimal ($)', '', '0.5')}${num('max_sl', c.max_sl, 'Jarak SL maksimal ($)', '', '0.5')}</div>
+</div>
           ${num('valid_min', c.valid_min, 'Sinyal berlaku (menit)', 'Client tidak masuk lagi sesudah waktu ini')}
           ${num('cost_cap', c.cost_cap, 'Batas biaya Claude per hari ($)', 'Lewat batas: analisis berhenti sampai besok', '0.5')}</div>
+        <div class="card" style="grid-column:1/-1"><div class="row between"><h3 style="margin:0">📊 Pasar yang dianalisis</h3>
+            <label class="small row" style="margin:0;color:var(--text)">Riset berita dibuat oleh master
+              <select name="research_symbol" style="width:auto">${d.markets.map((m) => opt(m.symbol, d.research_symbol, m.symbol)).join('')}</select></label></div>
+          <p class="help" style="margin:8px 0 14px">Satu EA MASTER per pasar (satu chart per pasar di MT5 master). Batas SL memakai satuan pasar itu (emas 1 pip = 0.10, EURUSD 0.0001, USDJPY 0.01, BTC dalam poin = $1). Profil karakter dibaca Claude di setiap analisis pasar itu.</p>
+          ${d.markets.map((m) => {
+            const seen = m.master_seen ? Math.floor(Date.now() / 1000) - m.master_seen : null;
+            const st = m.stats30;
+            const w = st && st.wins + st.losses ? Math.round(st.wins / (st.wins + st.losses) * 100) + '%' : '-';
+            return `<div class="mkt" data-sym="${esc(m.symbol)}" style="border:1px solid var(--line);border-radius:12px;padding:14px;margin-bottom:12px">
+              <div class="row between" style="flex-wrap:wrap;gap:8px"><label class="row" style="margin:0;color:var(--text);font-weight:700"><input type="checkbox" class="mk-on" ${m.enabled ? 'checked' : ''}> ${esc(m.symbol)}</label>
+                <span class="small muted">${seen !== null && seen < 900 ? '<span style="color:#6ee7a2">● master aktif</span>' : '○ master belum terhubung'} · 30 hari: ${st ? st.analyses : 0} analisis, win rate ${w}, $${Number(st ? st.cost : 0).toFixed(2)}</span></div>
+              <div class="grid" style="grid-template-columns:repeat(auto-fit,minmax(min(130px,100%),1fr));gap:0 10px;margin-top:10px">
+                <div class="field"><label>Mulai (jam)</label><input class="mk-st" type="number" min="0" max="23" value="${m.session_start}"></div>
+                <div class="field"><label>Berhenti (jam)</label><input class="mk-en" type="number" min="1" max="24" value="${m.session_end}"></div>
+                <div class="field"><label>SL min (${esc(m.pip_label)})</label><input class="mk-mn" type="number" step="any" value="${m.min_sl}"></div>
+                <div class="field"><label>SL maks (${esc(m.pip_label)})</label><input class="mk-mx" type="number" step="any" value="${m.max_sl}"></div>
+                <label class="row small" style="margin:24px 0 0;color:var(--text)"><input type="checkbox" class="mk-we" ${m.weekend ? 'checked' : ''}> Sabtu–Minggu</label></div>
+              <div class="field" style="margin-bottom:0"><label>Profil karakter (dibaca Claude)</label><textarea class="mk-pr" rows="4">${esc(m.profile)}</textarea></div></div>`;
+          }).join('')}</div>
         <div class="card" style="grid-column:1/-1"><h3>🔑 Kunci untuk EA</h3>
           <div class="grid c2" style="align-items:start">
             ${keyBox('Kunci MASTER (input 0.4, hanya di MT5 master)', d.keys.master, 'Rahasia. EA master memakai kunci ini untuk mengambil semua pengaturan di halaman ini (termasuk API key) dan mengirim sinyal.')}
@@ -701,13 +724,13 @@
         <div style="grid-column:1/-1"><button class="btn btn-gold" type="submit">Simpan Pengaturan Garuda AI</button></div>
       </form>
       <h3 style="margin:24px 0 10px">Sinyal terakhir</h3>
-      <div class="table-wrap"><table><thead><tr><th>Waktu</th><th>Keputusan</th><th class="right">Entry</th><th class="right">SL / TP</th><th>Hasil</th><th class="right">Biaya</th></tr></thead><tbody>
-      ${d.recent.map((r) => `<tr><td class="small nowrap">${fmtDateTime(r.created_at)}</td>
+      <div class="table-wrap"><table><thead><tr><th>Waktu</th><th>Pasar</th><th>Keputusan</th><th class="right">Entry</th><th class="right">SL / TP</th><th>Hasil</th><th class="right">Biaya</th></tr></thead><tbody>
+      ${d.recent.map((r) => `<tr><td class="small nowrap">${fmtDateTime(r.created_at)}</td><td class="small"><b>${esc(r.symbol)}</b></td>
         <td><span class="badge ${r.decision === 'BUY' ? 'b-green' : r.decision === 'SELL' ? 'b-red' : 'b-gold'}">${r.decision}</span> <span class="tiny muted">${r.confidence}%</span></td>
-        <td class="right mono small">${r.decision === 'WAIT' ? '-' : Number(r.price).toFixed(2)}</td>
-        <td class="right mono small nowrap">${r.decision === 'WAIT' ? '-' : Number(r.sl).toFixed(2) + ' / ' + Number(r.tp).toFixed(2)}</td>
-        <td class="small">${r.status === 'wait' ? '-' : r.status === 'open' ? '<span class="badge b-gold">berjalan</span>' : `<b style="color:${r.pips > 0 ? '#6ee7a2' : '#ff8b95'}">${r.pips > 0 ? '+' : ''}${Number(r.pips).toFixed(1)} pips</b> ${esc(r.status)}`}</td>
-        <td class="right small">$${Number(r.cost_usd || 0).toFixed(3)}</td></tr>`).join('') || '<tr><td colspan="6" class="empty">Belum ada analisis</td></tr>'}</tbody></table></div>`;
+        <td class="right mono small">${r.decision === 'WAIT' ? '-' : Number(r.price).toFixed(dg(r.symbol))}</td>
+        <td class="right mono small nowrap">${r.decision === 'WAIT' ? '-' : Number(r.sl).toFixed(dg(r.symbol)) + ' / ' + Number(r.tp).toFixed(dg(r.symbol))}</td>
+        <td class="small">${r.status === 'wait' ? '-' : r.status === 'open' ? '<span class="badge b-gold">berjalan</span>' : `<b style="color:${r.pips > 0 ? '#6ee7a2' : '#ff8b95'}">${r.pips > 0 ? '+' : ''}${Number(r.pips).toFixed(1)} ${esc(lb(r.symbol))}</b> ${esc(r.status)}`}</td>
+        <td class="right small">$${Number(r.cost_usd || 0).toFixed(3)}</td></tr>`).join('') || '<tr><td colspan="7" class="empty">Belum ada analisis</td></tr>'}</tbody></table></div>`;
     $$('[data-copy]').forEach((b) => b.onclick = () => { if (b.dataset.copy) { copy(b.dataset.copy); toast('Disalin'); } });
     $('#ai-test').onclick = async (e) => {
       $('#ai-test-r').textContent = 'menghubungi Claude...';
@@ -723,7 +746,9 @@
         model: f.model, effort: f.effort, news_effort: f.news_effort, claude_key: f.claude_key,
         news: !!f.news, intermarket: !!f.intermarket, vision: !!f.vision, chart: !!f.chart, paused: !!f.paused, master_trade: !!f.master_trade,
         news_max: f.news_max, session_start: f.session_start, session_end: f.session_end, friday_last: f.friday_last,
-        min_conf: f.min_conf, min_rr: f.min_rr, min_sl: f.min_sl, max_sl: f.max_sl, valid_min: f.valid_min, cost_cap: f.cost_cap,
+        min_conf: f.min_conf, min_rr: f.min_rr, valid_min: f.valid_min, cost_cap: f.cost_cap, research_symbol: f.research_symbol,
+        markets: $$('.mkt').map((r) => ({ symbol: r.dataset.sym, enabled: $('.mk-on', r).checked, weekend: $('.mk-we', r).checked,
+          session_start: $('.mk-st', r).value, session_end: $('.mk-en', r).value, min_sl: $('.mk-mn', r).value, max_sl: $('.mk-mx', r).value, profile: $('.mk-pr', r).value })),
       };
       await busy($('#aif button[type=submit]'), () => api('/admin/ai', { method: 'PUT', body }));
       toast('Pengaturan Garuda AI disimpan. EA master memakainya paling lambat 5 menit lagi.'); render();

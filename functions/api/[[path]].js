@@ -242,8 +242,19 @@ const signalView = (r) => r && ({
   trend_h4: r.trend_h4, trend_h1: r.trend_h1, reason: r.reason, news: r.news || '', model: r.model,
   status: r.status, close_price: r.close_price, closed_at: r.closed_at, pips: r.pips,
 });
-// Gold: 1 pip = 0.10 USD of price (e.g. 2,000.00 -> 2,001.50 = 15 pips)
-const PIP = 0.1;
+// Markets: canonical symbol (broker suffix removed) and its pip size / decimals from table ai_symbols
+const canonSymbol = (v) => { const x = str(v, 20).toUpperCase(); const m = x.match(/^([A-Z]{6})/); return m ? m[1] : x; };
+const SYM_DEFAULT = { symbol: '', enabled: 0, pip: 0.1, digits: 2, pip_label: 'pips', session_start: 7, session_end: 20, weekend: 0, min_sl: 30, max_sl: 200 };
+async function getSymbol(env, symbol) {
+  const r = await env.DB.prepare('SELECT * FROM ai_symbols WHERE symbol=?').bind(symbol).first();
+  return r || { ...SYM_DEFAULT, symbol };
+}
+async function allSymbols(env) {
+  const { results } = await env.DB.prepare('SELECT * FROM ai_symbols ORDER BY sort, symbol').all();
+  return results;
+}
+const symView = (m) => ({ symbol: m.symbol, enabled: !!m.enabled, pip: m.pip, digits: m.digits, pip_label: m.pip_label,
+  session_start: m.session_start, session_end: m.session_end, weekend: !!m.weekend, min_sl: m.min_sl, max_sl: m.max_sl, profile: m.profile || '' });
 
 // ---- Telegram: the server posts every BUY/SELL signal (with the chart picture) and its result as a reply ----
 // Configured in Admin > Pengaturan: bot token (stored encrypted) and any number of target channels / groups.
@@ -292,9 +303,11 @@ async function tgBroadcast(env, text, { photo, replyTo } = {}) {
   return out;
 }
 
-const f2 = (n) => Number(n).toFixed(2);
-// 1 pip = 0.10 and 1 point = 0.01 of the gold price (2-decimal quotes)
-const pipTxt = (p) => `${p > 0 ? '+' : ''}${Number(p).toFixed(1)} pips (${p > 0 ? '+' : ''}${Math.round(p * 10).toLocaleString('id-ID')} point)`;
+const fx = (n, d) => Number(n).toFixed(d);
+// pips (gold 0.10, FX 0.0001 / JPY 0.01) with points = 1/10 pip; BTC is counted in whole-dollar "poin"
+const pipTxt = (p, m) => m.pip_label === 'pips'
+  ? `${p > 0 ? '+' : ''}${Number(p).toFixed(1)} pips (${p > 0 ? '+' : ''}${Math.round(p * 10).toLocaleString('id-ID')} point)`
+  : `${p > 0 ? '+' : ''}${Math.round(p).toLocaleString('id-ID')} ${m.pip_label}`;
 const SIDE_TXT = { BUY: '🟢 BUY', SELL: '🔴 SELL' };
 const MAX_CHART_B64 = 1_800_000;              // about 1.3 MB PNG
 const chartB64 = (v) => { const x = typeof v === 'string' ? v.replace(/\s/g, '') : ''; return x && x.length <= MAX_CHART_B64 && /^[A-Za-z0-9+/=]+$/.test(x) ? x : ''; };
@@ -304,14 +317,14 @@ async function saveChart(env, id, kind, data) {
       ON CONFLICT(signal_id, kind) DO UPDATE SET data=excluded.data, created_at=excluded.created_at`).bind(id, kind, 'image/png', data, now()).run();
 }
 
-function tgOpenText(r, base) {
-  const slP = Math.abs(r.price - r.sl) / PIP, tpP = Math.abs(r.tp - r.price) / PIP;
+function tgOpenText(r, base, m) {
+  const slP = Math.abs(r.price - r.sl) / m.pip, tpP = Math.abs(r.tp - r.price) / m.pip;
   return [
-    `🦅 <b>GARUDA AI · ${SIDE_TXT[r.decision]} XAUUSD</b>`,
+    `🦅 <b>GARUDA AI · ${SIDE_TXT[r.decision]} ${esc(r.symbol)}</b>`,
     '',
-    `Entry: <b>${f2(r.price)}</b>`,
-    `SL: <b>${f2(r.sl)}</b>  (${slP.toFixed(0)} pips)`,
-    `TP: <b>${f2(r.tp)}</b>  (${tpP.toFixed(0)} pips)`,
+    `Entry: <b>${fx(r.price, m.digits)}</b>`,
+    `SL: <b>${fx(r.sl, m.digits)}</b>  (${slP.toFixed(0)} ${m.pip_label})`,
+    `TP: <b>${fx(r.tp, m.digits)}</b>  (${tpP.toFixed(0)} ${m.pip_label})`,
     `Keyakinan: ${r.confidence}% · Tren H4 ${esc(r.trend_h4)}, H1 ${esc(r.trend_h1)}`,
     '',
     `💬 ${esc(r.reason)}`,
@@ -322,12 +335,12 @@ function tgOpenText(r, base) {
   ].join('\n');
 }
 
-function tgCloseText(r, result, close, pips) {
+function tgCloseText(r, result, close, pips, m) {
   const head = { TP: '✅ <b>TP KENA</b>', SL: '❌ <b>SL KENA</b>', BE: '⚖️ <b>BREAK EVEN</b>', CLOSE: '🔒 <b>DITUTUP</b>' }[result];
   return [
-    `${head} · ${SIDE_TXT[r.decision]} XAUUSD #S${r.id}`,
-    `Entry ${f2(r.price)} → ${f2(close)}`,
-    `Hasil: <b>${pipTxt(pips)}</b>`,
+    `${head} · ${SIDE_TXT[r.decision]} ${esc(r.symbol)} #S${r.id}`,
+    `Entry ${fx(r.price, m.digits)} → ${fx(close, m.digits)}`,
+    `Hasil: <b>${pipTxt(pips, m)}</b>`,
   ].join('\n');
 }
 
@@ -346,7 +359,7 @@ route('POST', '/signal/publish', 'signal_pub', async ({ request, env, base, wait
   const b = await readJson(request);
   const decision = str(b.decision, 8).toUpperCase();
   if (!['BUY', 'SELL', 'WAIT'].includes(decision)) fail(400, 'decision harus BUY, SELL atau WAIT');
-  const symbol = str(b.symbol, 20);
+  const symbol = canonSymbol(b.symbol);
   if (!symbol) fail(400, 'symbol kosong');
   const num = (v) => { const n = Number(v); return Number.isFinite(n) ? n : 0; };
   const t = now();
@@ -364,7 +377,7 @@ route('POST', '/signal/publish', 'signal_pub', async ({ request, env, base, wait
     // post to Telegram in the background so the EA gets its answer at once
     waitUntil((async () => {
       const row = await env.DB.prepare('SELECT * FROM signals WHERE id=?').bind(id).first();
-      const msgs = await tgBroadcast(env, tgOpenText(row, base), { photo: chart });
+      const msgs = await tgBroadcast(env, tgOpenText(row, base, await getSymbol(env, symbol)), { photo: chart });
       if (msgs && Object.keys(msgs).length) await env.DB.prepare('UPDATE signals SET tg_msgs=? WHERE id=?').bind(JSON.stringify(msgs), id).run();
     })());
   }
@@ -376,19 +389,20 @@ route('POST', '/signal/close', 'signal_pub', async ({ request, env, waitUntil })
   const b = await readJson(request);
   const result = str(b.result, 8).toUpperCase();
   if (!['TP', 'SL', 'BE', 'CLOSE'].includes(result)) fail(400, 'result harus TP, SL, BE atau CLOSE');
-  const row = await env.DB.prepare('SELECT id, decision, price, status, tg_msgs FROM signals WHERE id=?').bind(int(b.id) || 0).first();
+  const row = await env.DB.prepare('SELECT id, symbol, decision, price, status, tg_msgs FROM signals WHERE id=?').bind(int(b.id) || 0).first();
   if (!row) fail(404, 'Sinyal tidak ditemukan');
   if (row.status !== 'open') fail(409, 'Sinyal sudah ditutup');
   const close = Number(b.close_price);
   if (!Number.isFinite(close) || close <= 0) fail(400, 'close_price tidak valid');
-  const pips = Math.round(((row.decision === 'BUY' ? close - row.price : row.price - close) / PIP) * 10) / 10;
+  const mk = await getSymbol(env, row.symbol);
+  const pips = Math.round(((row.decision === 'BUY' ? close - row.price : row.price - close) / mk.pip) * 10) / 10;
   const t = now();
   await env.DB.prepare('UPDATE signals SET status=?, close_price=?, closed_at=?, pips=? WHERE id=?').bind(result, close, t, pips, row.id).run();
   const chart = chartB64(b.chart_png);
   await saveChart(env, row.id, 'close', chart);
   let replyTo = null;
   try { replyTo = row.tg_msgs ? JSON.parse(row.tg_msgs) : null; } catch { replyTo = null; }
-  waitUntil(tgBroadcast(env, tgCloseText(row, result, close, pips), { photo: chart, replyTo }));
+  waitUntil(tgBroadcast(env, tgCloseText(row, result, close, pips, mk), { photo: chart, replyTo }));
   return json({ ok: true, pips });
 });
 
@@ -408,16 +422,30 @@ route('GET', '/signal/:id/chart', 'public', async ({ env, params, url, user }) =
 // logged-in users only, so the page works as a track record without giving the live trade away.
 route('GET', '/signal/feed', 'public', async ({ env, url, user }) => {
   const limit = Math.max(1, Math.min(int(url.searchParams.get('limit')) || 50, 200));
+  const sym = url.searchParams.get('symbol') ? canonSymbol(url.searchParams.get('symbol')) : '';
+  const w = sym ? ' AND symbol=?' : '';
+  const a = sym ? [sym] : [];
   const t = now();
-  const [{ results }, last, stat] = await Promise.all([
+  const [{ results }, last, stat, markets] = await Promise.all([
     env.DB.prepare(`SELECT s.*, (SELECT COUNT(*) FROM signal_charts c WHERE c.signal_id=s.id AND c.kind='open') AS has_chart,
         (SELECT COUNT(*) FROM signal_charts c WHERE c.signal_id=s.id AND c.kind='close') AS has_close_chart
-        FROM signals s WHERE decision IN ('BUY','SELL') ORDER BY id DESC LIMIT ?`).bind(limit).all(),
-    env.DB.prepare('SELECT decision, created_at, reason, news, trend_h4, trend_h1, confidence FROM signals ORDER BY id DESC LIMIT 1').first(),
+        FROM signals s WHERE decision IN ('BUY','SELL')${w} ORDER BY id DESC LIMIT ?`).bind(...a, limit).all(),
+    env.DB.prepare(`SELECT symbol, decision, created_at, reason, news, trend_h4, trend_h1, confidence FROM signals WHERE 1=1${w} ORDER BY id DESC LIMIT 1`).bind(...a).first(),
     env.DB.prepare(`SELECT COUNT(*) AS closed, COALESCE(SUM(CASE WHEN pips > 0 THEN 1 ELSE 0 END),0) AS wins,
         COALESCE(SUM(CASE WHEN pips < 0 THEN 1 ELSE 0 END),0) AS losses, COALESCE(SUM(pips),0) AS pips
-        FROM signals WHERE decision IN ('BUY','SELL') AND status <> 'open' AND closed_at > ?`).bind(t - 30 * DAY).first(),
+        FROM signals WHERE decision IN ('BUY','SELL') AND status <> 'open' AND closed_at > ?${w}`).bind(t - 30 * DAY, ...a).first(),
+    allSymbols(env),
   ]);
+  // win rate per market: last 30 days and all time (closed BUY/SELL signals only)
+  const { results: perMk } = await env.DB.prepare(`SELECT symbol,
+      COUNT(*) AS closed, COALESCE(SUM(CASE WHEN pips > 0 THEN 1 ELSE 0 END),0) AS wins, COALESCE(SUM(CASE WHEN pips < 0 THEN 1 ELSE 0 END),0) AS losses,
+      COALESCE(SUM(pips),0) AS pips,
+      COALESCE(SUM(CASE WHEN closed_at > ? THEN 1 ELSE 0 END),0) AS closed30,
+      COALESCE(SUM(CASE WHEN closed_at > ? AND pips > 0 THEN 1 ELSE 0 END),0) AS wins30,
+      COALESCE(SUM(CASE WHEN closed_at > ? AND pips < 0 THEN 1 ELSE 0 END),0) AS losses30,
+      COALESCE(SUM(CASE WHEN closed_at > ? THEN pips ELSE 0 END),0) AS pips30,
+      MIN(created_at) AS since
+      FROM signals WHERE decision IN ('BUY','SELL') AND status <> 'open' GROUP BY symbol`).bind(t - 30 * DAY, t - 30 * DAY, t - 30 * DAY, t - 30 * DAY).all();
   const member = !!user;
   const signals = results.map((r) => {
     const v = { ...signalView(r), has_chart: !!r.has_chart, has_close_chart: !!r.has_close_chart };
@@ -425,7 +453,19 @@ route('GET', '/signal/feed', 'public', async ({ env, url, user }) => {
     return v;
   });
   const lastView = last ? { ...last, reason: last.decision === 'WAIT' || member ? last.reason : '' } : null;   // news is public context
-  return json({ ok: true, server_time: t, member, signals, last: lastView, stats30: stat });
+  return json({ ok: true, server_time: t, member, signals, last: lastView, stats30: stat, symbol: sym, market_stats: perMk,
+    markets: markets.filter((m) => m.enabled).map((m) => { const v = symView(m); delete v.profile; return v; }) });
+});
+
+// One signal in full (shareable link /sinyal?s=<id>); a running signal's levels only for logged-in users
+route('GET', '/signal/detail/:id', 'public', async ({ env, params, user }) => {
+  const r = await env.DB.prepare(`SELECT s.*, (SELECT COUNT(*) FROM signal_charts c WHERE c.signal_id=s.id AND c.kind='open') AS has_chart,
+      (SELECT COUNT(*) FROM signal_charts c WHERE c.signal_id=s.id AND c.kind='close') AS has_close_chart FROM signals s WHERE s.id=?`).bind(int(params.id) || 0).first();
+  if (!r || r.decision === 'WAIT') fail(404, 'Sinyal tidak ditemukan');
+  const v = { ...signalView(r), has_chart: !!r.has_chart, has_close_chart: !!r.has_close_chart };
+  if (r.status === 'open' && !user) { v.price = null; v.sl = null; v.tp = null; v.reason = ''; v.news = ''; v.locked = true; v.has_chart = false; }
+  const m = await getSymbol(env, r.symbol);
+  return json({ ok: true, member: !!user, signal: v, market: { symbol: m.symbol, digits: m.digits, pip: m.pip, pip_label: m.pip_label } });
 });
 
 // ---- Garuda AI master settings (Admin > Garuda AI), fetched by the MASTER EA ----
@@ -459,26 +499,55 @@ route('GET', '/master/config', 'signal_pub', async ({ env, url }) => {
   const s = await getSettings(env);
   const cfg = aiConfig(s);
   cfg.claude_key = s.ai_claude_key_enc ? await decrypt(env, s.ai_claude_key_enc) : '';
+  const sym = canonSymbol(url.searchParams.get('symbol') || 'XAUUSD');
+  const m = await getSymbol(env, sym);
+  cfg.market = symView(m);
+  cfg.research_role = sym === canonSymbol(s.ai_research_symbol || 'XAUUSD');
+  cfg.markets = (await allSymbols(env)).filter((x) => x.enabled).map((x) => x.symbol);
+  const info = `${str(url.searchParams.get('acct'), 30)} · ${str(url.searchParams.get('ver'), 12)} · ${str(url.searchParams.get('status'), 80)}`;
   await putSetting(env, 'ai_master_seen', String(now()));
-  await putSetting(env, 'ai_master_info', `${str(url.searchParams.get('acct'), 30)} · ${str(url.searchParams.get('ver'), 12)} · ${str(url.searchParams.get('status'), 80)}`);
+  await putSetting(env, 'ai_master_info', `${sym} · ${info}`);
+  if (m.symbol && m.pip) await env.DB.prepare('UPDATE ai_symbols SET master_seen=?, master_info=? WHERE symbol=?').bind(now(), info, sym).run();
   return json({ ok: true, server_time: now(), config: cfg });
+});
+
+// Shared news research: one master researches once per hour, the other masters reuse it
+route('POST', '/master/research', 'signal_pub', async ({ request, env }) => {
+  const b = await readJson(request);
+  const text = str(b.text, 6000);
+  if (!text) fail(400, 'Riset kosong');
+  await env.DB.prepare('INSERT INTO ai_research (created_at, symbol, text, cost_usd) VALUES (?,?,?,?)')
+    .bind(now(), canonSymbol(b.symbol), text, Number(b.cost_usd) || 0).run();
+  await env.DB.prepare('DELETE FROM ai_research WHERE created_at < ?').bind(now() - 30 * DAY).run();
+  return json({ ok: true });
+});
+route('GET', '/master/research', 'signal_pub', async ({ env }) => {
+  const r = await env.DB.prepare('SELECT created_at, symbol, text FROM ai_research ORDER BY id DESC LIMIT 1').first();
+  if (!r || now() - r.created_at > 3 * 3600) return json({ ok: true, text: '', created_at: 0 });
+  return json({ ok: true, text: r.text, created_at: r.created_at, symbol: r.symbol });
 });
 
 route('GET', '/admin/ai', 'admin', async ({ env }) => {
   const s = await getSettings(env);
   const t = now();
   const [recent, stat] = await Promise.all([
-    env.DB.prepare('SELECT id, created_at, decision, confidence, price, sl, tp, status, pips, cost_usd, model FROM signals ORDER BY id DESC LIMIT 25').all(),
+    env.DB.prepare('SELECT id, symbol, created_at, decision, confidence, price, sl, tp, status, pips, cost_usd, model FROM signals ORDER BY id DESC LIMIT 25').all(),
     env.DB.prepare(`SELECT COUNT(*) AS analyses, COALESCE(SUM(cost_usd),0) AS cost, COALESCE(SUM(CASE WHEN decision IN ('BUY','SELL') THEN 1 ELSE 0 END),0) AS trades,
         COALESCE(SUM(CASE WHEN pips > 0 THEN 1 ELSE 0 END),0) AS wins, COALESCE(SUM(CASE WHEN pips < 0 THEN 1 ELSE 0 END),0) AS losses, COALESCE(SUM(pips),0) AS pips
         FROM signals WHERE created_at > ?`).bind(t - 30 * DAY).first(),
   ]);
   const today = await env.DB.prepare('SELECT COUNT(*) AS n, COALESCE(SUM(cost_usd),0) AS cost FROM signals WHERE created_at > ?').bind(t - (t % DAY)).first();
+  const research = await env.DB.prepare('SELECT COUNT(*) AS n, COALESCE(SUM(cost_usd),0) AS cost FROM ai_research WHERE created_at > ?').bind(t - 30 * DAY).first();
+  const { results: perSym } = await env.DB.prepare(`SELECT symbol, COUNT(*) AS analyses, COALESCE(SUM(cost_usd),0) AS cost,
+      COALESCE(SUM(CASE WHEN pips > 0 THEN 1 ELSE 0 END),0) AS wins, COALESCE(SUM(CASE WHEN pips < 0 THEN 1 ELSE 0 END),0) AS losses, COALESCE(SUM(pips),0) AS pips
+      FROM signals WHERE created_at > ? GROUP BY symbol`).bind(t - 30 * DAY).all();
+  const markets = (await allSymbols(env)).map((m) => ({ ...symView(m), master_seen: m.master_seen || 0, master_info: m.master_info || '',
+    stats30: perSym.find((x) => x.symbol === m.symbol) || null }));
   return json({
     config: aiConfig(s), key_set: !!s.ai_claude_key_enc, models: AI_MODELS, efforts: AI_EFFORTS,
     master: { seen: Number(s.ai_master_seen || 0), info: s.ai_master_info || '' },
     keys: { master: env.SIGNAL_SECRET || '', client: env.SIGNAL_KEY || '' },
-    stats30: stat, today, recent: recent.results,
+    stats30: stat, today, recent: recent.results, markets, research30: research, research_symbol: s.ai_research_symbol || 'XAUUSD',
   });
 });
 
@@ -505,6 +574,23 @@ route('PUT', '/admin/ai', 'admin', async ({ request, env }) => {
     await putSetting(env, 'ai_claude_key_enc', await encrypt(env, key));
   }
   if (b.claude_key_clear) await env.DB.prepare(`DELETE FROM settings WHERE key='ai_claude_key_enc'`).run();
+  if (Array.isArray(b.markets)) {
+    for (const m of b.markets) {
+      const sym = canonSymbol(m.symbol);
+      const row = await env.DB.prepare('SELECT symbol FROM ai_symbols WHERE symbol=?').bind(sym).first();
+      if (!row) continue;
+      const st = int(m.session_start), en = int(m.session_end), mn = Number(m.min_sl), mx = Number(m.max_sl);
+      if (!(st >= 0 && st <= 23 && en >= 1 && en <= 24 && st < en)) fail(400, `${sym}: jam sesi tidak valid`);
+      if (!(mn > 0 && mx > mn && mx <= 100000)) fail(400, `${sym}: batas SL tidak valid (minimal harus lebih kecil dari maksimal)`);
+      await env.DB.prepare('UPDATE ai_symbols SET enabled=?, session_start=?, session_end=?, weekend=?, min_sl=?, max_sl=?, profile=? WHERE symbol=?')
+        .bind(m.enabled ? 1 : 0, st, en, m.weekend ? 1 : 0, mn, mx, str(m.profile, 2500), sym).run();
+    }
+  }
+  if (b.research_symbol) {
+    const sym = canonSymbol(b.research_symbol);
+    if (!(await env.DB.prepare('SELECT symbol FROM ai_symbols WHERE symbol=?').bind(sym).first())) fail(400, 'Pasar riset tidak dikenal');
+    await putSetting(env, 'ai_research_symbol', sym);
+  }
   return json({ ok: true });
 });
 
@@ -533,11 +619,15 @@ route('POST', '/admin/ai/test', 'admin', async ({ env }) => {
 });
 
 route('GET', '/signal/latest', 'signal_read', async ({ env, url }) => {
-  const symbol = str(url.searchParams.get('symbol'), 20);
-  const row = await env.DB.prepare(symbol ? 'SELECT * FROM signals WHERE symbol=? ORDER BY id DESC LIMIT 1' : 'SELECT * FROM signals ORDER BY id DESC LIMIT 1')
-    .bind(...(symbol ? [symbol] : [])).first();
+  const symbol = canonSymbol(url.searchParams.get('symbol') || 'XAUUSD');      // old clients without ?symbol= follow gold
+  const row = await env.DB.prepare('SELECT * FROM signals WHERE symbol=? ORDER BY id DESC LIMIT 1').bind(symbol).first();
   const t = now();
-  return json({ ok: true, server_time: t, signal: signalView(row) || null, next: nextSignalCheck(t, row), filters: signalFilters(await getSettings(env)) });
+  const m = await getSymbol(env, symbol);
+  const f = signalFilters(await getSettings(env));
+  f.min_sl = m.min_sl * m.pip;                 // price units, like the client's own checks
+  f.max_sl = m.max_sl * m.pip;
+  return json({ ok: true, server_time: t, symbol, enabled: !!m.enabled, signal: signalView(row) || null, next: nextSignalCheck(t, row), filters: f,
+    market: symView(m) });
 });
 
 // ---- Admin: Telegram bot ----
