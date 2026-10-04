@@ -680,9 +680,10 @@
           <div class="row"><button type="button" class="btn btn-outline btn-sm" id="ai-test">Tes koneksi Claude</button><span class="small muted" id="ai-test-r"></span></div>
           <div class="help">Simpan dulu, baru tes. Ambil API key di <a href="https://console.anthropic.com" target="_blank" rel="noopener">console.anthropic.com</a> → API Keys (isi saldo di Billing).</div></div>
         <div class="card"><h3>🧠 Bahan analisis</h3>
-          ${chk('news', c.news, '<b>Riset berita & fundamental</b> lewat pencarian web sebelum analisis', 'Dolar, yield, The Fed, data AS, geopolitik. Menambah biaya sekitar $0,2–0,4 per analisis.')}
+          ${chk('news', c.news, '<b>Riset berita & fundamental</b> lewat pencarian web sebelum analisis', 'Dolar, yield, bank sentral, data ekonomi, geopolitik, berita kripto. Biaya per riset: Sonnet sekitar $0,05–0,1, Fable sekitar $0,2–0,4.')}
           <div class="grid c2" style="gap:0 12px"><div class="field"><label>Ketelitian riset</label><select name="news_effort">${d.efforts.map((e) => opt(e, c.news_effort, e)).join('')}</select></div>
             ${num('news_max', c.news_max, 'Maks. pencarian / riset', '$0,01 per pencarian')}</div>
+          ${num('research_every', c.research_every, 'Riset berita tiap (jam)', 'Satu riset dipakai semua pasar sampai riset berikutnya. 1 = tiap jam (paling segar, paling mahal); 4 = hemat.')}
           ${chk('intermarket', c.intermarket, '<b>Data antar-pasar</b> (indeks USD sintetis, perak, USDJPY, indeks saham jika ada di broker)')}
           ${chk('vision', c.vision, '<b>Claude melihat gambar chart</b> selain data angka')}
           ${chk('chart', c.chart, '<b>Kirim gambar analisis</b> bersama sinyal (Telegram & website)')}</div>
@@ -745,7 +746,7 @@
       const body = {
         model: f.model, effort: f.effort, news_effort: f.news_effort, claude_key: f.claude_key,
         news: !!f.news, intermarket: !!f.intermarket, vision: !!f.vision, chart: !!f.chart, paused: !!f.paused, master_trade: !!f.master_trade,
-        news_max: f.news_max, session_start: f.session_start, session_end: f.session_end, friday_last: f.friday_last,
+        news_max: f.news_max, research_every: f.research_every, session_start: f.session_start, session_end: f.session_end, friday_last: f.friday_last,
         min_conf: f.min_conf, min_rr: f.min_rr, valid_min: f.valid_min, cost_cap: f.cost_cap, research_symbol: f.research_symbol,
         markets: $$('.mkt').map((r) => ({ symbol: r.dataset.sym, enabled: $('.mk-on', r).checked, weekend: $('.mk-we', r).checked,
           session_start: $('.mk-st', r).value, session_end: $('.mk-en', r).value, min_sl: $('.mk-mn', r).value, max_sl: $('.mk-mx', r).value, profile: $('.mk-pr', r).value })),

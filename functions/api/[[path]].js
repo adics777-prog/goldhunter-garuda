@@ -477,7 +477,7 @@ const AI_MODELS = {
 const AI_EFFORTS = ['low', 'medium', 'high', 'xhigh', 'max'];
 const AI_KEYS = {               // key: [type, min, max]
   ai_paused: ['bool'], ai_model: ['model'], ai_effort: ['effort'], ai_news: ['bool'], ai_news_effort: ['effort'],
-  ai_news_max: ['int', 1, 10], ai_web_tool: ['tool'], ai_intermarket: ['bool'], ai_vision: ['bool'], ai_chart: ['bool'],
+  ai_news_max: ['int', 1, 10], ai_research_every: ['int', 1, 12], ai_web_tool: ['tool'], ai_intermarket: ['bool'], ai_vision: ['bool'], ai_chart: ['bool'],
   ai_session_start: ['int', 0, 23], ai_session_end: ['int', 1, 24], ai_friday_last: ['int', 0, 24],
   ai_min_conf: ['int', 0, 100], ai_min_rr: ['num', 0.5, 10], ai_min_sl: ['num', 0.5, 200], ai_max_sl: ['num', 1, 500], ai_valid_min: ['int', 1, 60],
   ai_cost_cap: ['num', 0, 1000], ai_master_trade: ['bool'],
@@ -527,7 +527,8 @@ route('POST', '/master/research', 'signal_pub', async ({ request, env }) => {
 });
 route('GET', '/master/research', 'signal_pub', async ({ env }) => {
   const r = await env.DB.prepare('SELECT created_at, symbol, text FROM ai_research ORDER BY id DESC LIMIT 1').first();
-  if (!r || now() - r.created_at > 3 * 3600) return json({ ok: true, text: '', created_at: 0 });
+  const every = Number((await getSettings(env)).ai_research_every) || 1;
+  if (!r || now() - r.created_at > (every + 2) * 3600) return json({ ok: true, text: '', created_at: 0 });
   return json({ ok: true, text: r.text, created_at: r.created_at, symbol: r.symbol });
 });
 
