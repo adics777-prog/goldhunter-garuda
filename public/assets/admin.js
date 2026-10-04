@@ -694,6 +694,7 @@
             ${[[240, 'Rutin tiap 4 jam'], [120, 'Rutin tiap 2 jam (disarankan bersama momentum)'], [60, 'Rutin tiap 60 menit'], [30, 'Rutin tiap 30 menit (biaya ±2x)'], [15, 'Rutin tiap 15 menit (biaya ±4x)']].map(([v, l]) => opt(v, Number(c.interval_min) || 60, l)).join('')}</select>
             <div class="help">Analisis rutin = cadangan. Analisis tidak jalan selama sinyal pasar itu masih berjalan. Batas biaya per hari tetap berlaku.</div></div>
           ${chk('momentum', c.momentum, '<b>Analisis saat ada momentum</b>', 'EA mengamati tiap candle M5 tanpa biaya; Claude dipanggil saat harga menembus high/low kemarin, high/low 24 jam atau range Asia, atau saat muncul candle M15 besar / lonjakan volume (paling cepat 20 menit sesudah analisis, maks. 2 analisis cepat per jam).')}
+          ${chk('momentum_24h', c.momentum_24h, '<b>Momentum & level dipantau 24 jam</b>', 'Di luar jam rutin (misalnya pagi WIB / sesi Asia) momentum dan level Claude tetap bisa memanggil Claude. Sabtu, Minggu malam dan Jumat sore tetap libur untuk pasar yang tutup akhir pekan.')}
           ${chk('level_trigger', c.level_trigger, '<b>Analisis cepat di level Claude</b>', 'Saat Claude menjawab TUNGGU, EA memantau level / zona yang ia sebut dan langsung menganalisis ulang begitu harga menyentuhnya (paling cepat 20 menit sesudah analisis, maks. 2x per jam bersama momentum; level yang sudah dekat harga saat analisis tidak dipicu).')}
           <p class="help">Jam mulai / berhenti per pasar diatur di kartu Pasar di bawah; nilai di sini adalah cadangan.</p>
           ${chk('paused', c.paused, '<b>JEDA analisis</b> (Claude tidak dipanggil, tidak ada sinyal baru)', 'Sinyal yang sedang berjalan tetap dipantau sampai selesai.')}
@@ -769,7 +770,7 @@
       const f = Object.fromEntries(new FormData(e.target));
       const body = {
         model: f.model, effort: f.effort, news_effort: f.news_effort, claude_key: f.claude_key,
-        news: !!f.news, intermarket: !!f.intermarket, vision: !!f.vision, chart: !!f.chart, paused: !!f.paused, master_trade: !!f.master_trade, level_trigger: !!f.level_trigger, momentum: !!f.momentum, interval_min: f.interval_min,
+        news: !!f.news, intermarket: !!f.intermarket, vision: !!f.vision, chart: !!f.chart, paused: !!f.paused, master_trade: !!f.master_trade, level_trigger: !!f.level_trigger, momentum: !!f.momentum, momentum_24h: !!f.momentum_24h, interval_min: f.interval_min,
         news_max: f.news_max, research_every: f.research_every, session_start: f.session_start, session_end: f.session_end, friday_last: f.friday_last,
         min_conf: f.min_conf, min_rr: f.min_rr, valid_min: f.valid_min, cost_cap: f.cost_cap, research_symbol: f.research_symbol,
         markets: $$('.mkt').map((r) => ({ symbol: r.dataset.sym, enabled: $('.mk-on', r).checked, weekend: $('.mk-we', r).checked,

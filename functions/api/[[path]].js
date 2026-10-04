@@ -483,7 +483,7 @@ const AI_KEYS = {               // key: [type, min, max]
   ai_paused: ['bool'], ai_model: ['model'], ai_effort: ['effort'], ai_news: ['bool'], ai_news_effort: ['effort'],
   ai_news_max: ['int', 1, 10], ai_research_every: ['int', 1, 12], ai_web_tool: ['tool'], ai_intermarket: ['bool'], ai_vision: ['bool'], ai_chart: ['bool'],
   ai_session_start: ['int', 0, 23], ai_session_end: ['int', 1, 24], ai_friday_last: ['int', 0, 24],
-  ai_interval_min: ['int', 15, 240], ai_level_trigger: ['bool'], ai_momentum: ['bool'],
+  ai_interval_min: ['int', 15, 240], ai_level_trigger: ['bool'], ai_momentum: ['bool'], ai_momentum_24h: ['bool'],
   ai_min_conf: ['int', 0, 100], ai_min_rr: ['num', 0.5, 10], ai_min_sl: ['num', 0.5, 200], ai_max_sl: ['num', 1, 500], ai_valid_min: ['int', 1, 60],
   ai_cost_cap: ['num', 0, 1000], ai_master_trade: ['bool'],
 };
