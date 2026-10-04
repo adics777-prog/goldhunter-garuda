@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Sinyal Garuda AI: Emas, Bitcoin &amp; Forex</title>
+<title data-en="Garuda AI Signals: Gold, Bitcoin &amp;amp; Forex">Sinyal Garuda AI: Emas, Bitcoin &amp; Forex</title>
 <meta name="description" content="Sinyal BUY / SELL Garuda AI untuk emas (XAUUSD), Bitcoin (BTCUSD) dan forex (EURUSD, USDJPY): analisis Claude tiap jam dan setiap ada momentum, lengkap dengan hasil setiap sinyal.">
 <meta name="robots" content="index,follow">
 <meta name="theme-color" content="#07070a">
@@ -18,7 +18,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@700;900&family=Poppins:wght@300;400;600;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="/assets/app.css?v=2c54d69e">
+<link rel="stylesheet" href="/assets/app.css?v=736b75ce">
 <style>
   .pub-top{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:14px clamp(16px,4vw,40px);border-bottom:1px solid var(--line);background:var(--bg-2);position:sticky;top:0;z-index:20}
   .pub-top .brand{padding:0}
@@ -52,116 +52,126 @@
 <body>
 <header class="pub-top">
   <a class="brand" href="/"><img src="/assets/brand/goldhunter-garuda-logo-128.png" width="38" height="38" alt="GoldHunter Garuda"><span class="gold-text">GOLDHUNTER</span></a>
-  <div class="row" style="gap:8px"><a class="btn btn-ghost btn-sm" href="/">🏠 Beranda</a><span class="row" id="top-btn" style="gap:8px"><a class="btn btn-ghost btn-sm" href="/masuk">Masuk</a><a class="btn btn-gold btn-sm" href="/daftar">Daftar Gratis</a></span></div>
+  <div class="row" style="gap:8px"><a href="#" class="btn btn-ghost btn-sm" data-lang-toggle>🌐 EN</a><a class="btn btn-ghost btn-sm" href="/" data-en="🏠 Home">🏠 Beranda</a><span class="row" id="top-btn" style="gap:8px"><a class="btn btn-ghost btn-sm" href="/masuk" data-en="Log in">Masuk</a><a class="btn btn-gold btn-sm" href="/daftar" data-en="Sign Up Free">Daftar Gratis</a></span></div>
 </header>
 <main class="pub-wrap">
   <div class="pub-hero">
-    <span class="badge b-gold">🤖 Garuda AI · Emas · Bitcoin · Forex</span>
-    <h1 style="margin-top:12px">Sinyal <span class="gold-text">Garuda AI</span></h1>
-    <p>Claude menggabungkan analisis teknikal dan fundamental: tiap jam pada jam aktif pasar, dan langsung saat ada momentum. Setiap sinyal BUY / SELL dipantau sampai kena TP atau SL, lalu hasilnya dicatat di sini.</p>
+    <span class="badge b-gold" data-en="🤖 Garuda AI · Gold · Bitcoin · Forex">🤖 Garuda AI · Emas · Bitcoin · Forex</span>
+    <h1 style="margin-top:12px" data-en="&lt;span class=&quot;gold-text&quot;&gt;Garuda AI&lt;/span&gt; Signals">Sinyal <span class="gold-text">Garuda AI</span></h1>
+    <p data-en="Claude combines technical and fundamental analysis every hour in the active market hours, and right away when momentum appears. Every BUY / SELL signal is followed until it hits TP or SL, and the result is recorded here.">Claude menggabungkan analisis teknikal dan fundamental: tiap jam pada jam aktif pasar, dan langsung saat ada momentum. Setiap sinyal BUY / SELL dipantau sampai kena TP atau SL, lalu hasilnya dicatat di sini.</p>
   </div>
   <div class="row" style="justify-content:center;margin-bottom:18px"><div class="choice" id="tabs"></div></div>
   <div class="now" id="now"></div>
   <div class="grid c3" style="margin-bottom:18px" id="tiles"></div>
   <div id="mstats" style="margin-bottom:22px"></div>
   <div id="list"><div class="loading"><span class="spinner"></span></div></div>
-  <p class="center tiny muted" style="margin-top:12px"><span id="pipnote"></span> Waktu ditampilkan sesuai jam perangkat Anda. Halaman diperbarui otomatis tiap menit.</p>
-  <div class="alert err small center" style="line-height:1.7;margin-top:24px">
+  <p class="center tiny muted" style="margin-top:12px"><span id="pipnote"></span> <span data-en="Times are shown in your device&#39;s time zone. The page refreshes every minute.">Waktu ditampilkan sesuai jam perangkat Anda. Halaman diperbarui otomatis tiap menit.</span></p>
+  <div class="alert err small center" style="line-height:1.7;margin-top:24px" data-en="<b>⚠️ RISK WARNING.</b> Signals are generated automatically by AI and are <b>not investment advice or a guarantee of results</b>. Results above are the price movement from the signal point, before spread, slippage and commission, so every account&#39;s result can differ. Trading forex, gold &amp; crypto is very high risk and can lead to the loss of part or all of your capital. <a href=&quot;/#risiko&quot; style=&quot;color:#ff8b95;text-decoration:underline&quot;>Read the full risk warning</a>.">
     <b>⚠️ PERINGATAN RISIKO.</b> Sinyal dibuat otomatis oleh AI dan <b>bukan saran investasi atau jaminan hasil</b>. Hasil di atas adalah pergerakan harga dari titik sinyal, belum termasuk spread, slippage dan komisi, sehingga hasil akun tiap orang bisa berbeda.
     Trading forex, emas &amp; kripto berisiko sangat tinggi dan dapat menyebabkan kehilangan sebagian atau seluruh modal.
     <a href="/#risiko" style="color:#ff8b95;text-decoration:underline">Baca peringatan risiko lengkap</a>.
   </div>
 </main>
-<script src="/assets/common.js?v=94a3104e"></script>
+<script src="/assets/i18n.js?v=489e4256"></script>
+<script src="/assets/common.js?v=aa4bb046"></script>
 <script>
 (() => {
   const { $, esc, fmtDateTime, ago, modal } = GHG;
-  const NAMES = { XAUUSD: 'Emas', BTCUSD: 'Bitcoin', EURUSD: 'EURUSD', USDJPY: 'USDJPY' };
+  let NAMES = {};
+  const setNames = () => { NAMES = { XAUUSD: T('Emas', 'Gold'), BTCUSD: 'Bitcoin', EURUSD: 'EURUSD', USDJPY: 'USDJPY' }; };
+  setNames();
+  // AI text in the visitor's language (Claude writes both)
+  const RS = (x) => (window.GHG_LANG === 'en' && x.reason_en) || x.reason || '';
+  const NW = (x) => (window.GHG_LANG === 'en' && x.news_en) || x.news || '';
+  const UL = (l) => l === 'poin' ? T('poin', 'points') : l;
   let MK = {}, cur = new URLSearchParams(location.search).get('pasar') || '';
   const mk = (sym) => MK[sym] || { digits: 2, pip_label: 'pips', pip: 0.1 };
   const num = (v, sym) => v == null ? '-' : Number(v).toFixed(mk(sym).digits);
   const pipsTxt = (p, sym) => p == null ? '-' : mk(sym).pip_label === 'pips'
-    ? (p > 0 ? '+' : '') + Number(p).toFixed(1) + ' pips' : (p > 0 ? '+' : '') + Math.round(p).toLocaleString('id-ID') + ' ' + mk(sym).pip_label;
-  const pipDesc = (m) => m.pip_label === 'pips' ? `${NAMES[m.symbol] || m.symbol}: 1 pip = ${m.pip}` : `${NAMES[m.symbol] || m.symbol}: 1 ${m.pip_label} = ${m.pip}`;
-  const STATUS = { open: ['b-gold', 'BERJALAN'], TP: ['b-green', 'TP'], SL: ['b-red', 'SL'], BE: ['b-gold', 'BREAK EVEN'], CLOSE: ['b-gold', 'DITUTUP'] };
+    ? (p > 0 ? '+' : '') + Number(p).toFixed(1) + ' pips' : (p > 0 ? '+' : '') + Math.round(p).toLocaleString(T('id-ID', 'en-US')) + ' ' + UL(mk(sym).pip_label);
+  const pipDesc = (m) => m.pip_label === 'pips' ? `${NAMES[m.symbol] || m.symbol}: 1 pip = ${m.pip}` : `${NAMES[m.symbol] || m.symbol}: 1 ${UL(m.pip_label)} = ${m.pip}`;
+  const STATUS_ = () => ({ open: ['b-gold', T('BERJALAN', 'RUNNING')], TP: ['b-green', 'TP'], SL: ['b-red', 'SL'], BE: ['b-gold', 'BREAK EVEN'], CLOSE: ['b-gold', T('DITUTUP', 'CLOSED')] });
   const side = (d) => `<span class="badge ${d === 'BUY' ? 'b-green' : 'b-red'}">${d === 'BUY' ? '▲ BUY' : '▼ SELL'}</span>`;
 
   async function load() {
     let d;
     try { d = await (await fetch('/api/signal/feed?limit=60' + (cur ? '&symbol=' + encodeURIComponent(cur) : ''), { credentials: 'same-origin' })).json(); } catch { d = null; }
-    if (!d || !d.ok) { $('#list').innerHTML = '<div class="card empty">Data sinyal belum bisa dimuat. Coba muat ulang halaman.</div>'; return; }
+    if (!d || !d.ok) { $('#list').innerHTML = '<div class="card empty">' + T('Data sinyal belum bisa dimuat. Coba muat ulang halaman.', 'Signals could not be loaded. Please reload the page.') + '</div>'; return; }
+    setNames();
+    const STATUS = STATUS_();
     MK = Object.fromEntries((d.markets || []).map((m) => [m.symbol, m]));
-    $('#tabs').innerHTML = [['', 'Semua'], ...(d.markets || []).map((m) => [m.symbol, NAMES[m.symbol] || m.symbol])]
+    $('#tabs').innerHTML = [['', T('Semua', 'All')], ...(d.markets || []).map((m) => [m.symbol, NAMES[m.symbol] || m.symbol])]
       .map(([v, l]) => `<label><input type="radio" name="pasar" value="${esc(v)}" ${v === cur ? 'checked' : ''}><span>${esc(l)}</span></label>`).join('');
     $('#pipnote').textContent = (d.markets || []).map(pipDesc).join(' · ') + '.';
     if (d.member) $('#top-btn').innerHTML = '<a class="btn btn-gold btn-sm" href="/member">Member Area</a>';
 
     const cards = (d.last_by_market || []).filter((x) => !cur || x.symbol === cur);
     if (cards.length) {
-      const dec = (x) => x.decision === 'WAIT' ? '<span class="badge b-gold">◆ TUNGGU</span>' : side(x.decision);
-      const tr = (t) => t === 'UP' ? '▲ naik' : t === 'DOWN' ? '▼ turun' : '◆ sideways';
-      $('#now').innerHTML = `<div class="small muted" style="margin-bottom:10px">Analisis terakhir tiap pasar</div>
+      const dec = (x) => x.decision === 'WAIT' ? `<span class="badge b-gold">◆ ${T('TUNGGU', 'WAIT')}</span>` : side(x.decision);
+      const tr = (t) => t === 'UP' ? T('▲ naik', '▲ up') : t === 'DOWN' ? T('▼ turun', '▼ down') : '◆ sideways';
+      $('#now').innerHTML = `<div class="small muted" style="margin-bottom:10px">${T('Analisis terakhir tiap pasar', 'Latest analysis per market')}</div>
         <div class="now-grid">${cards.map((x) => `<div class="now-card">
           <div class="row" style="gap:8px;flex-wrap:wrap"><span class="mk">${esc(x.symbol)}</span>${dec(x)}<span class="small muted">${esc(ago(x.created_at))}</span></div>
-          <div class="small muted" style="margin-top:6px">Tren H4 ${tr(x.trend_h4)} · H1 ${tr(x.trend_h1)}</div>
-          ${x.reason ? `<div class="small" style="margin-top:8px;overflow-wrap:anywhere">${esc(x.reason)}</div>` : '<div class="small muted" style="margin-top:8px">🔒 Detail sinyal yang masih berjalan khusus member.</div>'}
-          ${x.news ? `<div class="small muted" style="margin-top:6px;overflow-wrap:anywhere">📰 ${esc(x.news)}</div>` : ''}
-          ${x.wait_chart ? `<a class="now-pic" href="/api/signal/${x.wait_chart}/chart" target="_blank" rel="noopener"><img loading="lazy" src="/api/signal/${x.wait_chart}/chart" alt="Chart analisis ${esc(x.symbol)}"><span>Chart analisis AI · ${esc(ago(x.wait_chart_at))}</span></a>` : ''}
+          <div class="small muted" style="margin-top:6px">${T('Tren', 'Trend')} H4 ${tr(x.trend_h4)} · H1 ${tr(x.trend_h1)}</div>
+          ${RS(x) ? `<div class="small" style="margin-top:8px;overflow-wrap:anywhere">${esc(RS(x))}</div>` : `<div class="small muted" style="margin-top:8px">🔒 ${T('Detail sinyal yang masih berjalan khusus member.', 'Details of a running signal are for members only.')}</div>`}
+          ${NW(x) ? `<div class="small muted" style="margin-top:6px;overflow-wrap:anywhere">📰 ${esc(NW(x))}</div>` : ''}
+          ${x.wait_chart ? `<a class="now-pic" href="/api/signal/${x.wait_chart}/chart" target="_blank" rel="noopener"><img loading="lazy" src="/api/signal/${x.wait_chart}/chart" alt="Chart ${esc(x.symbol)}"><span>${T('Chart analisis AI', 'AI analysis chart')} · ${esc(ago(x.wait_chart_at))}</span></a>` : ''}
         </div>`).join('')}</div>`;
     } else {
     const l = d.last;
     $('#now').innerHTML = l
-      ? `<div class="small muted">Analisis terakhir · ${esc(ago(l.created_at))}</div>
-         <div style="margin-top:6px"><span class="mk">${esc(l.symbol || '')}</span> <b>${l.decision === 'WAIT' ? '◆ TUNGGU' : (l.decision === 'BUY' ? '▲ BUY' : '▼ SELL')}</b>
-         <span class="small muted"> · tren H4 ${esc(l.trend_h4 || '-')}, H1 ${esc(l.trend_h1 || '-')}</span></div>
-         ${l.decision === 'WAIT' && l.reason ? `<div class="small" style="margin-top:6px;overflow-wrap:anywhere">${esc(l.reason)}</div>` : ''}
-         ${l.news ? `<div class="small muted" style="margin-top:6px;overflow-wrap:anywhere">📰 ${esc(l.news)}</div>` : ''}`
-      : '<div class="small muted">Belum ada analisis. Analisis berikutnya berjalan tiap jam pada jam aktif pasar, atau lebih cepat saat ada momentum.</div>';
+      ? `<div class="small muted">${T('Analisis terakhir', 'Latest analysis')} · ${esc(ago(l.created_at))}</div>
+         <div style="margin-top:6px"><span class="mk">${esc(l.symbol || '')}</span> <b>${l.decision === 'WAIT' ? '◆ ' + T('TUNGGU', 'WAIT') : (l.decision === 'BUY' ? '▲ BUY' : '▼ SELL')}</b>
+         <span class="small muted"> · ${T('tren', 'trend')} H4 ${esc(l.trend_h4 || '-')}, H1 ${esc(l.trend_h1 || '-')}</span></div>
+         ${l.decision === 'WAIT' && RS(l) ? `<div class="small" style="margin-top:6px;overflow-wrap:anywhere">${esc(RS(l))}</div>` : ''}
+         ${NW(l) ? `<div class="small muted" style="margin-top:6px;overflow-wrap:anywhere">📰 ${esc(NW(l))}</div>` : ''}`
+      : `<div class="small muted">${T('Belum ada analisis. Analisis berikutnya berjalan tiap jam pada jam aktif pasar, atau lebih cepat saat ada momentum.', 'No analysis yet. Analysis runs every hour in the active market hours, or sooner on momentum.')}</div>`;
     }
 
     const s = d.stats30 || {};
     const closed = s.closed || 0;
     const wr = closed ? Math.round((s.wins / closed) * 100) : 0;
     $('#tiles').innerHTML = `
-      <div class="stat"><b>${closed ? wr + '%' : '-'}</b><span>Win rate 30 hari (${s.wins || 0} TP / ${s.losses || 0} SL)</span></div>
-      <div class="stat"><b class="${(s.pips || 0) < 0 ? 'neg' : ''}">${closed && cur ? pipsTxt(s.pips, cur) : '-'}</b><span>${cur ? 'Total hasil 30 hari' : 'Total hasil: pilih satu pasar'}</span></div>
-      <div class="stat"><b>${closed}</b><span>Sinyal selesai 30 hari</span></div>`;
+      <div class="stat"><b>${closed ? wr + '%' : '-'}</b><span>${T('Win rate 30 hari', '30-day win rate')} (${s.wins || 0} TP / ${s.losses || 0} SL)</span></div>
+      <div class="stat"><b class="${(s.pips || 0) < 0 ? 'neg' : ''}">${closed && cur ? pipsTxt(s.pips, cur) : '-'}</b><span>${cur ? T('Total hasil 30 hari', '30-day total') : T('Total hasil: pilih satu pasar', 'Total: pick one market')}</span></div>
+      <div class="stat"><b>${closed}</b><span>${T('Sinyal selesai 30 hari', 'Closed signals, 30 days')}</span></div>`;
 
     const ms = d.market_stats || [];
     const pct = (w, l) => w + l ? Math.round(w / (w + l) * 100) + '%' : '-';
-    $('#mstats').innerHTML = ms.length ? `<h3 style="margin:0 0 10px">Win rate per pasar</h3><div class="table-wrap"><table><thead><tr>
-        <th>Pasar</th><th class="right">Win rate 30 hari</th><th class="right hide-sm">Hasil 30 hari</th><th class="right">Win rate sejak awal</th><th class="right hide-sm">Sinyal selesai</th><th class="right hide-sm">Hasil sejak awal</th></tr></thead><tbody>
+    $('#mstats').innerHTML = ms.length ? `<h3 style="margin:0 0 10px">${T('Win rate per pasar', 'Win rate per market')}</h3><div class="table-wrap"><table><thead><tr>
+        <th>${T('Pasar', 'Market')}</th><th class="right">${T('Win rate 30 hari', '30-day win rate')}</th><th class="right hide-sm">${T('Hasil 30 hari', '30-day result')}</th><th class="right">${T('Win rate sejak awal', 'All-time win rate')}</th><th class="right hide-sm">${T('Sinyal selesai', 'Closed signals')}</th><th class="right hide-sm">${T('Hasil sejak awal', 'All-time result')}</th></tr></thead><tbody>
       ${ms.map((m) => `<tr><td><span class="mk">${esc(m.symbol)}</span> <span class="tiny muted">${esc(NAMES[m.symbol] || '')}</span></td>
         <td class="right"><b>${pct(m.wins30, m.losses30)}</b> <span class="tiny muted">(${m.wins30} TP / ${m.losses30} SL)</span></td>
         <td class="right hide-sm ${m.pips30 < 0 ? 'neg' : 'pos'}">${m.closed30 ? pipsTxt(m.pips30, m.symbol) : '-'}</td>
         <td class="right"><b>${pct(m.wins, m.losses)}</b></td>
         <td class="right hide-sm">${m.closed}</td>
         <td class="right hide-sm ${m.pips < 0 ? 'neg' : 'pos'}">${pipsTxt(m.pips, m.symbol)}</td></tr>`).join('')}</tbody></table></div>
-      <p class="tiny muted" style="margin-top:6px">Win rate = sinyal kena TP dibanding kena SL. Break even dan sinyal yang ditutup manual tidak dihitung menang atau kalah.</p>` : '';
+      <p class="tiny muted" style="margin-top:6px">${T('Win rate = sinyal kena TP dibanding kena SL. Break even dan sinyal yang ditutup manual tidak dihitung menang atau kalah.', 'Win rate = signals that hit TP versus SL. Break-even and manually closed signals count as neither a win nor a loss.')}</p>` : '';
     $('#list').innerHTML = d.signals.length ? `<div class="table-wrap"><table class="sig"><thead><tr>
-        <th>Waktu</th><th>Sinyal</th><th class="right">Entry</th><th class="right hide-sm">SL</th><th class="right hide-sm">TP</th><th class="right">Hasil</th></tr></thead><tbody>
+        <th>${T('Waktu', 'Time')}</th><th>${T('Sinyal', 'Signal')}</th><th class="right">Entry</th><th class="right hide-sm">SL</th><th class="right hide-sm">TP</th><th class="right">${T('Hasil', 'Result')}</th></tr></thead><tbody>
       ${d.signals.map((r) => {
         const st = STATUS[r.status] || STATUS.open;
         const res = r.status === 'open' ? `<span class="badge ${st[0]}">${st[1]}</span>`
           : `<div class="${r.pips > 0 ? 'pos' : (r.pips < 0 ? 'neg' : '')} nowrap">${pipsTxt(r.pips, r.symbol)}</div><span class="badge ${st[0]}">${st[1]}</span>`;
         return `<tr><td class="nowrap small">${esc(fmtDateTime(r.created_at))}</td>
           <td><span class="mk">${esc(r.symbol)}</span>${side(r.decision)} <span class="tiny muted">${r.confidence}%</span>
-            ${r.locked ? '<div class="lock">🔒 Entry, SL, TP sinyal yang masih berjalan khusus member. <a href="/masuk">Masuk</a></div>' : (r.reason ? `<div class="why">${esc(r.reason)}</div>` : '') + (r.news ? `<div class="why">📰 ${esc(r.news)}</div>` : '')}
-            <button type="button" class="btn btn-ghost btn-sm" style="margin-top:6px" data-detail="${r.id}">🔎 Detail${r.has_chart || r.has_close_chart ? ' & chart' : ''}</button></td>
+            ${r.locked ? `<div class="lock">🔒 ${T('Entry, SL, TP sinyal yang masih berjalan khusus member.', 'Entry, SL and TP of a running signal are for members only.')} <a href="/masuk">${T('Masuk', 'Log in')}</a></div>` : (RS(r) ? `<div class="why">${esc(RS(r))}</div>` : '') + (NW(r) ? `<div class="why">📰 ${esc(NW(r))}</div>` : '')}
+            <button type="button" class="btn btn-ghost btn-sm" style="margin-top:6px" data-detail="${r.id}">🔎 ${T('Detail', 'Details')}${r.has_chart || r.has_close_chart ? ' & chart' : ''}</button></td>
           <td class="right mono small nowrap">${num(r.price, r.symbol)}</td>
           <td class="right mono small hide-sm nowrap">${num(r.sl, r.symbol)}</td>
           <td class="right mono small hide-sm nowrap">${num(r.tp, r.symbol)}</td>
           <td class="right">${res}</td></tr>`;
       }).join('')}</tbody></table></div>`
-      : '<div class="card empty">Belum ada sinyal BUY / SELL.</div>';
+      : `<div class="card empty">${T('Belum ada sinyal BUY / SELL.', 'No BUY / SELL signals yet.')}</div>`;
   }
-  const dur = (a, b) => { const m = Math.max(0, Math.round((b - a) / 60)); return m < 60 ? m + ' menit' : Math.floor(m / 60) + ' jam ' + (m % 60) + ' menit'; };
+  const dur = (a, b) => { const m = Math.max(0, Math.round((b - a) / 60)); return m < 60 ? m + T(' menit', ' min') : Math.floor(m / 60) + T(' jam ', ' h ') + (m % 60) + T(' menit', ' min'); };
   async function detail(id) {
     let d;
     try { d = await (await fetch('/api/signal/detail/' + encodeURIComponent(id), { credentials: 'same-origin' })).json(); } catch { d = null; }
     if (!d || !d.ok) return;
     const r = d.signal, m = d.market;
     MK[m.symbol] = { ...(MK[m.symbol] || {}), ...m };
+    const STATUS = STATUS_();
     const st = STATUS[r.status] || STATUS.open;
     const rr = r.price != null && r.sl != null && Math.abs(r.price - r.sl) > 0 ? (Math.abs(r.tp - r.price) / Math.abs(r.price - r.sl)).toFixed(2) : '-';
     const img = (kind, cap) => `<figure style="margin:0 0 16px"><figcaption class="small muted" style="margin-bottom:6px">${cap}</figcaption>
@@ -169,22 +179,22 @@
     const link = location.origin + '/sinyal?s=' + r.id;
     modal(`Sinyal #S${r.id} · ${r.symbol} ${r.decision}`, `
       <dl class="kv2">
-        <dt>Pasar</dt><dd>${esc(r.symbol)} ${esc(NAMES[r.symbol] && NAMES[r.symbol] !== r.symbol ? '(' + NAMES[r.symbol] + ')' : '')}</dd>
-        <dt>Arah</dt><dd>${side(r.decision)} · keyakinan ${r.confidence}% · tren H4 ${esc(r.trend_h4 || '-')}, H1 ${esc(r.trend_h1 || '-')}</dd>
-        <dt>Dibuat</dt><dd>${esc(fmtDateTime(r.created_at))}</dd>
-        <dt>Status</dt><dd><span class="badge ${st[0]}">${st[1]}</span>${r.closed_at ? ' · ditutup ' + esc(fmtDateTime(r.closed_at)) + ' (setelah ' + dur(r.created_at, r.closed_at) + ')' : ''}</dd>
-        ${r.locked ? '<dt>Level</dt><dd>🔒 Entry, SL dan TP sinyal yang masih berjalan khusus member. <a href="/masuk">Masuk</a></dd>' : `
+        <dt>${T('Pasar', 'Market')}</dt><dd>${esc(r.symbol)} ${esc(NAMES[r.symbol] && NAMES[r.symbol] !== r.symbol ? '(' + NAMES[r.symbol] + ')' : '')}</dd>
+        <dt>${T('Arah', 'Direction')}</dt><dd>${side(r.decision)} · ${T('keyakinan', 'confidence')} ${r.confidence}% · ${T('tren', 'trend')} H4 ${esc(r.trend_h4 || '-')}, H1 ${esc(r.trend_h1 || '-')}</dd>
+        <dt>${T('Dibuat', 'Created')}</dt><dd>${esc(fmtDateTime(r.created_at))}</dd>
+        <dt>Status</dt><dd><span class="badge ${st[0]}">${st[1]}</span>${r.closed_at ? ' · ' + T('ditutup', 'closed') + ' ' + esc(fmtDateTime(r.closed_at)) + ' (' + T('setelah', 'after') + ' ' + dur(r.created_at, r.closed_at) + ')' : ''}</dd>
+        ${r.locked ? `<dt>Level</dt><dd>🔒 ${T('Entry, SL dan TP sinyal yang masih berjalan khusus member.', 'Entry, SL and TP of a running signal are for members only.')} <a href="/masuk">${T('Masuk', 'Log in')}</a></dd>` : `
         <dt>Entry</dt><dd class="mono">${num(r.price, r.symbol)}</dd>
         <dt>Stop loss</dt><dd class="mono">${num(r.sl, r.symbol)} <span class="neg">(${pipsTxt(-Math.abs(r.price - r.sl) / mk(r.symbol).pip, r.symbol)})</span></dd>
         <dt>Take profit</dt><dd class="mono">${num(r.tp, r.symbol)} <span class="pos">(${pipsTxt(Math.abs(r.tp - r.price) / mk(r.symbol).pip, r.symbol)})</span> · RR 1:${rr}</dd>
-        ${r.close_price != null ? `<dt>Ditutup di</dt><dd class="mono">${num(r.close_price, r.symbol)}</dd><dt>Hasil</dt><dd class="${r.pips > 0 ? 'pos' : (r.pips < 0 ? 'neg' : '')}">${pipsTxt(r.pips, r.symbol)}</dd>` : ''}`}
+        ${r.close_price != null ? `<dt>${T('Ditutup di', 'Closed at')}</dt><dd class="mono">${num(r.close_price, r.symbol)}</dd><dt>${T('Hasil', 'Result')}</dt><dd class="${r.pips > 0 ? 'pos' : (r.pips < 0 ? 'neg' : '')}">${pipsTxt(r.pips, r.symbol)}</dd>` : ''}`}
       </dl>
-      ${r.reason ? `<h4 style="margin:0 0 6px">Analisis Claude</h4><p class="small" style="margin:0 0 12px;overflow-wrap:anywhere">${esc(r.reason)}</p>` : ''}
-      ${r.news ? `<h4 style="margin:0 0 6px">Fundamental</h4><p class="small" style="margin:0 0 14px;overflow-wrap:anywhere">${esc(r.news)}</p>` : ''}
-      ${r.has_chart ? img('open', 'Chart saat sinyal dibuat') : ''}${r.has_close_chart ? img('close', 'Chart saat sinyal selesai') : ''}
-      <div class="row" style="gap:8px;flex-wrap:wrap"><input class="mono small" value="${esc(link)}" readonly style="flex:1;min-width:0"><button type="button" class="btn btn-outline btn-sm" id="cp-link">Salin link</button></div>`, { wide: true });
+      ${RS(r) ? `<h4 style="margin:0 0 6px">${T('Analisis Claude', 'Claude&#39;s analysis')}</h4><p class="small" style="margin:0 0 12px;overflow-wrap:anywhere">${esc(RS(r))}</p>` : ''}
+      ${NW(r) ? `<h4 style="margin:0 0 6px">Fundamental</h4><p class="small" style="margin:0 0 14px;overflow-wrap:anywhere">${esc(NW(r))}</p>` : ''}
+      ${r.has_chart ? img('open', T('Chart saat sinyal dibuat', 'Chart when the signal was created')) : ''}${r.has_close_chart ? img('close', T('Chart saat sinyal selesai', 'Chart when the signal closed')) : ''}
+      <div class="row" style="gap:8px;flex-wrap:wrap"><input class="mono small" value="${esc(link)}" readonly style="flex:1;min-width:0"><button type="button" class="btn btn-outline btn-sm" id="cp-link">${T('Salin link', 'Copy link')}</button></div>`, { wide: true });
     const cb = document.getElementById('cp-link');
-    if (cb) cb.onclick = () => { navigator.clipboard && navigator.clipboard.writeText(link); cb.textContent = 'Tersalin ✔'; };
+    if (cb) cb.onclick = () => { navigator.clipboard && navigator.clipboard.writeText(link); cb.textContent = T('Tersalin ✔', 'Copied ✔'); };
   }
   $('#list').onclick = (e) => {
     const b = e.target.closest('[data-detail]');
@@ -193,6 +203,7 @@
   const deep = new URLSearchParams(location.search).get('s');
   if (deep) detail(deep);
   $('#tabs').onchange = (e) => { cur = e.target.value; history.replaceState(null, '', cur ? '?pasar=' + cur : location.pathname); load(); };
+  document.addEventListener('ghg:lang', load);
   load();
   setInterval(load, 60000);
 })();

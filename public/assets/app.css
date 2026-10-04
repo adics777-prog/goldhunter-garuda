@@ -209,3 +209,5 @@ label.row{flex-wrap:nowrap}
 .main,.card,.grid>*{min-width:0}
 .auth-back{display:inline-block;margin-bottom:14px;color:var(--muted);font-size:.9rem;text-decoration:none!important}
 .auth-back:hover{color:var(--gold)}
+.auth-lang{position:absolute;top:0;right:0;border:1px solid var(--line);border-radius:50px;padding:4px 12px;font-size:.85rem;color:var(--text);text-decoration:none!important}
+.auth-lang:hover{border-color:var(--gold);color:var(--gold)}

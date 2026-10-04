@@ -12,27 +12,29 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@700;900&family=Poppins:wght@300;400;600;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="/assets/app.css?v=2c54d69e">
+<link rel="stylesheet" href="/assets/app.css?v=736b75ce">
 </head>
 <body data-page="masuk">
 <main class="auth"><div class="auth-box">
-  <a class="auth-back" href="/">← Kembali ke halaman utama</a>
+  <a href="#" class="auth-lang" data-lang-toggle>🌐 EN</a>
+  <a class="auth-back" href="/" data-en="← Back to the home page">← Kembali ke halaman utama</a>
   <a class="auth-logo" href="/"><img src="/assets/brand/goldhunter-garuda-logo-256.png" width="70" height="70" alt="GoldHunter Garuda"><b class="gold-text">GOLDHUNTER GARUDA</b></a>
   <div class="card">
-    <h1>Masuk Member Area</h1>
-    <p class="sub">Masuk untuk melihat detail sinyal Garuda AI dan mengelola layanan Anda.</p>
-    <div class="alert info small hidden" id="order-note" style="margin-bottom:16px">🛒 Silakan masuk untuk melanjutkan order. Belum punya akun? <a href="/daftar" id="reg-link">Daftar dulu</a>.</div>
+    <h1 data-en="Member Login">Masuk Member Area</h1>
+    <p class="sub" data-en="Log in to see full Garuda AI signal details and manage your services.">Masuk untuk melihat detail sinyal Garuda AI dan mengelola layanan Anda.</p>
+    <div class="alert info small hidden" id="order-note" style="margin-bottom:16px" data-en="🛒 Please log in to continue your order. No account yet? &lt;a href=&quot;/daftar&quot; id=&quot;reg-link&quot;&gt;Sign up first&lt;/a&gt;.">🛒 Silakan masuk untuk melanjutkan order. Belum punya akun? <a href="/daftar" id="reg-link">Daftar dulu</a>.</div>
     <div id="msg" class="alert hidden" style="margin-bottom:16px"></div>
     <form novalidate>
-      <div class="field"><label>Email</label><input name="email" type="email" required autocomplete="email" placeholder="nama@email.com"></div>
-      <div class="field"><label>Password</label><div class="pw-wrap"><input name="password" type="password" required minlength="8" autocomplete="current-password"><button type="button" data-toggle-pw>lihat</button></div></div>
-      <p class="right small" style="margin:-6px 0 16px"><a href="/lupa-password">Lupa password?</a></p>
-      <button class="btn btn-gold btn-block" type="submit">Masuk</button>
+      <div class="field"><label data-en="Email">Email</label><input name="email" type="email" required autocomplete="email" placeholder="nama@email.com" data-en-placeholder="name@email.com"></div>
+      <div class="field"><label data-en="Password">Password</label><div class="pw-wrap"><input name="password" type="password" required minlength="8" autocomplete="current-password"><button type="button" data-toggle-pw data-en="show">lihat</button></div></div>
+      <p class="right small" style="margin:-6px 0 16px"><a href="/lupa-password" data-en="Forgot password?">Lupa password?</a></p>
+      <button class="btn btn-gold btn-block" type="submit" data-en="Log in">Masuk</button>
     </form>
   </div>
-  <p class="links">Belum punya akun? <a href="/daftar" class="keep-q">Daftar gratis</a></p>
+  <p class="links" data-en="No account yet? &lt;a href=&quot;/daftar&quot; class=&quot;keep-q&quot;&gt;Sign up free&lt;/a&gt;">Belum punya akun? <a href="/daftar" class="keep-q">Daftar gratis</a></p>
 </div></main>
-<script src="/assets/common.js?v=94a3104e"></script>
-<script src="/assets/auth.js?v=f17d50e1"></script>
+<script src="/assets/i18n.js?v=489e4256"></script>
+<script src="/assets/common.js?v=aa4bb046"></script>
+<script src="/assets/auth.js?v=52a72ff4"></script>
 </body>
 </html>

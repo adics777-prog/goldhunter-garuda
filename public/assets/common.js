@@ -4,11 +4,20 @@ const GHG = (() => {
   const $$ = (sel, root = document) => [...root.querySelectorAll(sel)];
   const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
   const rupiah = (n) => 'Rp ' + Math.round(n || 0).toString().replace(/\B(?=(\d{3})+(?!\d))/g, '.');
-  const BULAN = ['Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun', 'Jul', 'Agu', 'Sep', 'Okt', 'Nov', 'Des'];
-  const fmtDate = (t) => { if (!t) return 'Selamanya'; const d = new Date(t * 1000); return `${d.getDate()} ${BULAN[d.getMonth()]} ${d.getFullYear()}`; };
+  // public pages load i18n.js (window.GHG_LANG); member / admin areas stay Indonesian
+  const EN = () => window.GHG_LANG === 'en';
+  const BULAN_ID = ['Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun', 'Jul', 'Agu', 'Sep', 'Okt', 'Nov', 'Des'];
+  const BULAN_EN = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+  const fmtDate = (t) => { if (!t) return EN() ? 'Forever' : 'Selamanya'; const d = new Date(t * 1000); return `${d.getDate()} ${(EN() ? BULAN_EN : BULAN_ID)[d.getMonth()]} ${d.getFullYear()}`; };
   const fmtDateTime = (t) => { if (!t) return '-'; const d = new Date(t * 1000); return `${fmtDate(t)} ${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`; };
   const ago = (t) => {
     const s = Math.floor(Date.now() / 1000) - t;
+    if (EN()) {
+      if (s < 60) return 'just now';
+      if (s < 3600) return Math.floor(s / 60) + ' min ago';
+      if (s < 86400) return Math.floor(s / 3600) + ' h ago';
+      return Math.floor(s / 86400) + ' days ago';
+    }
     if (s < 60) return 'baru saja';
     if (s < 3600) return Math.floor(s / 60) + ' menit lalu';
     if (s < 86400) return Math.floor(s / 3600) + ' jam lalu';
@@ -72,7 +81,7 @@ const GHG = (() => {
     const c = e.target.closest('[data-copy]');
     if (c) copy(c.dataset.copy);
     const pw = e.target.closest('[data-toggle-pw]');
-    if (pw) { const i = pw.parentElement.querySelector('input'); i.type = i.type === 'password' ? 'text' : 'password'; pw.textContent = i.type === 'password' ? 'lihat' : 'sembunyi'; }
+    if (pw) { const i = pw.parentElement.querySelector('input'); i.type = i.type === 'password' ? 'text' : 'password'; pw.textContent = i.type === 'password' ? (EN() ? 'show' : 'lihat') : (EN() ? 'hide' : 'sembunyi'); }
   });
 
   // Shrink photos before upload (D1 rows are limited to ~2 MB).

@@ -197,6 +197,9 @@ route('GET', '/catalog', 'public', async ({ env }) => {
   });
 });
 
+// Visitor country from Cloudflare (website language: Indonesian visitors get Indonesian)
+route('GET', '/geo', 'public', async ({ request }) => json({ country: (request.cf && request.cf.country) || request.headers.get('cf-ipcountry') || '' }));
+
 route('GET', '/rate', 'public', async ({ env, waitUntil }) => {
   const r = await getUsdIdr(env, waitUntil);
   const s = await getSettings(env);
@@ -239,7 +242,7 @@ route('POST', '/ea/report', 'public', async ({ request, env }) => {
 const signalView = (r) => r && ({
   id: r.id, symbol: r.symbol, bar_time: r.bar_time, created_at: r.created_at, valid_until: r.valid_until,
   decision: r.decision, confidence: r.confidence, price: r.price, sl: r.sl, tp: r.tp,
-  trend_h4: r.trend_h4, trend_h1: r.trend_h1, reason: r.reason, news: r.news || '', model: r.model,
+  trend_h4: r.trend_h4, trend_h1: r.trend_h1, reason: r.reason, news: r.news || '', reason_en: r.reason_en || '', news_en: r.news_en || '', model: r.model,
   status: r.status, close_price: r.close_price, closed_at: r.closed_at, pips: r.pips,
 });
 // Markets: canonical symbol (broker suffix removed) and its pip size / decimals from table ai_symbols
@@ -417,11 +420,11 @@ route('POST', '/signal/publish', 'signal_pub', async ({ request, env, base, wait
   const num = (v) => { const n = Number(v); return Number.isFinite(n) ? n : 0; };
   const t = now();
   const validMin = Math.max(1, Math.min(int(b.valid_min) || 10, 60));
-  const r = await env.DB.prepare(`INSERT INTO signals (symbol, bar_time, created_at, valid_until, decision, confidence, price, sl, tp, trend_h4, trend_h1, reason, model, cost_usd, tokens_in, tokens_out, status, news)
-      VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`)
+  const r = await env.DB.prepare(`INSERT INTO signals (symbol, bar_time, created_at, valid_until, decision, confidence, price, sl, tp, trend_h4, trend_h1, reason, model, cost_usd, tokens_in, tokens_out, status, news, reason_en, news_en)
+      VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`)
     .bind(symbol, int(b.bar_time) || 0, t, t + validMin * 60, decision, Math.max(0, Math.min(int(b.confidence) || 0, 100)),
       num(b.price), num(b.sl), num(b.tp), str(b.trend_h4, 8), str(b.trend_h1, 8), str(b.reason, 600), str(b.model, 40),
-      num(b.cost_usd), int(b.tokens_in) || 0, int(b.tokens_out) || 0, decision === 'WAIT' ? 'wait' : 'open', str(b.news, 400))
+      num(b.cost_usd), int(b.tokens_in) || 0, int(b.tokens_out) || 0, decision === 'WAIT' ? 'wait' : 'open', str(b.news, 400), str(b.reason_en, 600), str(b.news_en, 400))
     .run();
   const id = r.meta.last_row_id;
   const chart = chartB64(b.chart_png);
@@ -496,7 +499,7 @@ route('GET', '/signal/feed', 'public', async ({ env, url, user }) => {
     env.DB.prepare(`SELECT s.*, (SELECT COUNT(*) FROM signal_charts c WHERE c.signal_id=s.id AND c.kind='open') AS has_chart,
         (SELECT COUNT(*) FROM signal_charts c WHERE c.signal_id=s.id AND c.kind='close') AS has_close_chart
         FROM signals s WHERE decision IN ('BUY','SELL')${w} ORDER BY id DESC LIMIT ?`).bind(...a, limit).all(),
-    env.DB.prepare(`SELECT id, symbol, decision, created_at, reason, news, trend_h4, trend_h1, confidence, price, status FROM signals WHERE 1=1${w} ORDER BY id DESC LIMIT 1`).bind(...a).first(),
+    env.DB.prepare(`SELECT id, symbol, decision, created_at, reason, news, reason_en, news_en, trend_h4, trend_h1, confidence, price, status FROM signals WHERE 1=1${w} ORDER BY id DESC LIMIT 1`).bind(...a).first(),
     env.DB.prepare(`SELECT COUNT(*) AS closed, COALESCE(SUM(CASE WHEN pips > 0 THEN 1 ELSE 0 END),0) AS wins,
         COALESCE(SUM(CASE WHEN pips < 0 THEN 1 ELSE 0 END),0) AS losses, COALESCE(SUM(pips),0) AS pips
         FROM signals WHERE decision IN ('BUY','SELL') AND status <> 'open' AND closed_at > ?${w}`).bind(t - 30 * DAY, ...a).first(),
@@ -515,19 +518,20 @@ route('GET', '/signal/feed', 'public', async ({ env, url, user }) => {
   const member = !!user;
   const signals = results.map((r) => {
     const v = { ...signalView(r), has_chart: !!r.has_chart, has_close_chart: !!r.has_close_chart };
-    if (r.status === 'open' && !member) { v.price = null; v.sl = null; v.tp = null; v.reason = ''; v.news = ''; v.locked = true; v.has_chart = false; }
+    if (r.status === 'open' && !member) { v.price = null; v.sl = null; v.tp = null; v.reason = ''; v.news = ''; v.reason_en = ''; v.news_en = ''; v.locked = true; v.has_chart = false; }
     return v;
   });
-  const lastView = last ? { ...last, reason: last.decision === 'WAIT' || member || last.status !== 'open' ? last.reason : '' } : null;   // news is public context
+  const openHidden = (x) => x.decision !== 'WAIT' && !member && x.status === 'open';
+  const lastView = last ? { ...last, reason: openHidden(last) ? '' : last.reason, reason_en: openHidden(last) ? '' : last.reason_en } : null;   // news is public context
   // latest analysis of every market + its newest WAIT picture (last 24 h) for the live cards on /sinyal
-  const { results: lastRows } = await env.DB.prepare(`SELECT id, symbol, decision, created_at, reason, news, trend_h4, trend_h1, confidence, status FROM signals
+  const { results: lastRows } = await env.DB.prepare(`SELECT id, symbol, decision, created_at, reason, news, reason_en, news_en, trend_h4, trend_h1, confidence, status FROM signals
       WHERE id IN (SELECT MAX(id) FROM signals GROUP BY symbol)`).all();
   const { results: waitPics } = await env.DB.prepare(`SELECT s.symbol, MAX(s.id) AS id, MAX(s.created_at) AS at FROM signals s
       JOIN signal_charts c ON c.signal_id = s.id AND c.kind = 'open' WHERE s.decision = 'WAIT' AND s.created_at > ? GROUP BY s.symbol`).bind(t - DAY).all();
   const enabledSyms = new Set(markets.filter((m) => m.enabled).map((m) => m.symbol));
   const lastByMarket = lastRows.filter((x) => enabledSyms.has(x.symbol)).map((x) => {
     const pic = waitPics.find((p) => p.symbol === x.symbol);
-    return { ...x, reason: x.decision === 'WAIT' || member || x.status !== 'open' ? x.reason : '', wait_chart: pic ? pic.id : 0, wait_chart_at: pic ? pic.at : 0 };
+    return { ...x, reason: openHidden(x) ? '' : x.reason, reason_en: openHidden(x) ? '' : x.reason_en, wait_chart: pic ? pic.id : 0, wait_chart_at: pic ? pic.at : 0 };
   });
   return json({ ok: true, server_time: t, member, signals, last: lastView, last_by_market: lastByMarket, stats30: stat, symbol: sym, market_stats: perMk,
     markets: markets.filter((m) => m.enabled).map((m) => { const v = symView(m); delete v.profile; return v; }) });
@@ -539,7 +543,7 @@ route('GET', '/signal/detail/:id', 'public', async ({ env, params, user }) => {
       (SELECT COUNT(*) FROM signal_charts c WHERE c.signal_id=s.id AND c.kind='close') AS has_close_chart FROM signals s WHERE s.id=?`).bind(int(params.id) || 0).first();
   if (!r || r.decision === 'WAIT') fail(404, 'Sinyal tidak ditemukan');
   const v = { ...signalView(r), has_chart: !!r.has_chart, has_close_chart: !!r.has_close_chart };
-  if (r.status === 'open' && !user) { v.price = null; v.sl = null; v.tp = null; v.reason = ''; v.news = ''; v.locked = true; v.has_chart = false; }
+  if (r.status === 'open' && !user) { v.price = null; v.sl = null; v.tp = null; v.reason = ''; v.news = ''; v.reason_en = ''; v.news_en = ''; v.locked = true; v.has_chart = false; }
   const m = await getSymbol(env, r.symbol);
   return json({ ok: true, member: !!user, signal: v, market: { symbol: m.symbol, digits: m.digits, pip: m.pip, pip_label: m.pip_label } });
 });
