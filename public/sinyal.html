@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Sinyal Garuda AI: Emas, Bitcoin &amp; Forex</title>
-<meta name="description" content="Sinyal BUY / SELL Garuda AI untuk emas (XAUUSD), Bitcoin (BTCUSD) dan forex (EURUSD, USDJPY): analisis Claude tiap candle H1, lengkap dengan hasil setiap sinyal.">
+<meta name="description" content="Sinyal BUY / SELL Garuda AI untuk emas (XAUUSD), Bitcoin (BTCUSD) dan forex (EURUSD, USDJPY): analisis Claude tiap jam dan setiap ada momentum, lengkap dengan hasil setiap sinyal.">
 <meta name="robots" content="index,follow">
 <meta name="theme-color" content="#07070a">
 <link rel="canonical" href="https://goldhuntergaruda.com/sinyal">
@@ -48,7 +48,7 @@
   <div class="pub-hero">
     <span class="badge b-gold">🤖 Garuda AI · Emas · Bitcoin · Forex</span>
     <h1 style="margin-top:12px">Sinyal <span class="gold-text">Garuda AI</span></h1>
-    <p>Setiap pasar dianalisis Claude di setiap candle H1 pada jam aktifnya. Setiap sinyal BUY / SELL dipantau sampai kena TP atau SL, lalu hasilnya dicatat di sini.</p>
+    <p>Claude menggabungkan analisis teknikal dan fundamental: tiap jam pada jam aktif pasar, dan langsung saat ada momentum. Setiap sinyal BUY / SELL dipantau sampai kena TP atau SL, lalu hasilnya dicatat di sini.</p>
   </div>
   <div class="row" style="justify-content:center;margin-bottom:18px"><div class="choice" id="tabs"></div></div>
   <div class="now" id="now"></div>
@@ -93,7 +93,7 @@
          <span class="small muted"> · tren H4 ${esc(l.trend_h4 || '-')}, H1 ${esc(l.trend_h1 || '-')}</span></div>
          ${l.decision === 'WAIT' && l.reason ? `<div class="small" style="margin-top:6px;overflow-wrap:anywhere">${esc(l.reason)}</div>` : ''}
          ${l.news ? `<div class="small muted" style="margin-top:6px;overflow-wrap:anywhere">📰 ${esc(l.news)}</div>` : ''}`
-      : '<div class="small muted">Belum ada analisis. Sinyal pertama muncul di awal candle H1 berikutnya pada jam sesi London / New York.</div>';
+      : '<div class="small muted">Belum ada analisis. Analisis berikutnya berjalan tiap jam pada jam aktif pasar, atau lebih cepat saat ada momentum.</div>';
 
     const s = d.stats30 || {};
     const closed = s.closed || 0;
