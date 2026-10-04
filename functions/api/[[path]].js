@@ -428,12 +428,116 @@ route('GET', '/signal/feed', 'public', async ({ env, url, user }) => {
   return json({ ok: true, server_time: t, member, signals, last: lastView, stats30: stat });
 });
 
+// ---- Garuda AI master settings (Admin > Garuda AI), fetched by the MASTER EA ----
+const AI_MODELS = {
+  'claude-fable-5-1': { label: 'Claude Fable 5.1 (paling kuat)', in: 10, out: 50 },
+  'claude-opus-5-5': { label: 'Claude Opus 5.5', in: 4, out: 20 },
+  'claude-sonnet-5-5': { label: 'Claude Sonnet 5.5 (hemat)', in: 2, out: 10 },
+};
+const AI_EFFORTS = ['low', 'medium', 'high', 'xhigh', 'max'];
+const AI_KEYS = {               // key: [type, min, max]
+  ai_paused: ['bool'], ai_model: ['model'], ai_effort: ['effort'], ai_news: ['bool'], ai_news_effort: ['effort'],
+  ai_news_max: ['int', 1, 10], ai_web_tool: ['tool'], ai_intermarket: ['bool'], ai_vision: ['bool'], ai_chart: ['bool'],
+  ai_session_start: ['int', 0, 23], ai_session_end: ['int', 1, 24], ai_friday_last: ['int', 0, 24],
+  ai_min_conf: ['int', 0, 100], ai_min_rr: ['num', 0.5, 10], ai_min_sl: ['num', 0.5, 200], ai_max_sl: ['num', 1, 500], ai_valid_min: ['int', 1, 60],
+  ai_cost_cap: ['num', 0, 1000], ai_master_trade: ['bool'],
+};
+function aiConfig(s) {
+  const out = {};
+  for (const [k, [t]] of Object.entries(AI_KEYS)) {
+    const v = s[k];
+    out[k.slice(3)] = t === 'bool' ? v === '1' : (t === 'int' || t === 'num') ? Number(v) : String(v ?? '');
+  }
+  const m = AI_MODELS[out.model] || AI_MODELS['claude-fable-5-1'];
+  out.price_in = m.in; out.price_out = m.out;
+  return out;
+}
+const signalFilters = (s) => ({ min_conf: Number(s.ai_min_conf || 65), min_rr: Number(s.ai_min_rr || 1.5), min_sl: Number(s.ai_min_sl || 3), max_sl: Number(s.ai_max_sl || 20) });
+
+// MASTER EA: all settings incl. the Claude API key (only with the master secret). Also records that the master is alive.
+route('GET', '/master/config', 'signal_pub', async ({ env, url }) => {
+  const s = await getSettings(env);
+  const cfg = aiConfig(s);
+  cfg.claude_key = s.ai_claude_key_enc ? await decrypt(env, s.ai_claude_key_enc) : '';
+  await putSetting(env, 'ai_master_seen', String(now()));
+  await putSetting(env, 'ai_master_info', `${str(url.searchParams.get('acct'), 30)} · ${str(url.searchParams.get('ver'), 12)} · ${str(url.searchParams.get('status'), 80)}`);
+  return json({ ok: true, server_time: now(), config: cfg });
+});
+
+route('GET', '/admin/ai', 'admin', async ({ env }) => {
+  const s = await getSettings(env);
+  const t = now();
+  const [recent, stat] = await Promise.all([
+    env.DB.prepare('SELECT id, created_at, decision, confidence, price, sl, tp, status, pips, cost_usd, model FROM signals ORDER BY id DESC LIMIT 25').all(),
+    env.DB.prepare(`SELECT COUNT(*) AS analyses, COALESCE(SUM(cost_usd),0) AS cost, COALESCE(SUM(CASE WHEN decision IN ('BUY','SELL') THEN 1 ELSE 0 END),0) AS trades,
+        COALESCE(SUM(CASE WHEN pips > 0 THEN 1 ELSE 0 END),0) AS wins, COALESCE(SUM(CASE WHEN pips < 0 THEN 1 ELSE 0 END),0) AS losses, COALESCE(SUM(pips),0) AS pips
+        FROM signals WHERE created_at > ?`).bind(t - 30 * DAY).first(),
+  ]);
+  const today = await env.DB.prepare('SELECT COUNT(*) AS n, COALESCE(SUM(cost_usd),0) AS cost FROM signals WHERE created_at > ?').bind(t - (t % DAY)).first();
+  return json({
+    config: aiConfig(s), key_set: !!s.ai_claude_key_enc, models: AI_MODELS, efforts: AI_EFFORTS,
+    master: { seen: Number(s.ai_master_seen || 0), info: s.ai_master_info || '' },
+    keys: { master: env.SIGNAL_SECRET || '', client: env.SIGNAL_KEY || '' },
+    stats30: stat, today, recent: recent.results,
+  });
+});
+
+route('PUT', '/admin/ai', 'admin', async ({ request, env }) => {
+  const b = await readJson(request);
+  for (const [k, [t, mn, mx]] of Object.entries(AI_KEYS)) {
+    const name = k.slice(3);
+    if (b[name] === undefined) continue;
+    let v = b[name];
+    if (t === 'bool') v = v === true || v === '1' || v === 'on' ? '1' : '0';
+    else if (t === 'int' || t === 'num') {
+      const n = Number(v);
+      if (!Number.isFinite(n) || n < mn || n > mx) fail(400, `Nilai ${name} harus ${mn} sampai ${mx}`);
+      v = String(t === 'int' ? Math.round(n) : n);
+    } else if (t === 'model') { if (!AI_MODELS[v]) fail(400, 'Model tidak dikenal'); }
+    else if (t === 'effort') { if (!AI_EFFORTS.includes(v)) fail(400, 'Tingkat ketelitian tidak dikenal'); }
+    else if (t === 'tool') { if (!['web_search_20260209', 'web_search_20250305'].includes(v)) fail(400, 'Versi tool pencarian tidak dikenal'); }
+    await putSetting(env, k, v);
+  }
+  if (Number(b.min_sl) >= Number(b.max_sl)) fail(400, 'SL minimal harus lebih kecil dari SL maksimal');
+  if (typeof b.claude_key === 'string' && b.claude_key.trim()) {
+    const key = b.claude_key.trim();
+    if (!/^sk-ant-[A-Za-z0-9_-]{20,}$/.test(key)) fail(400, 'Format API key Claude tidak valid (diawali sk-ant-)');
+    await putSetting(env, 'ai_claude_key_enc', await encrypt(env, key));
+  }
+  if (b.claude_key_clear) await env.DB.prepare(`DELETE FROM settings WHERE key='ai_claude_key_enc'`).run();
+  return json({ ok: true });
+});
+
+// Test the Claude connection with the saved key and model (a tiny request)
+route('POST', '/admin/ai/test', 'admin', async ({ env }) => {
+  const s = await getSettings(env);
+  if (!s.ai_claude_key_enc) fail(400, 'API key Claude belum disimpan');
+  const key = await decrypt(env, s.ai_claude_key_enc);
+  const model = AI_MODELS[s.ai_model] ? s.ai_model : 'claude-fable-5-1';
+  const t0 = Date.now();
+  let r, j;
+  try {
+    r = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', 'x-api-key': key, 'anthropic-version': '2023-06-01' },
+      body: JSON.stringify({ model, max_tokens: 2000, output_config: { effort: 'low' },
+        messages: [{ role: 'user', content: 'Tes koneksi. Balas hanya dengan: Garuda AI siap.' }] }),
+    });
+    j = await r.json();
+  } catch (e) { fail(502, 'Tidak bisa menghubungi Claude: ' + (e.message || e)); }
+  if (!r.ok) fail(400, `Claude menolak (HTTP ${r.status}): ${(j && j.error && j.error.message) || 'cek API key & saldo'}`);
+  const text = (j.content || []).filter((c) => c.type === 'text').map((c) => c.text).join(' ').trim();
+  const u = j.usage || {};
+  const m = AI_MODELS[model];
+  return json({ ok: true, model: j.model, ms: Date.now() - t0, text, cost_usd: ((u.input_tokens || 0) * m.in + (u.output_tokens || 0) * m.out) / 1e6 });
+});
+
 route('GET', '/signal/latest', 'signal_read', async ({ env, url }) => {
   const symbol = str(url.searchParams.get('symbol'), 20);
   const row = await env.DB.prepare(symbol ? 'SELECT * FROM signals WHERE symbol=? ORDER BY id DESC LIMIT 1' : 'SELECT * FROM signals ORDER BY id DESC LIMIT 1')
     .bind(...(symbol ? [symbol] : [])).first();
   const t = now();
-  return json({ ok: true, server_time: t, signal: signalView(row) || null, next: nextSignalCheck(t, row) });
+  return json({ ok: true, server_time: t, signal: signalView(row) || null, next: nextSignalCheck(t, row), filters: signalFilters(await getSettings(env)) });
 });
 
 // ---- Admin: Telegram bot ----

@@ -1,6 +1,6 @@
 // Admin area (hash router).
 (() => {
-  const { $, $$, esc, rupiah, fmtDate, fmtDateTime, ago, api, toast, busy, modal, confirmBox,
+  const { $, $$, esc, rupiah, fmtDate, fmtDateTime, ago, api, toast, busy, modal, confirmBox, copy,
     orderBadge, licenseBadge, buildBadge, billingText } = GHG;
   const view = $('#view');
   let me = null, timer = null;
@@ -34,7 +34,7 @@
   }
 
   const routes = { '': dashboard, ib: ibOrders, pesanan: paidOrders, 'ganti-akun': changesPage, lisensi: licensesPage, build: buildsPage,
-    member: usersPage, profit: profitPage, produk: productsPage, pengaturan: settingsPage, email: emailsPage };
+    member: usersPage, profit: profitPage, produk: productsPage, pengaturan: settingsPage, email: emailsPage, 'garuda-ai': garudaAiPage };
   async function render() {
     clearInterval(timer);
     const [name, arg] = location.hash.replace(/^#\/?/, '').split('/');
@@ -640,6 +640,93 @@
       };
       await busy($('#sf button[type=submit]'), () => api('/admin/settings', { method: 'PUT', body }));
       toast('Pengaturan disimpan'); render();
+    };
+  }
+
+  // ------------------------------------------------------------------ Garuda AI (sinyal Claude)
+  async function garudaAiPage() {
+    const d = await api('/admin/ai');
+    const c = d.config;
+    const seenAgo = d.master.seen ? Math.floor(Date.now() / 1000) - d.master.seen : null;
+    const alive = seenAgo !== null && seenAgo < 900;
+    const st = d.stats30 || {};
+    const wr = st.wins + st.losses ? Math.round(st.wins / (st.wins + st.losses) * 100) : null;
+    const opt = (v, cur, label) => `<option value="${esc(v)}" ${v === cur ? 'selected' : ''}>${esc(label)}</option>`;
+    const effLabel = { low: 'low (cepat, murah)', medium: 'medium', high: 'high', xhigh: 'xhigh (sangat teliti, disarankan)', max: 'max (paling teliti, paling mahal)' };
+    const chk = (name, on, label, help = '') => `<label class="row small" style="color:var(--text);margin-bottom:10px;align-items:flex-start"><input type="checkbox" name="${name}" ${on ? 'checked' : ''} style="margin-top:4px">
+      <span>${label}${help ? `<div class="help" style="margin:2px 0 0">${help}</div>` : ''}</span></label>`;
+    const num = (name, v, label, help = '', step = '1') => `<div class="field"><label>${label}</label><input name="${name}" type="number" step="${step}" value="${esc(v)}">${help ? `<div class="help">${help}</div>` : ''}</div>`;
+    const keyBox = (label, v, help) => `<div class="field"><label>${label}</label><div class="row" style="flex-wrap:nowrap">
+      <input class="mono" value="${esc(v || 'belum diatur')}" readonly style="flex:1;min-width:0"><button type="button" class="btn btn-outline btn-sm" data-copy="${esc(v)}">Salin</button></div><div class="help">${help}</div></div>`;
+    view.innerHTML = `${title('🤖 Garuda AI')}
+      <div class="grid" style="grid-template-columns:repeat(auto-fit,minmax(min(200px,100%),1fr));margin-bottom:16px">
+        <div class="stat ${alive ? '' : 'alert'}"><b style="font-size:1.15rem">${alive ? '● Aktif' : (d.master.seen ? '○ Tidak terhubung' : '○ Belum pernah')}</b><span>EA master ${d.master.seen ? '· ' + esc(ago(d.master.seen)) : ''}</span>
+          ${d.master.info ? `<div class="tiny muted" style="margin-top:4px;overflow-wrap:anywhere">${esc(d.master.info)}</div>` : ''}</div>
+        <div class="stat"><b>${c.paused ? '⏸' : (d.key_set ? '✔' : '✖')}</b><span>${c.paused ? 'Analisis DIJEDA' : (d.key_set ? 'API key Claude tersimpan' : 'API key Claude belum diisi')}</span></div>
+        <div class="stat"><b>$${Number(d.today.cost || 0).toFixed(2)}</b><span>Biaya Claude hari ini (${d.today.n} analisis)</span></div>
+        <div class="stat"><b>$${Number(st.cost || 0).toFixed(2)}</b><span>Biaya 30 hari (${st.analyses || 0} analisis)</span></div>
+        <div class="stat"><b>${wr === null ? '-' : wr + '%'}</b><span>Win rate 30 hari · ${Number(st.pips || 0) >= 0 ? '+' : ''}${Number(st.pips || 0).toFixed(0)} pips</span></div>
+      </div>
+      <form id="aif" class="grid" style="align-items:start;grid-template-columns:repeat(auto-fit,minmax(min(380px,100%),1fr))">
+        <div class="card"><h3>🔌 Koneksi Claude</h3>
+          <div class="field"><label>API key Claude ${d.key_set ? '<span class="badge b-green">tersimpan</span>' : ''}</label>
+            <input name="claude_key" type="password" autocomplete="off" placeholder="${d.key_set ? 'kosongkan = tidak diubah' : 'sk-ant-... (dari console.anthropic.com)'}">
+            <div class="help">Disimpan terenkripsi. Hanya dikirim ke EA master yang memakai kunci master.</div></div>
+          <div class="field"><label>Model</label><select name="model">${Object.entries(d.models).map(([k, m]) => opt(k, c.model, `${m.label} · $${m.in}/$${m.out} per 1 jt token`)).join('')}</select></div>
+          <div class="field"><label>Ketelitian analisis</label><select name="effort">${d.efforts.map((e) => opt(e, c.effort, effLabel[e])).join('')}</select></div>
+          <div class="row"><button type="button" class="btn btn-outline btn-sm" id="ai-test">Tes koneksi Claude</button><span class="small muted" id="ai-test-r"></span></div>
+          <div class="help">Simpan dulu, baru tes. Ambil API key di <a href="https://console.anthropic.com" target="_blank" rel="noopener">console.anthropic.com</a> → API Keys (isi saldo di Billing).</div></div>
+        <div class="card"><h3>🧠 Bahan analisis</h3>
+          ${chk('news', c.news, '<b>Riset berita & fundamental</b> lewat pencarian web sebelum analisis', 'Dolar, yield, The Fed, data AS, geopolitik. Menambah biaya sekitar $0,2–0,4 per analisis.')}
+          <div class="grid c2" style="gap:0 12px"><div class="field"><label>Ketelitian riset</label><select name="news_effort">${d.efforts.map((e) => opt(e, c.news_effort, e)).join('')}</select></div>
+            ${num('news_max', c.news_max, 'Maks. pencarian / riset', '$0,01 per pencarian')}</div>
+          ${chk('intermarket', c.intermarket, '<b>Data antar-pasar</b> (indeks USD sintetis, perak, USDJPY, indeks saham jika ada di broker)')}
+          ${chk('vision', c.vision, '<b>Claude melihat gambar chart</b> selain data angka')}
+          ${chk('chart', c.chart, '<b>Kirim gambar analisis</b> bersama sinyal (Telegram & website)')}</div>
+        <div class="card"><h3>🕐 Jadwal (jam server broker)</h3>
+          <div class="grid c2" style="gap:0 12px">${num('session_start', c.session_start, 'Mulai analisis (jam)', 'Awal sesi London')}${num('session_end', c.session_end, 'Berhenti analisis (jam)', 'Akhir sesi New York')}</div>
+          ${num('friday_last', c.friday_last, 'Jumat: tidak analisis lagi mulai jam', 'Menghindari posisi menginap akhir pekan')}
+          ${chk('paused', c.paused, '<b>JEDA analisis</b> (Claude tidak dipanggil, tidak ada sinyal baru)', 'Sinyal yang sedang berjalan tetap dipantau sampai selesai.')}
+          ${chk('master_trade', c.master_trade, 'EA master ikut membuka order di akunnya sendiri')}</div>
+        <div class="card"><h3>🎯 Saringan sinyal (berlaku untuk semua EA client)</h3>
+          <div class="grid c2" style="gap:0 12px">${num('min_conf', c.min_conf, 'Keyakinan minimal (%)')}${num('min_rr', c.min_rr, 'Reward : risk minimal', '', '0.1')}
+            ${num('min_sl', c.min_sl, 'Jarak SL minimal ($)', '', '0.5')}${num('max_sl', c.max_sl, 'Jarak SL maksimal ($)', '', '0.5')}</div>
+          ${num('valid_min', c.valid_min, 'Sinyal berlaku (menit)', 'Client tidak masuk lagi sesudah waktu ini')}
+          ${num('cost_cap', c.cost_cap, 'Batas biaya Claude per hari ($)', 'Lewat batas: analisis berhenti sampai besok', '0.5')}</div>
+        <div class="card" style="grid-column:1/-1"><h3>🔑 Kunci untuk EA</h3>
+          <div class="grid c2" style="align-items:start">
+            ${keyBox('Kunci MASTER (input 0.4, hanya di MT5 master)', d.keys.master, 'Rahasia. EA master memakai kunci ini untuk mengambil semua pengaturan di halaman ini (termasuk API key) dan mengirim sinyal.')}
+            ${keyBox('Kunci CLIENT (input 0.3, untuk EA member)', d.keys.client, 'Dipakai EA client untuk mengambil sinyal.')}</div>
+          <p class="help">EA master cukup diisi: 0.1 = MASTER, 0.2 = alamat web, 0.4 = kunci master. Pengaturan Telegram ada di <a href="#/pengaturan">Pengaturan</a>.</p></div>
+        <div style="grid-column:1/-1"><button class="btn btn-gold" type="submit">Simpan Pengaturan Garuda AI</button></div>
+      </form>
+      <h3 style="margin:24px 0 10px">Sinyal terakhir</h3>
+      <div class="table-wrap"><table><thead><tr><th>Waktu</th><th>Keputusan</th><th class="right">Entry</th><th class="right">SL / TP</th><th>Hasil</th><th class="right">Biaya</th></tr></thead><tbody>
+      ${d.recent.map((r) => `<tr><td class="small nowrap">${fmtDateTime(r.created_at)}</td>
+        <td><span class="badge ${r.decision === 'BUY' ? 'b-green' : r.decision === 'SELL' ? 'b-red' : 'b-gold'}">${r.decision}</span> <span class="tiny muted">${r.confidence}%</span></td>
+        <td class="right mono small">${r.decision === 'WAIT' ? '-' : Number(r.price).toFixed(2)}</td>
+        <td class="right mono small nowrap">${r.decision === 'WAIT' ? '-' : Number(r.sl).toFixed(2) + ' / ' + Number(r.tp).toFixed(2)}</td>
+        <td class="small">${r.status === 'wait' ? '-' : r.status === 'open' ? '<span class="badge b-gold">berjalan</span>' : `<b style="color:${r.pips > 0 ? '#6ee7a2' : '#ff8b95'}">${r.pips > 0 ? '+' : ''}${Number(r.pips).toFixed(1)} pips</b> ${esc(r.status)}`}</td>
+        <td class="right small">$${Number(r.cost_usd || 0).toFixed(3)}</td></tr>`).join('') || '<tr><td colspan="6" class="empty">Belum ada analisis</td></tr>'}</tbody></table></div>`;
+    $$('[data-copy]').forEach((b) => b.onclick = () => { if (b.dataset.copy) { copy(b.dataset.copy); toast('Disalin'); } });
+    $('#ai-test').onclick = async (e) => {
+      $('#ai-test-r').textContent = 'menghubungi Claude...';
+      try {
+        const r = await busy(e.target, () => post('/admin/ai/test', {}));
+        $('#ai-test-r').textContent = `✔ ${r.model} menjawab dalam ${(r.ms / 1000).toFixed(1)} detik: "${r.text}" (biaya ±$${r.cost_usd.toFixed(4)})`;
+      } catch (err) { $('#ai-test-r').textContent = '✖ ' + err.message; }
+    };
+    $('#aif').onsubmit = async (e) => {
+      e.preventDefault();
+      const f = Object.fromEntries(new FormData(e.target));
+      const body = {
+        model: f.model, effort: f.effort, news_effort: f.news_effort, claude_key: f.claude_key,
+        news: !!f.news, intermarket: !!f.intermarket, vision: !!f.vision, chart: !!f.chart, paused: !!f.paused, master_trade: !!f.master_trade,
+        news_max: f.news_max, session_start: f.session_start, session_end: f.session_end, friday_last: f.friday_last,
+        min_conf: f.min_conf, min_rr: f.min_rr, min_sl: f.min_sl, max_sl: f.max_sl, valid_min: f.valid_min, cost_cap: f.cost_cap,
+      };
+      await busy($('#aif button[type=submit]'), () => api('/admin/ai', { method: 'PUT', body }));
+      toast('Pengaturan Garuda AI disimpan. EA master memakainya paling lambat 5 menit lagi.'); render();
     };
   }
 
