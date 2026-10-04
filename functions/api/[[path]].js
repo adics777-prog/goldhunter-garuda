@@ -67,6 +67,37 @@ async function rateLimit(env, key, max, windowSec) {
 }
 const clientIp = (request) => request.headers.get('cf-connecting-ip') || 'local';
 
+// ---- Risk warning the member agrees to when signing up. The exact text of every version is archived in
+// legal_texts and each acceptance in consents (time, IP, country, browser, language, text hash), so an admin can
+// print the signed statement later. Change RISK_VERSION whenever the wording changes.
+const RISK_VERSION = 'RW-2026-10-05';
+const RISK_TEXT = {
+  id: [
+    'Saya memahami bahwa trading forex, emas (XAUUSD) dan kripto dengan leverage berisiko sangat tinggi dan dapat menyebabkan kehilangan sebagian atau SELURUH modal saya.',
+    'Sinyal dan EA Garuda AI / GoldHunter Garuda adalah alat bantu trading, bukan nasihat investasi, bukan produk investasi, bukan pengelolaan dana, dan TIDAK menjamin profit.',
+    'Analisis AI bisa salah. Win rate, hasil dan contoh perhitungan yang ditampilkan adalah catatan masa lalu atau ilustrasi dan tidak menjamin hasil di masa depan.',
+    'Keputusan memakai sinyal atau EA, besar modal, setting, dan seluruh risiko yang timbul sepenuhnya menjadi tanggung jawab saya. GoldHunter Garuda dan admin tidak bertanggung jawab atas kerugian akibat kondisi pasar, broker, VPS, koneksi, maupun penggunaan sinyal / EA.',
+    'GoldHunter Garuda bukan broker dan tidak menerima, menyimpan atau mengelola dana trading saya. Dana saya berada di akun broker atas nama saya sendiri.',
+    'Saya hanya memakai dana yang siap saya tanggung risikonya, dan saya menyetujui peringatan risiko ini dengan sadar, tanpa paksaan.',
+  ],
+  en: [
+    'I understand that trading forex, gold (XAUUSD) and crypto with leverage carries a very high risk and can lead to the loss of part or ALL of my capital.',
+    'Garuda AI / GoldHunter Garuda signals and EAs are a trading tool, not investment advice, not an investment product, not fund management, and they do NOT guarantee profit.',
+    'AI analysis can be wrong. The win rate, results and examples shown are past records or illustrations and do not guarantee future results.',
+    'The decision to use the signals or the EA, the capital, the settings and all resulting risk are entirely my own responsibility. GoldHunter Garuda and its admin are not liable for losses caused by market conditions, brokers, VPS, connections or the use of the signals / EA.',
+    'GoldHunter Garuda is not a broker and does not accept, hold or manage my trading funds. My funds stay in a broker account in my own name.',
+    'I only use money I can afford to lose, and I accept this risk warning knowingly and without pressure.',
+  ],
+};
+async function recordConsent(env, request, userId, lang) {
+  const l = lang === 'en' ? 'en' : 'id';
+  const text = RISK_TEXT[l].map((x, i) => `${i + 1}. ${x}`).join('\n');
+  await env.DB.prepare('INSERT OR IGNORE INTO legal_texts (version, lang, text, created_at) VALUES (?,?,?,?)').bind(RISK_VERSION, l, text, now()).run();
+  await env.DB.prepare(`INSERT INTO consents (user_id, kind, version, lang, text_hash, ip, country, user_agent, accepted_at) VALUES (?,?,?,?,?,?,?,?,?)`)
+    .bind(userId, 'risk_warning', RISK_VERSION, l, await sha256(text), clientIp(request), (request.cf && request.cf.country) || '',
+      str(request.headers.get('user-agent'), 300), now()).run();
+}
+
 route('POST', '/auth/register', 'public', async ({ request, env, base }) => {
   const b = await readJson(request);
   const name = str(b.name, 80), email = str(b.email, 120).toLowerCase(), phone = str(b.phone, 30), password = String(b.password || '');
@@ -76,6 +107,7 @@ route('POST', '/auth/register', 'public', async ({ request, env, base }) => {
   if (!isEmail(email)) fail(400, 'Email tidak valid');
   if (!/^[0-9+\-\s]{8,20}$/.test(phone)) fail(400, 'Nomor WhatsApp tidak valid');
   if (password.length < 8) fail(400, 'Password minimal 8 karakter');
+  if (!b.agree) fail(400, 'Centang persetujuan risiko trading dulu');
   await rateLimit(env, 'reg:' + clientIp(request), 10, 3600);
   const exists = await env.DB.prepare('SELECT 1 FROM users WHERE email=?').bind(email).first();
   if (exists) fail(409, 'Email sudah terdaftar. Silakan login atau reset password.');
@@ -84,6 +116,7 @@ route('POST', '/auth/register', 'public', async ({ request, env, base }) => {
   const r = await env.DB.prepare('INSERT INTO users (email, name, phone, address, pass_hash, pass_salt, role, created_at) VALUES (?,?,?,?,?,?,?,?)')
     .bind(email, name, phone, address, hash, salt, role, now()).run();
   const userId = r.meta.last_row_id;
+  await recordConsent(env, request, userId, str(b.lang, 4));
   await notify(env, userId, 'Selamat datang di GoldHunter Garuda!', 'Mulai dari menu Order, atau baca "Syarat EA Gratis" untuk EA gratis.', '#/order');
   const s = await getSettings(env);
   const pwRow = (pw) => `<tr><td style="padding:6px 0;color:#a3a3b2">Password</td><td style="padding:6px 0"><b style="font-family:monospace;font-size:16px">${pw}</b></td></tr>`;
@@ -1355,6 +1388,15 @@ route('GET', '/admin/users', 'admin', async ({ env, url }) => {
     .bind(q, `%${q}%`, `%${q}%`, `%${q}%`).all();
   return json({ users: results });
 });
+// Signed risk statement of one member (the PDF is generated in the admin's browser, nothing is stored)
+route('GET', '/admin/users/:id/consent', 'admin', async ({ env, params }) => {
+  const u = await env.DB.prepare('SELECT id, email, name, phone, address, created_at FROM users WHERE id=?').bind(int(params.id) || 0).first();
+  if (!u) fail(404, 'Member tidak ditemukan');
+  const { results } = await env.DB.prepare(`SELECT c.*, t.text FROM consents c LEFT JOIN legal_texts t ON t.version = c.version AND t.lang = c.lang
+      WHERE c.user_id=? ORDER BY c.id`).bind(u.id).all();
+  return json({ user: u, consents: results, site: 'goldhuntergaruda.com' });
+});
+
 route('PUT', '/admin/users/:id', 'admin', async ({ request, env, params, user }) => {
   const b = await readJson(request);
   const id = int(params.id);

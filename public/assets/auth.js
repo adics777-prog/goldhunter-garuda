@@ -51,6 +51,7 @@
         } else if (page === 'daftar') {
           if (d.password !== d.password2) throw new Error(L('Konfirmasi password tidak sama', 'The passwords do not match'));
           if (!d.agree) throw new Error(L('Centang persetujuan risiko trading dulu', 'Please tick the trading risk agreement first'));
+          d.lang = window.GHG_LANG === 'en' ? 'en' : 'id';
           const r = await api('/auth/register', { method: 'POST', body: d });
           location.href = r.role === 'admin' ? '/admin' : (next() || '/member#/order');
         } else if (page === 'lupa') {

@@ -211,3 +211,7 @@ label.row{flex-wrap:nowrap}
 .auth-back:hover{color:var(--gold)}
 .auth-lang{position:absolute;top:0;right:0;border:1px solid var(--line);border-radius:50px;padding:4px 12px;font-size:.85rem;color:var(--text);text-decoration:none!important}
 .auth-lang:hover{border-color:var(--gold);color:var(--gold)}
+.risk-box{border:1px solid var(--line);border-radius:10px;padding:12px 14px;margin:6px 0 12px;background:var(--bg-2);font-size:.82rem;color:var(--muted);max-height:220px;overflow:auto}
+.risk-box b{color:var(--text);display:block;margin-bottom:6px}
+.risk-box ol{margin:0 0 0 18px;padding:0}
+.risk-box li{margin:0 0 6px}

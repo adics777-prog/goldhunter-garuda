@@ -378,7 +378,10 @@
       ${users.map((u) => `<tr><td>${esc(u.name)}</td><td class="small">${esc(u.email)}</td><td class="small">${esc(u.phone)} ${u.phone ? `<a href="${waLink(u.phone)}" target="_blank" rel="noopener">↗</a>` : ''}</td><td class="tiny muted" style="max-width:220px">${esc(u.address)}</td>
         <td>${u.active_licenses}</td><td>${u.orders}</td><td class="small nowrap">${fmtDate(u.created_at)}</td>
         <td>${u.role === 'admin' ? '<span class="badge b-gold">admin</span>' : '<span class="badge b-gray">member</span>'} ${u.status === 'blocked' ? '<span class="badge b-red">diblokir</span>' : ''}</td>
-        <td class="nowrap">${u.id === me.id ? '' : `<button class="btn btn-ghost btn-sm" data-u="${u.id}">Ubah</button>`}</td></tr>`).join('')}</tbody></table></div>`;
+        <td class="nowrap"><button class="btn btn-ghost btn-sm" data-pdf="${u.id}" title="Surat pernyataan persetujuan risiko (PDF)">📄 Pernyataan</button>
+          ${u.id === me.id ? '' : `<button class="btn btn-ghost btn-sm" data-u="${u.id}">Ubah</button>`}</td></tr>`).join('')}</tbody></table></div>
+      <p class="help" style="margin-top:10px">📄 <b>Pernyataan</b> = surat persetujuan risiko yang ditandatangani secara elektronik saat member mendaftar (waktu, IP, negara, perangkat, teks yang disetujui). PDF dibuat langsung di browser saat diklik, tidak disimpan di server.</p>`;
+    $$('[data-pdf]').forEach((b) => b.onclick = () => busy(b, () => consentPdf(b.dataset.pdf)));
     $$('[data-u]').forEach((b) => b.onclick = () => {
       const u = users.find((x) => x.id == b.dataset.u);
       const m = modal(u.name, `<div class="field"><label>Role</label><select id="ur"><option value="member">member</option><option value="admin" ${u.role === 'admin' ? 'selected' : ''}>admin</option></select></div>
@@ -388,6 +391,78 @@
     });
   }
 
+
+  // ------------------------------------------------------------------ signed risk statement (PDF, made in the browser)
+  async function loadJsPdf() {
+    if (window.jspdf) return window.jspdf.jsPDF;
+    await new Promise((ok, bad) => {
+      const sc = document.createElement('script');
+      sc.src = 'https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js';
+      sc.onload = ok;
+      sc.onerror = () => bad(new Error('Pustaka PDF gagal dimuat, cek koneksi internet'));
+      document.head.appendChild(sc);
+    });
+    return window.jspdf.jsPDF;
+  }
+  async function consentPdf(id) {
+    const d = await api('/admin/users/' + id + '/consent');
+    const JsPDF = await loadJsPdf();
+    const doc = new JsPDF({ unit: 'mm', format: 'a4' });
+    const W = 210, M = 18, TW = W - 2 * M;
+    let y = 20;
+    const wib = (t) => new Date((t + 7 * 3600) * 1000).toISOString().replace('T', ' ').slice(0, 19) + ' WIB';
+    const para = (txt, size = 10, style = 'normal', gap = 1.5) => {
+      doc.setFont('helvetica', style);
+      doc.setFontSize(size);
+      const lines = doc.splitTextToSize(String(txt), TW);
+      for (const ln of lines) {
+        if (y > 280) { doc.addPage(); y = 20; }
+        doc.text(ln, M, y);
+        y += size * 0.45;
+      }
+      y += gap;
+    };
+    const row = (k, v) => {
+      doc.setFont('helvetica', 'bold'); doc.setFontSize(9.5); doc.text(k, M, y);
+      doc.setFont('helvetica', 'normal');
+      const lines = doc.splitTextToSize(String(v || '-'), TW - 42);
+      doc.text(lines, M + 42, y);
+      y += Math.max(1, lines.length) * 4.4 + 0.6;
+    };
+    doc.setFillColor(20, 20, 28); doc.rect(0, 0, W, 14, 'F');
+    doc.setTextColor(245, 197, 66); doc.setFont('helvetica', 'bold'); doc.setFontSize(12); doc.text('GOLDHUNTER GARUDA · ' + d.site, M, 9);
+    doc.setTextColor(20, 20, 20);
+    y = 26;
+    para('SURAT PERNYATAAN PERSETUJUAN RISIKO TRADING', 14, 'bold', 1);
+    para('Risk Acknowledgement Statement', 10, 'italic', 4);
+    para('Data member', 11, 'bold', 1);
+    row('Nama', d.user.name);
+    row('Email', d.user.email);
+    row('WhatsApp', d.user.phone);
+    row('Alamat', d.user.address);
+    row('ID member', '#' + d.user.id);
+    row('Terdaftar', wib(d.user.created_at));
+    y += 3;
+    if (!d.consents.length) {
+      para('Tidak ada catatan persetujuan elektronik untuk member ini. Akun dibuat sebelum pencatatan persetujuan diaktifkan (5 Oktober 2026) atau dibuat oleh admin.', 10, 'italic');
+    }
+    d.consents.forEach((c, i) => {
+      para(`Persetujuan ${d.consents.length > 1 ? '#' + (i + 1) + ' ' : ''}(versi teks ${c.version}, bahasa ${c.lang === 'en' ? 'English' : 'Indonesia'})`, 11, 'bold', 1);
+      row('Waktu disetujui', wib(c.accepted_at));
+      row('Alamat IP', c.ip);
+      row('Negara', c.country || '-');
+      row('Perangkat / browser', c.user_agent);
+      row('Kode verifikasi', 'SHA-256 ' + c.text_hash);
+      y += 2;
+      para('Dengan mencentang kotak persetujuan dan menekan tombol Daftar di ' + d.site + ', member menyatakan:', 10, 'normal', 1);
+      String(c.text || '').split('\n').forEach((ln) => para(ln, 10, 'normal', 1));
+      y += 3;
+    });
+    para('Persetujuan di atas diberikan secara elektronik oleh pemilik akun saat pendaftaran dan tercatat otomatis oleh sistem. Kode verifikasi adalah sidik digital (SHA-256) dari teks persis yang ditampilkan kepada member; perubahan satu huruf pada teks menghasilkan kode yang berbeda.', 9, 'normal', 2);
+    para('Dokumen dibuat dari catatan sistem pada ' + wib(Math.floor(Date.now() / 1000)) + '.', 8.5, 'italic', 0);
+    const safe = String(d.user.name || 'member').replace(/[^A-Za-z0-9]+/g, '_').slice(0, 40);
+    doc.save(`Pernyataan_Risiko_${safe}_${d.user.id}.pdf`);
+  }
 
   // ------------------------------------------------------------------ profit board
   async function profitPage() {
