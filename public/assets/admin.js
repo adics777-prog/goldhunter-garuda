@@ -569,6 +569,15 @@
           <label>Rekening / e-wallet tujuan transfer (tampil ke member saat bayar)</label>
           <div id="bkl">${(s.bank_list || []).map(bankRow).join('')}</div>
           <button type="button" class="btn btn-ghost btn-sm" id="addbk" style="margin:4px 0 16px">+ Tambah rekening</button>
+          <div class="usdt-admin">
+            <label class="row small" style="color:var(--text);margin-bottom:10px"><input type="checkbox" name="usdt_enabled" ${s.usdt_enabled === '1' ? 'checked' : ''}> <b>Terima pembayaran USDT (jaringan TRC20)</b></label>
+            <div class="grid c2" style="gap:0 14px;align-items:start">
+              <div><div class="field"><label>Alamat wallet USDT TRC20</label><input name="usdt_address" value="${esc(s.usdt_address || '')}" placeholder="T..." class="mono" autocomplete="off">
+                <div class="help">34 karakter, diawali huruf <b>T</b>. Nominal USDT dihitung otomatis dari total rupiah dan kurs hari ini.</div></div>
+                <div class="field"><label>Barcode / QR alamat (PNG / JPG)</label><input type="file" id="usdt-qr-file" accept="image/png,image/jpeg,image/webp">
+                  <div class="help">Ambil dari aplikasi wallet / exchange (menu Receive / Deposit USDT TRC20). Langsung tersimpan saat dipilih.</div></div></div>
+              <div id="usdt-qr-box">${s.usdt_qr_set ? `<img src="/api/usdt-qr?t=${Date.now()}" alt="QR USDT" class="usdt-qr" onerror="this.replaceWith(Object.assign(document.createElement('div'),{className:'tiny muted',textContent:'QR tersimpan; aktifkan USDT untuk menampilkannya.'}))"><button type="button" class="btn btn-ghost btn-sm" id="usdt-qr-del" style="display:block;margin-top:8px">Hapus QR</button>` : '<div class="tiny muted">Belum ada QR.</div>'}</div>
+            </div></div>
           <div class="grid c2" style="gap:0 12px"><div class="field"><label>Batas waktu bayar (jam)</label><input name="pay_deadline_hours" type="number" min="1" value="${esc(s.pay_deadline_hours)}"></div>
           <div class="field"><label>Kode unik</label><input value="Selalu aktif: 3 digit, berbeda tiap order (30 hari)" disabled></div></div>
           <h3 style="margin-top:8px">Durasi sewa &amp; diskon</h3>
@@ -688,6 +697,15 @@
       else toast('Gagal ke: ' + bad.map((x) => `${x.name || x.chat_id} (${x.error})`).join(', '), 'err');
     };
     $('#addbk').onclick = () => $('#bkl').insertAdjacentHTML('beforeend', bankRow());
+    $('#usdt-qr-file').onchange = async (e) => {
+      const f = e.target.files[0];
+      if (!f) return;
+      if (f.size > 600 * 1024) { toast('Gambar QR maksimal 600 KB', 'err'); return; }
+      const image = await new Promise((ok, bad) => { const r = new FileReader(); r.onload = () => ok(r.result); r.onerror = bad; r.readAsDataURL(f); });
+      try { await api('/admin/usdt-qr', { method: 'POST', body: { image } }); toast('QR USDT tersimpan'); render(); } catch (err) { toast(err.message, 'err'); }
+    };
+    const qd = $('#usdt-qr-del');
+    if (qd) qd.onclick = async () => { await api('/admin/usdt-qr', { method: 'DELETE' }); toast('QR dihapus'); render(); };
     $('#bkl').onclick = (e) => { if (e.target.classList.contains('bk-del')) e.target.closest('.bkr').remove(); };
     if (!(s.bank_list || []).length) $('#bkl').insertAdjacentHTML('beforeend', bankRow());
     $('#test-email').onclick = async (e) => {
@@ -700,6 +718,7 @@
       e.preventDefault();
       const d = Object.fromEntries(new FormData(e.target));
       const body = {
+        usdt_enabled: d.usdt_enabled ? '1' : '0', usdt_address: (d.usdt_address || '').trim(),
         bank_list: $$('.bkr').map((r) => ({ bank: $('.bk-bank', r).value.trim(), number: $('.bk-num', r).value.trim(), name: $('.bk-name', r).value.trim(), active: $('.bk-act', r).checked }))
           .filter((x) => x.bank || x.number),
         pay_deadline_hours: d.pay_deadline_hours,

@@ -213,13 +213,27 @@
         ${b.name ? `<div class="tiny muted">a.n. <b style="color:var(--text)">${esc(b.name)}</b></div>` : ''}
         <button class="btn btn-ghost btn-sm" data-copy="${esc(String(b.number).replace(/[\s-]/g, ''))}">Salin nomor</button></div>`).join('')}</div>`
     : '<div class="alert warn small">Rekening tujuan belum diatur admin. Silakan hubungi admin sebelum transfer.</div>';
+  // USDT (TRC20): amount, address and QR next to the bank accounts
+  const usdtBox = (u) => !u || !u.amount ? '' : `<div class="usdt-card">
+      <div class="row between" style="gap:10px;flex-wrap:wrap"><b>💠 Bayar dengan USDT · jaringan TRC20</b><span class="tiny muted">kurs ${rupiah(u.rate)} / USD</span></div>
+      <div class="row" style="gap:16px;align-items:center;flex-wrap:wrap;margin-top:10px">
+        ${u.qr ? '<img src="/api/usdt-qr" alt="QR alamat USDT" class="usdt-qr">' : ''}
+        <div style="flex:1;min-width:200px">
+          <div class="tiny muted">Nominal</div>
+          <div class="row" style="gap:8px;align-items:center"><span class="total" style="font-size:1.3rem">${u.amount.toFixed(2)} USDT</span><button class="btn btn-ghost btn-sm" type="button" data-copy="${u.amount.toFixed(2)}">Salin</button></div>
+          <div class="tiny muted" style="margin-top:8px">Alamat TRC20</div>
+          <div class="mono small" style="overflow-wrap:anywhere">${esc(u.address)}</div>
+          <button class="btn btn-ghost btn-sm" type="button" style="margin-top:6px" data-copy="${esc(u.address)}">Salin alamat</button>
+        </div></div>
+      <div class="alert warn small" style="margin-top:10px">Kirim <b>hanya lewat jaringan TRON (TRC20)</b>. Jaringan lain (ERC20, BEP20) = dana tidak bisa kembali. Setelah kirim, konfirmasi dengan screenshot dan <b>TX hash</b> di catatan.</div>
+    </div>`;
   const waButton = (whatsapp, text, label = '💬 Ada kendala? Chat admin via WhatsApp') => {
     const wa = waLink(whatsapp, text);
     return wa ? `<a class="btn btn-ghost btn-sm" target="_blank" rel="noopener" href="${wa}">${label}</a>` : '';
   };
 
   async function orderDetail(id) {
-    const { order: o, banks, whatsapp } = await api('/orders/' + id);
+    const { order: o, banks, whatsapp, usdt } = await api('/orders/' + id);
     const free = o.billing === 'free';
     const steps = [
       ['Pesanan dibuat', o.created_at],
@@ -235,7 +249,7 @@
         <p class="muted small">Transfer <b>tepat</b> sesuai nominal, <b>termasuk 3 digit kode unik</b>, sebelum <b>${fmtDateTime(o.pay_deadline)}</b>.</p>
         <div class="summary" style="margin:14px 0"><div class="muted small">Total transfer (kode unik <b>${o.unique_code}</b>)</div>
           <div class="row between"><span class="total">${totalHtml(o)}</span><button class="btn btn-outline btn-sm" data-copy="${o.total}">Salin nominal</button></div></div>
-        <div style="margin-bottom:18px"><div class="small muted" style="margin-bottom:8px">Transfer ke salah satu rekening berikut:</div>${bankList(banks)}</div>
+        <div style="margin-bottom:18px"><div class="small muted" style="margin-bottom:8px">Transfer ke salah satu rekening berikut:</div>${(banks || []).length || !(usdt && usdt.amount) ? bankList(banks) : ''}${usdtBox(usdt)}</div>
         <div class="row"><a class="btn btn-gold" href="#/bayar/${o.id}">Saya Sudah Transfer → Konfirmasi Pembayaran</a>
           ${o.proof_file_id ? '' : '<button class="btn btn-red btn-sm" type="button" id="cancel">Batalkan pesanan</button>'}</div>
         <div style="margin-top:12px">${waButton(whatsapp, `Halo admin GoldHunter Garuda, saya ada kendala pembayaran pesanan ${o.code}`)}</div></div>`;
@@ -294,7 +308,7 @@
         <div style="margin-top:16px">${waButton(c.whatsapp, 'Halo admin GoldHunter Garuda, saya ada kendala pembayaran')}</div>`;
       return;
     }
-    const { order: o, banks, whatsapp } = await api('/orders/' + id);
+    const { order: o, banks, whatsapp, usdt } = await api('/orders/' + id);
     if (!['awaiting_payment', 'awaiting_verification'].includes(o.status) || !o.total) { location.replace('#/pesanan/' + o.id); return; }
     view.innerHTML = `
       <div class="crumb"><a href="#/pesanan/${o.id}">← Pesanan ${esc(o.code)}</a></div>
@@ -310,14 +324,15 @@
           <div class="summary" style="margin-bottom:16px"><div class="muted small">Pesanan ${esc(o.code)} · ${esc(o.product_name)} · akun ${esc(o.account_number)}</div>
             <div class="row between"><span class="total">${totalHtml(o)}</span><span class="tiny muted">kode unik <b style="color:var(--green)">${o.unique_code}</b></span></div></div>
           <div class="grid c2" style="gap:0 14px"><div class="field"><label>Nama pemilik rekening pengirim</label><input name="payer_name" value="${esc(o.payer_name || me.name)}" required></div>
-          <div class="field"><label>Dari bank / e-wallet</label><input name="payer_bank" value="${esc(o.payer_bank)}" placeholder="BCA / BRI / DANA / ..." required></div></div>
+          <div class="field"><label>Dari bank / e-wallet</label><input name="payer_bank" value="${esc(o.payer_bank)}" placeholder="BCA / BRI / DANA / USDT TRC20" required></div></div>
+          ${usdt && usdt.amount ? '<div class="help" style="margin:-6px 0 12px">Bayar dengan USDT? Isi <b>USDT TRC20</b> di kolom bank, nama pengirim = nama Anda, dan tempel <b>TX hash</b> di catatan.</div>' : ''}
           <div class="field"><label>Foto / screenshot bukti transfer</label><input type="file" name="proof" accept="image/*,application/pdf" required>
             <div class="help">Pastikan nominal, tanggal dan rekening tujuan terlihat jelas. Foto otomatis dikecilkan.</div></div>
           <div class="field"><label>Catatan untuk admin (opsional)</label><input name="note" value="${esc(o.member_note)}"></div>
           <button class="btn btn-gold btn-block" type="submit">Kirim Bukti Transfer</button>
         </form>
         <div class="stack">
-          <div class="card"><h3>Rekening tujuan</h3>${bankList(banks)}
+          <div class="card"><h3>Rekening tujuan</h3>${(banks || []).length || !(usdt && usdt.amount) ? bankList(banks) : ''}${usdtBox(usdt)}
             <p class="tiny muted" style="margin-top:10px">Batas pembayaran: ${fmtDateTime(o.pay_deadline)}</p></div>
           <div class="card"><h3>Ada kendala?</h3><p class="small muted" style="margin-bottom:12px">Salah nominal, transfer gagal, atau bukti tidak bisa diupload? Hubungi admin, sebutkan kode pesanan <b>${esc(o.code)}</b>.</p>
             ${waButton(whatsapp, `Halo admin GoldHunter Garuda, saya ada kendala pembayaran pesanan ${o.code} (total ${rupiah(o.total)})`, '💬 Chat Admin via WhatsApp') || '<span class="muted small">Kontak admin belum diatur.</span>'}</div>

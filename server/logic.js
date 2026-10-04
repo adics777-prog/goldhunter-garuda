@@ -192,11 +192,13 @@ export async function createOrder(env, base, user, fields) {
       `<p>${esc(user.name)} (${esc(user.email)}) mengajukan EA gratis untuk akun ${esc(fields.broker)} <b>${esc(fields.account_number)}</b>. Cek di portal partner bahwa akun ini di bawah IB Anda, lalu klik Proses.</p>`, '/admin#/pesanan/' + id);
     return id;
   }
+  const usdt = await usdtPay(env, s, total);
   const banks = activeBanks(s).map((b) => `<li><b>${esc(b.bank)}</b> <span style="font-family:monospace;font-size:16px;color:#f5c542">${esc(b.number)}</span>${b.name ? ` a.n. <b>${esc(b.name)}</b>` : ''}</li>`).join('');
   const wa = s.whatsapp ? `https://wa.me/${String(s.whatsapp).replace(/\D/g, '').replace(/^0/, '62')}` : '';
   const payBlock = `<p>Silakan transfer <b>tepat</b> sebesar:</p><p style="font-size:24px;font-weight:bold;color:#f5c542;margin:6px 0">${rupiah(total)}</p>
        <p style="color:#a3a3b2;font-size:13px;margin-top:0">sudah termasuk 3 digit kode unik <b>${uniq}</b> agar pembayaran Anda mudah dikenali.</p>
        ${banks ? `<p>Ke salah satu rekening berikut:</p><ul>${banks}</ul>` : ''}
+       ${usdt && usdt.amount ? `<p>Atau bayar dengan <b>USDT jaringan TRC20</b> sebesar <b style="color:#f5c542">${usdt.amount.toFixed(2)} USDT</b> ke alamat:<br><span style="font-family:monospace;font-size:14px;color:#f5c542">${esc(usdt.address)}</span><br><span style="color:#a3a3b2;font-size:12px">Hanya jaringan TRON (TRC20). Kirim lewat jaringan lain = dana tidak bisa kembali.</span></p>` : ''}
        <p>Setelah transfer, buka halaman <b>Tagihan &amp; Pembayaran</b> dan upload bukti transfer.</p>
        ${wa ? `<p>Ada kendala? <a href="${wa}" style="color:#f5c542">Chat admin via WhatsApp</a>.</p>` : ''}`;
   if (fields.invoice) {
@@ -263,6 +265,16 @@ const RATE_SOURCES = [
   ['fawazahmed0 currency-api', 'https://cdn.jsdelivr.net/npm/@fawazahmed0/currency-api@latest/v1/currencies/usd.min.json', (j) => j.usd && j.usd.idr],
   ['frankfurter (ECB)', 'https://api.frankfurter.dev/v1/latest?base=USD&symbols=IDR', (j) => j.rates && j.rates.IDR],
 ];
+// USDT (TRC20) payment: shown next to the bank accounts when the admin enabled it. Amount = rupiah total / live rate,
+// rounded up to 2 decimals (the 3-digit unique code already makes every order's amount different)
+export const TRC20_RE = /^T[1-9A-HJ-NP-Za-km-z]{33}$/;
+export async function usdtPay(env, s, totalIdr, waitUntil) {
+  if (s.usdt_enabled !== '1' || !TRC20_RE.test(s.usdt_address || '')) return null;
+  const { rate } = await getUsdIdr(env, waitUntil);
+  return { network: 'TRC20', address: s.usdt_address, qr: !!s.usdt_qr_file_id, rate: rate || 0,
+    amount: rate && totalIdr ? Math.ceil((totalIdr / rate) * 100) / 100 : 0 };
+}
+
 export async function getUsdIdr(env, waitUntil) {
   const cache = caches.default;
   const key = new Request('https://goldhuntergaruda.com/__cache/usd-idr-v2');

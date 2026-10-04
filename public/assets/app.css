@@ -215,3 +215,6 @@ label.row{flex-wrap:nowrap}
 .risk-box b{color:var(--text);display:block;margin-bottom:6px}
 .risk-box ol{margin:0 0 0 18px;padding:0}
 .risk-box li{margin:0 0 6px}
+.usdt-card{border:1px solid #1f6f5c;background:rgba(38,161,123,.08);border-radius:12px;padding:14px;margin-top:12px}
+.usdt-qr{width:150px;height:150px;object-fit:contain;background:#fff;border-radius:10px;padding:6px}
+.usdt-admin{border-top:1px solid var(--line);padding-top:14px;margin:4px 0 16px}

@@ -7,6 +7,7 @@ import {
 import {
   getSettings, putSetting, quote, notify, emailUser, emailAdmin, newOrderCode, getUser, getProduct,
   processOrder, completeOrder, queueBuild, claimBuild, rebuildAll, finishBuild, runDaily, orderStatusLabel, pickUniqueCode, ensureUniqueCode, createOrder, changeOrderMonths, getUsdIdr, toIdr, boardName, maskAccount, reportInterval, activeBanks,
+  usdtPay, TRC20_RE,
 } from '../../server/logic.js';
 import { layout, sendEmail } from '../../server/email.js';
 
@@ -228,6 +229,30 @@ route('GET', '/catalog', 'public', async ({ env }) => {
       ? { min: Number(s.profit_est_min_idr), max: Number(s.profit_est_max_idr), basis: s.profit_est_basis } : null,
     ib_brokers: s.ib_brokers.filter((b) => b.active && b.link), whatsapp: s.whatsapp || '',
   });
+});
+
+// QR code of the USDT (TRC20) address, uploaded by the admin
+route('GET', '/usdt-qr', 'public', async ({ env }) => {
+  const s = await getSettings(env);
+  const f = s.usdt_enabled === '1' && s.usdt_qr_file_id ? await env.DB.prepare("SELECT mime, data_b64 FROM files WHERE id=? AND kind='usdt_qr'").bind(int(s.usdt_qr_file_id)).first() : null;
+  if (!f) fail(404, 'QR belum diatur');
+  return new Response(unb64(f.data_b64), { headers: { 'content-type': f.mime, 'cache-control': 'public, max-age=300' } });
+});
+route('POST', '/admin/usdt-qr', 'admin', async ({ request, env }) => {
+  const b = await readJson(request);
+  const m = String(b.image || '').match(/^data:(image\/(?:png|jpeg|webp));base64,([A-Za-z0-9+/=]+)$/);
+  if (!m) fail(400, 'Gambar QR harus PNG / JPG / WEBP');
+  if (m[2].length > 900000) fail(400, 'Gambar QR terlalu besar (maks. 600 KB)');
+  const r = await env.DB.prepare('INSERT INTO files (user_id, kind, name, mime, size, data_b64, created_at) VALUES (NULL, ?, ?, ?, ?, ?, ?)')
+    .bind('usdt_qr', 'usdt-qr', m[1], Math.round(m[2].length * 0.75), m[2], now()).run();
+  await env.DB.prepare("DELETE FROM files WHERE kind='usdt_qr' AND id<>?").bind(r.meta.last_row_id).run();
+  await putSetting(env, 'usdt_qr_file_id', String(r.meta.last_row_id));
+  return json({ ok: true });
+});
+route('DELETE', '/admin/usdt-qr', 'admin', async ({ env }) => {
+  await env.DB.prepare("DELETE FROM files WHERE kind='usdt_qr'").run();
+  await env.DB.prepare("DELETE FROM settings WHERE key='usdt_qr_file_id'").run();
+  return json({ ok: true });
 });
 
 // Visitor country from Cloudflare (website language: Indonesian visitors get Indonesian)
@@ -947,13 +972,14 @@ route('GET', '/orders', 'member', async ({ env, user }) => {
   return json({ orders: results.map((o) => ({ ...o, status_label: orderStatusLabel(o.status) })) });
 });
 
-route('GET', '/orders/:id', 'member', async ({ env, user, params }) => {
+route('GET', '/orders/:id', 'member', async ({ env, user, params, waitUntil }) => {
   const o = await env.DB.prepare(`SELECT o.*, p.name AS product_name, p.billing, p.includes_ea, p.includes_vps, p.requires_ib, p.managed_vps, p.kind AS product_kind
       FROM orders o JOIN products p ON p.id=o.product_id WHERE o.id=? AND o.user_id=?`).bind(int(params.id), user.id).first();
   if (!o) fail(404, 'Pesanan tidak ditemukan');
   delete o.trading_pass_enc;
   const s = await getSettings(env);
-  return json({ order: { ...o, status_label: orderStatusLabel(o.status) }, banks: activeBanks(s), whatsapp: s.whatsapp || '' });
+  return json({ order: { ...o, status_label: orderStatusLabel(o.status) }, banks: activeBanks(s), whatsapp: s.whatsapp || '',
+    usdt: await usdtPay(env, s, o.total, waitUntil) });
 });
 
 route('POST', '/orders/:id/confirm', 'member', async ({ request, env, user, params, base }) => {
@@ -1438,12 +1464,13 @@ route('PUT', '/admin/products/:id', 'admin', async ({ request, env, params }) =>
 const EDITABLE_SETTINGS = ['durations', 'discounts', 'bank_list', 'admin_notify_email', 'whatsapp', 'pay_deadline_hours', 'reminder_days', 'mt4_enabled',
   'ib_brokers', 'auto_complete_ea', 'auto_process_paid', 'welcome_email_password', 'email_provider', 'email_from', 'email_from_name', 'vps_spec',
   'min_capital_usd', 'invoice_days_before', 'auto_rebuild_on_version', 'report_interval_min', 'board_enabled', 'board_name_mode', 'board_landing_top', 'board_stale_days', 'profit_est_enabled', 'profit_est_min_idr', 'profit_est_max_idr', 'profit_est_basis',
-  'telegram_enabled', 'telegram_targets', 'telegram_wait', 'telegram_wait_hours'];
+  'telegram_enabled', 'telegram_targets', 'telegram_wait', 'telegram_wait_hours', 'usdt_enabled', 'usdt_address'];
 route('GET', '/admin/settings', 'admin', async ({ env }) => {
   const s = await getSettings(env);
   const out = Object.fromEntries(EDITABLE_SETTINGS.map((k) => [k, s[k] ?? '']));
   out.email_api_key_set = !!s.email_api_key_enc;
   out.telegram_bot_token_set = !!s.telegram_bot_token_enc;
+  out.usdt_qr_set = !!s.usdt_qr_file_id;
   out._env = { email_provider: env.EMAIL_PROVIDER || 'log', email_from: env.EMAIL_FROM || '', site_url: env.SITE_URL || '',
     builder_token_set: !!env.BUILDER_TOKEN, cron_secret_set: !!env.CRON_SECRET, data_key_set: !!env.DATA_KEY };
   return json(out);
@@ -1467,6 +1494,8 @@ route('PUT', '/admin/settings', 'admin', async ({ request, env }) => {
       v = v.map((x) => ({ name: str(x.name, 60), chat_id: str(x.chat_id, 64).replace(/\s/g, ''), active: x.active !== false })).filter((x) => x.chat_id);
       for (const x of v) if (!/^(-?\d+|@[A-Za-z0-9_]{4,})$/.test(x.chat_id)) fail(400, `Chat ID "${x.chat_id}" tidak valid (angka seperti -1001234567890 atau @namachannel)`);
     }
+    if (k === 'usdt_address' && v && !TRC20_RE.test(str(v, 60))) fail(400, 'Alamat USDT TRC20 tidak valid (34 karakter, diawali huruf T)');
+    if (k === 'usdt_enabled') v = v === '1' || v === true ? '1' : '0';
     if (k === 'telegram_wait_hours') { const n = Math.round(Number(v)); if (!(n >= 1 && n <= 24)) fail(400, 'Jeda analisis TUNGGU harus 1 sampai 24 jam'); v = String(n); }
     if (k === 'ib_brokers') v = v.map((x) => ({ name: str(x.name, 40), link: str(x.link, 300), active: !!x.active })).filter((x) => x.name);
     if (k === 'email_provider' && !['', 'log', 'resend', 'brevo'].includes(v)) fail(400, 'Penyedia email tidak dikenal');
