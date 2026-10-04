@@ -693,7 +693,7 @@
           <div class="field"><label>Interval analisis per pasar</label><select name="interval_min">
             ${[[60, 'Tiap 60 menit (hemat)'], [30, 'Tiap 30 menit (biaya ±2x)'], [15, 'Tiap 15 menit (biaya ±4x)']].map(([v, l]) => opt(v, Number(c.interval_min) || 60, l)).join('')}</select>
             <div class="help">Analisis tidak jalan selama sinyal pasar itu masih berjalan. Batas biaya per hari tetap berlaku.</div></div>
-          ${chk('level_trigger', c.level_trigger, '<b>Analisis cepat di level Claude</b>', 'Saat Claude menjawab TUNGGU, EA memantau level / zona yang ia sebut dan langsung menganalisis ulang begitu harga menyentuhnya (paling cepat 15 menit sekali, maks. 2x per jam).')}
+          ${chk('level_trigger', c.level_trigger, '<b>Analisis cepat di level Claude</b>', 'Saat Claude menjawab TUNGGU, EA memantau level / zona yang ia sebut dan langsung menganalisis ulang begitu harga menyentuhnya (paling cepat 20 menit sesudah analisis, maks. 1x per jam; level yang sudah dekat harga saat analisis tidak dipicu).')}
           <p class="help">Jam mulai / berhenti per pasar diatur di kartu Pasar di bawah; nilai di sini adalah cadangan.</p>
           ${chk('paused', c.paused, '<b>JEDA analisis</b> (Claude tidak dipanggil, tidak ada sinyal baru)', 'Sinyal yang sedang berjalan tetap dipantau sampai selesai.')}
           ${chk('master_trade', c.master_trade, 'EA master ikut membuka order di akunnya sendiri')}</div>
