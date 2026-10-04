@@ -60,7 +60,7 @@
 <script src="/assets/common.js?v=94a3104e"></script>
 <script>
 (() => {
-  const { $, esc, fmtDateTime, ago } = GHG;
+  const { $, esc, fmtDateTime, ago, modal } = GHG;
   const num = (v) => v == null ? '-' : Number(v).toFixed(2);
   const pipsTxt = (p) => p == null ? '-' : (p > 0 ? '+' : '') + Number(p).toFixed(1) + ' pips';
   const STATUS = { open: ['b-gold', 'BERJALAN'], TP: ['b-green', 'TP'], SL: ['b-red', 'SL'], BE: ['b-gold', 'BREAK EVEN'], CLOSE: ['b-gold', 'DITUTUP'] };
@@ -96,7 +96,8 @@
           : `<div class="${r.pips > 0 ? 'pos' : (r.pips < 0 ? 'neg' : '')} nowrap">${pipsTxt(r.pips)}</div><span class="badge ${st[0]}">${st[1]}</span>`;
         return `<tr><td class="nowrap small">${esc(fmtDateTime(r.created_at))}</td>
           <td>${side(r.decision)} <span class="tiny muted">${r.confidence}%</span>
-            ${r.locked ? '<div class="lock">🔒 Entry, SL, TP sinyal yang masih berjalan khusus member. <a href="/masuk">Masuk</a></div>' : (r.reason ? `<div class="why">${esc(r.reason)}</div>` : '')}</td>
+            ${r.locked ? '<div class="lock">🔒 Entry, SL, TP sinyal yang masih berjalan khusus member. <a href="/masuk">Masuk</a></div>' : (r.reason ? `<div class="why">${esc(r.reason)}</div>` : '')}
+            ${r.has_chart || r.has_close_chart ? `<button type="button" class="btn btn-ghost btn-sm" style="margin-top:6px" data-chart="${r.id}" data-open="${r.has_chart ? 1 : 0}" data-close="${r.has_close_chart ? 1 : 0}">📈 Chart</button>` : ''}</td>
           <td class="right mono small">${num(r.price)}</td>
           <td class="right mono small hide-sm">${num(r.sl)}</td>
           <td class="right mono small hide-sm">${num(r.tp)}</td>
@@ -104,6 +105,14 @@
       }).join('')}</tbody></table></div>`
       : '<div class="card empty">Belum ada sinyal BUY / SELL.</div>';
   }
+  $('#list').onclick = (e) => {
+    const b = e.target.closest('[data-chart]');
+    if (!b) return;
+    const id = b.dataset.chart;
+    const img = (kind, cap) => `<figure style="margin:0 0 16px"><figcaption class="small muted" style="margin-bottom:6px">${cap}</figcaption>
+      <a href="/api/signal/${id}/chart?kind=${kind}" target="_blank" rel="noopener"><img src="/api/signal/${id}/chart?kind=${kind}" alt="Chart ${cap}" style="width:100%;height:auto;border-radius:10px;border:1px solid var(--line)" loading="lazy"></a></figure>`;
+    modal(`Chart sinyal #S${id}`, (b.dataset.open === '1' ? img('open', 'Saat sinyal dibuat') : '') + (b.dataset.close === '1' ? img('close', 'Saat sinyal selesai') : ''), { wide: true });
+  };
   load();
   setInterval(load, 60000);
 })();

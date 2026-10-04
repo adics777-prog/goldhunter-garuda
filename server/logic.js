@@ -3,7 +3,7 @@ import { now, DAY, fail, addMonths, fmtDate, rupiah, esc, randomToken } from './
 import { layout, sendEmail } from './email.js';
 
 // ---------- settings ----------
-const JSON_KEYS = ['durations', 'discounts', 'reminder_days', 'ib_brokers', 'bank_list'];
+const JSON_KEYS = ['durations', 'discounts', 'reminder_days', 'ib_brokers', 'bank_list', 'telegram_targets'];
 export async function getSettings(env) {
   const { results } = await env.DB.prepare('SELECT key, value FROM settings').all();
   const s = {};

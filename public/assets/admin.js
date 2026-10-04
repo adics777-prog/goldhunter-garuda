@@ -481,6 +481,10 @@
       <input class="bk-bank" value="${esc(b.bank)}" placeholder="Bank / e-wallet (BCA, DANA…)"><input class="bk-num" value="${esc(b.number)}" placeholder="Nomor rekening" inputmode="numeric">
       <input class="bk-name" value="${esc(b.name)}" placeholder="Atas nama"><label class="row nowrap" style="margin:0;color:var(--text)"><input type="checkbox" class="bk-act" ${b.active !== false ? 'checked' : ''}> aktif</label>
       <button type="button" class="btn btn-red btn-sm bk-del" title="Hapus">✕</button></div>`;
+    const tgRow = (t = { name: '', chat_id: '', active: true }) => `<div class="tgr" style="display:grid;grid-template-columns:1.2fr 1.4fr auto auto;gap:8px;align-items:center;margin-bottom:8px">
+      <input class="tg-name" value="${esc(t.name)}" placeholder="Nama (mis. Channel VIP)"><input class="tg-id mono" value="${esc(t.chat_id)}" placeholder="-1001234567890 atau @namachannel">
+      <label class="row nowrap" style="margin:0;color:var(--text)"><input type="checkbox" class="tg-act" ${t.active !== false ? 'checked' : ''}> aktif</label>
+      <button type="button" class="btn btn-red btn-sm tg-del" title="Hapus">✕</button></div>`;
     const brokerRow = (b = { name: '', link: '', active: true }) => `<div class="row ibr" style="margin-bottom:8px;flex-wrap:nowrap">
       <input class="ib-name" value="${esc(b.name)}" placeholder="Broker" style="max-width:120px"><input class="ib-link" style="flex:1" value="${esc(b.link)}" placeholder="https://link-ib-anda">
       <label class="row nowrap" style="margin:0;color:var(--text)"><input type="checkbox" class="ib-act" ${b.active ? 'checked' : ''}> aktif</label></div>`;
@@ -536,6 +540,28 @@
               <li>Menu <b>API Keys → Create API Key</b> (permission: Sending access), salin key-nya.</li>
               <li>Di sini: pilih <b>Resend</b>, email pengirim <span class="mono">no-reply@goldhuntergaruda.com</span>, tempel API key, <b>Simpan</b>, lalu <b>Kirim email tes</b>.</li></ol></div>
           </div></div>
+        <div class="card" style="grid-column:1/-1" id="tg-card"><div class="row between"><h3 style="margin:0">📣 Telegram (sinyal Garuda AI)</h3>
+            <span>${s.telegram_enabled === '1' && s.telegram_bot_token_set ? '<span class="badge b-green">Aktif</span>' : '<span class="badge b-orange">Belum aktif</span>'}</span></div>
+          <div class="grid c2" style="margin-top:14px;align-items:start">
+            <div>
+              <label class="row small" style="color:var(--text);margin-bottom:12px"><input type="checkbox" name="telegram_enabled" ${s.telegram_enabled === '1' ? 'checked' : ''}> Kirim setiap sinyal BUY / SELL (dengan gambar chart) dan hasilnya ke Telegram</label>
+              <div class="field"><label>Token bot ${s.telegram_bot_token_set ? '<span class="badge b-green">tersimpan</span>' : ''}</label><input name="telegram_bot_token" type="password" autocomplete="off" placeholder="${s.telegram_bot_token_set ? 'kosongkan = tidak diubah' : '123456789:AAH... (dari @BotFather)'}">
+                <div class="help">Disimpan terenkripsi di database.</div></div>
+              <label>Target channel / grup (boleh lebih dari satu)</label>
+              <div id="tgl">${(s.telegram_targets || []).map(tgRow).join('')}</div>
+              <div class="row" style="margin:4px 0 14px"><button type="button" class="btn btn-ghost btn-sm" id="addtg">+ Tambah target</button>
+                <button type="button" class="btn btn-outline btn-sm" id="tg-find">🔎 Cari chat ID</button>
+                <button type="button" class="btn btn-outline btn-sm" id="tg-test">Kirim pesan tes</button></div>
+              <div class="help">Simpan pengaturan dulu, baru <b>Cari chat ID</b> atau <b>Kirim pesan tes</b>.</div>
+            </div>
+            <div class="alert info small"><b>Cara menyiapkan bot:</b>
+              <ol style="margin:8px 0 0 18px"><li>Di Telegram buka <b>@BotFather</b> → <span class="mono">/newbot</span> → beri nama, misalnya <i>Garuda AI Signal</i>. Salin <b>token</b> yang diberikan.</li>
+              <li>Tempel token di sini, centang kirim ke Telegram, lalu <b>Simpan</b>.</li>
+              <li>Tambahkan bot ke setiap channel / grup tujuan sebagai <b>admin</b> (izin kirim pesan).</li>
+              <li>Kirim satu pesan apa saja di channel / grup itu, lalu klik <b>Cari chat ID</b> dan pilih <b>+ Tambah</b>. Channel publik juga bisa diisi langsung <span class="mono">@namachannel</span>.</li>
+              <li><b>Simpan</b> lagi, lalu <b>Kirim pesan tes</b>.</li></ol>
+              <p style="margin-top:8px">Setiap sinyal dikirim dengan gambar chart analisis. Saat sinyal selesai (TP / SL / BE), hasil pips dan point dikirim sebagai balasan ke pesan sinyalnya.</p></div>
+          </div></div>
         <div class="card" style="grid-column:1/-1"><h3>📈 Potensi profit di promo (landing page)</h3>
           <div class="grid" style="grid-template-columns:repeat(auto-fit,minmax(min(220px,100%),1fr));gap:0 14px">
             <div class="field"><label>Potensi profit minimum / bulan (Rp)</label><input name="profit_est_min_idr" type="number" min="0" step="1000" value="${esc(s.profit_est_min_idr)}" placeholder="contoh 150000"></div>
@@ -555,6 +581,34 @@
         <div style="grid-column:1/-1"><button class="btn btn-gold" type="submit">Simpan Pengaturan</button></div>
       </form>`;
     $('#addib').onclick = () => $('#ibl').insertAdjacentHTML('beforeend', brokerRow());
+    $('#addtg').onclick = () => $('#tgl').insertAdjacentHTML('beforeend', tgRow());
+    $('#tgl').onclick = (e) => { if (e.target.classList.contains('tg-del')) e.target.closest('.tgr').remove(); };
+    if (!(s.telegram_targets || []).length) $('#tgl').insertAdjacentHTML('beforeend', tgRow());
+    $('#tg-find').onclick = async (e) => {
+      const r = await busy(e.target, () => post('/admin/telegram/chats', {}));
+      if (r.error) return toast(r.error, 'err');
+      const have = new Set($$('.tg-id').map((i) => i.value.trim()));
+      const m = modal('Chat yang dilihat bot ' + (r.bot || ''), r.chats.length
+        ? `<p class="small muted">Klik <b>+ Tambah</b>, lalu Simpan pengaturan.</p>${r.chats.map((c) => `<div class="row between" style="padding:8px 0;border-bottom:1px solid var(--line)">
+            <div><b>${esc(c.title)}</b><div class="tiny muted mono">${esc(c.chat_id)} · ${esc(c.type)}</div></div>
+            ${have.has(c.chat_id) ? '<span class="badge b-green">sudah ada</span>' : `<button type="button" class="btn btn-gold btn-sm" data-add="${esc(c.chat_id)}" data-name="${esc(c.title)}">+ Tambah</button>`}</div>`).join('')}`
+        : '<p class="small">Belum ada channel / grup yang terlihat. Pastikan bot sudah jadi admin, kirim satu pesan di channel / grup itu, lalu coba lagi. Channel publik bisa langsung diisi <span class="mono">@namachannel</span>.</p>');
+      m.el.onclick = (ev) => {
+        const b = ev.target.closest('[data-add]');
+        if (!b) return;
+        const empty = $$('.tgr').find((row) => !$('.tg-id', row).value.trim());
+        if (empty) { $('.tg-id', empty).value = b.dataset.add; $('.tg-name', empty).value = b.dataset.name; }
+        else $('#tgl').insertAdjacentHTML('beforeend', tgRow({ name: b.dataset.name, chat_id: b.dataset.add, active: true }));
+        b.outerHTML = '<span class="badge b-green">ditambahkan</span>';
+      };
+    };
+    $('#tg-test').onclick = async (e) => {
+      const r = await busy(e.target, () => post('/admin/telegram/test', {}));
+      if (r.error) return toast(r.error, 'err');
+      const bad = r.results.filter((x) => !x.ok);
+      if (!bad.length) toast(`Pesan tes terkirim ke ${r.results.length} target ✔${r.enabled ? '' : ' (pengiriman sinyal masih mati: centang lalu Simpan)'}`);
+      else toast('Gagal ke: ' + bad.map((x) => `${x.name || x.chat_id} (${x.error})`).join(', '), 'err');
+    };
     $('#addbk').onclick = () => $('#bkl').insertAdjacentHTML('beforeend', bankRow());
     $('#bkl').onclick = (e) => { if (e.target.classList.contains('bk-del')) e.target.closest('.bkr').remove(); };
     if (!(s.bank_list || []).length) $('#bkl').insertAdjacentHTML('beforeend', bankRow());
@@ -580,6 +634,9 @@
         ib_brokers: $$('.ibr').map((r) => ({ name: $('.ib-name', r).value, link: $('.ib-link', r).value, active: $('.ib-act', r).checked })),
         email_provider: d.email_provider, email_from: d.email_from, email_from_name: d.email_from_name, email_api_key: d.email_api_key,
         welcome_email_password: d.welcome_email_password ? '1' : '0',
+        telegram_enabled: d.telegram_enabled ? '1' : '0', telegram_bot_token: d.telegram_bot_token,
+        telegram_targets: $$('.tgr').map((r) => ({ name: $('.tg-name', r).value.trim(), chat_id: $('.tg-id', r).value.trim(), active: $('.tg-act', r).checked }))
+          .filter((x) => x.chat_id),
       };
       await busy($('#sf button[type=submit]'), () => api('/admin/settings', { method: 'PUT', body }));
       toast('Pengaturan disimpan'); render();

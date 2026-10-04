@@ -2,7 +2,7 @@
 import {
   HttpError, fail, json, readJson, now, DAY, str, int, isEmail, hashPassword, verifyPassword,
   encrypt, decrypt, createSession, destroySession, sessionUser, isAdminEmail, randomToken, sha256,
-  siteUrl, esc, rupiah, fmtDate, unb64,
+  siteUrl, esc, rupiah, fmtDate, unb64, b64,
 } from '../../server/util.js';
 import {
   getSettings, putSetting, quote, notify, emailUser, emailAdmin, newOrderCode, getUser, getProduct,
@@ -245,6 +245,91 @@ const signalView = (r) => r && ({
 // Gold: 1 pip = 0.10 USD of price (e.g. 2,000.00 -> 2,001.50 = 15 pips)
 const PIP = 0.1;
 
+// ---- Telegram: the server posts every BUY/SELL signal (with the chart picture) and its result as a reply ----
+// Configured in Admin > Pengaturan: bot token (stored encrypted) and any number of target channels / groups.
+async function tgConfig(env) {
+  const s = await getSettings(env);
+  const token = s.telegram_bot_token_enc ? await decrypt(env, s.telegram_bot_token_enc) : '';
+  const targets = (Array.isArray(s.telegram_targets) ? s.telegram_targets : []).filter((t) => t.active !== false && t.chat_id);
+  return { on: s.telegram_enabled === '1' && !!token && targets.length > 0, token, targets };
+}
+
+// One message (or photo with caption) to one chat; returns { ok, message_id, error }
+async function tgSend(token, chatId, text, { photo, replyTo } = {}) {
+  const reply = replyTo ? { message_id: replyTo, allow_sending_without_reply: true } : null;
+  try {
+    let r;
+    if (photo) {
+      const fd = new FormData();
+      fd.append('chat_id', String(chatId));
+      fd.append('caption', text.length > 1024 ? text.slice(0, 1020) + '…' : text);
+      fd.append('parse_mode', 'HTML');
+      if (reply) fd.append('reply_parameters', JSON.stringify(reply));
+      fd.append('photo', new Blob([unb64(photo)], { type: 'image/png' }), 'chart.png');
+      r = await fetch(`https://api.telegram.org/bot${token}/sendPhoto`, { method: 'POST', body: fd });
+    } else {
+      const body = { chat_id: chatId, text, parse_mode: 'HTML', link_preview_options: { is_disabled: true } };
+      if (reply) body.reply_parameters = reply;
+      r = await fetch(`https://api.telegram.org/bot${token}/sendMessage`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) });
+    }
+    const j = await r.json();
+    return j.ok ? { ok: true, message_id: j.result.message_id } : { ok: false, error: j.description || 'ditolak Telegram' };
+  } catch (e) {
+    return { ok: false, error: String(e.message || e) };
+  }
+}
+
+// Send to every active target; replyTo is the {chat_id: message_id} map of the original signal post
+async function tgBroadcast(env, text, { photo, replyTo } = {}) {
+  const c = await tgConfig(env);
+  if (!c.on) return null;
+  const out = {};
+  await Promise.all(c.targets.map(async (t) => {
+    const r = await tgSend(c.token, t.chat_id, text, { photo, replyTo: replyTo ? replyTo[t.chat_id] : null });
+    if (r.ok) out[t.chat_id] = r.message_id;
+    else console.error('telegram', t.chat_id, r.error);
+  }));
+  return out;
+}
+
+const f2 = (n) => Number(n).toFixed(2);
+// 1 pip = 0.10 and 1 point = 0.01 of the gold price (2-decimal quotes)
+const pipTxt = (p) => `${p > 0 ? '+' : ''}${Number(p).toFixed(1)} pips (${p > 0 ? '+' : ''}${Math.round(p * 10).toLocaleString('id-ID')} point)`;
+const SIDE_TXT = { BUY: '🟢 BUY', SELL: '🔴 SELL' };
+const MAX_CHART_B64 = 1_800_000;              // about 1.3 MB PNG
+const chartB64 = (v) => { const x = typeof v === 'string' ? v.replace(/\s/g, '') : ''; return x && x.length <= MAX_CHART_B64 && /^[A-Za-z0-9+/=]+$/.test(x) ? x : ''; };
+async function saveChart(env, id, kind, data) {
+  if (!data) return;
+  await env.DB.prepare(`INSERT INTO signal_charts (signal_id, kind, mime, data, created_at) VALUES (?,?,?,?,?)
+      ON CONFLICT(signal_id, kind) DO UPDATE SET data=excluded.data, created_at=excluded.created_at`).bind(id, kind, 'image/png', data, now()).run();
+}
+
+function tgOpenText(r, base) {
+  const slP = Math.abs(r.price - r.sl) / PIP, tpP = Math.abs(r.tp - r.price) / PIP;
+  return [
+    `🦅 <b>GARUDA AI · ${SIDE_TXT[r.decision]} XAUUSD</b>`,
+    '',
+    `Entry: <b>${f2(r.price)}</b>`,
+    `SL: <b>${f2(r.sl)}</b>  (${slP.toFixed(0)} pips)`,
+    `TP: <b>${f2(r.tp)}</b>  (${tpP.toFixed(0)} pips)`,
+    `Keyakinan: ${r.confidence}% · Tren H4 ${esc(r.trend_h4)}, H1 ${esc(r.trend_h1)}`,
+    '',
+    `💬 ${esc(r.reason)}`,
+    '',
+    `#S${r.id} · masuk maksimal ${Math.round((r.valid_until - r.created_at) / 60)} menit setelah sinyal · <a href="${base}/sinyal">rekam jejak</a>`,
+    '<i>Bukan saran investasi. Trading berisiko tinggi.</i>',
+  ].join('\n');
+}
+
+function tgCloseText(r, result, close, pips) {
+  const head = { TP: '✅ <b>TP KENA</b>', SL: '❌ <b>SL KENA</b>', BE: '⚖️ <b>BREAK EVEN</b>', CLOSE: '🔒 <b>DITUTUP</b>' }[result];
+  return [
+    `${head} · ${SIDE_TXT[r.decision]} XAUUSD #S${r.id}`,
+    `Entry ${f2(r.price)} → ${f2(close)}`,
+    `Hasil: <b>${pipTxt(pips)}</b>`,
+  ].join('\n');
+}
+
 // When a client should ask again: signals arrive a few minutes after each H1 close, so clients come back
 // ~2.5 minutes after the next hour (plus a short retry window while this hour's signal is still missing).
 // Keeps Functions/D1 traffic to a few requests per client per hour.
@@ -256,7 +341,7 @@ function nextSignalCheck(t, latest) {
   return Math.max(30, Math.min(toNextHour, 3600));
 }
 
-route('POST', '/signal/publish', 'signal_pub', async ({ request, env }) => {
+route('POST', '/signal/publish', 'signal_pub', async ({ request, env, base, waitUntil }) => {
   const b = await readJson(request);
   const decision = str(b.decision, 8).toUpperCase();
   if (!['BUY', 'SELL', 'WAIT'].includes(decision)) fail(400, 'decision harus BUY, SELL atau WAIT');
@@ -271,15 +356,26 @@ route('POST', '/signal/publish', 'signal_pub', async ({ request, env }) => {
       num(b.price), num(b.sl), num(b.tp), str(b.trend_h4, 8), str(b.trend_h1, 8), str(b.reason, 600), str(b.model, 40),
       num(b.cost_usd), int(b.tokens_in) || 0, int(b.tokens_out) || 0, decision === 'WAIT' ? 'wait' : 'open')
     .run();
-  return json({ ok: true, id: r.meta.last_row_id, valid_until: t + validMin * 60 });
+  const id = r.meta.last_row_id;
+  const chart = chartB64(b.chart_png);
+  await saveChart(env, id, 'open', chart);
+  if (decision !== 'WAIT') {
+    // post to Telegram in the background so the EA gets its answer at once
+    waitUntil((async () => {
+      const row = await env.DB.prepare('SELECT * FROM signals WHERE id=?').bind(id).first();
+      const msgs = await tgBroadcast(env, tgOpenText(row, base), { photo: chart });
+      if (msgs && Object.keys(msgs).length) await env.DB.prepare('UPDATE signals SET tg_msgs=? WHERE id=?').bind(JSON.stringify(msgs), id).run();
+    })());
+  }
+  return json({ ok: true, id, valid_until: t + validMin * 60 });
 });
 
 // The MASTER EA follows every BUY/SELL signal and reports how it ended; pips are computed here from the entry
-route('POST', '/signal/close', 'signal_pub', async ({ request, env }) => {
+route('POST', '/signal/close', 'signal_pub', async ({ request, env, waitUntil }) => {
   const b = await readJson(request);
   const result = str(b.result, 8).toUpperCase();
   if (!['TP', 'SL', 'BE', 'CLOSE'].includes(result)) fail(400, 'result harus TP, SL, BE atau CLOSE');
-  const row = await env.DB.prepare('SELECT id, decision, price, status FROM signals WHERE id=?').bind(int(b.id) || 0).first();
+  const row = await env.DB.prepare('SELECT id, decision, price, status, tg_msgs FROM signals WHERE id=?').bind(int(b.id) || 0).first();
   if (!row) fail(404, 'Sinyal tidak ditemukan');
   if (row.status !== 'open') fail(409, 'Sinyal sudah ditutup');
   const close = Number(b.close_price);
@@ -287,7 +383,24 @@ route('POST', '/signal/close', 'signal_pub', async ({ request, env }) => {
   const pips = Math.round(((row.decision === 'BUY' ? close - row.price : row.price - close) / PIP) * 10) / 10;
   const t = now();
   await env.DB.prepare('UPDATE signals SET status=?, close_price=?, closed_at=?, pips=? WHERE id=?').bind(result, close, t, pips, row.id).run();
+  const chart = chartB64(b.chart_png);
+  await saveChart(env, row.id, 'close', chart);
+  let replyTo = null;
+  try { replyTo = row.tg_msgs ? JSON.parse(row.tg_msgs) : null; } catch { replyTo = null; }
+  waitUntil(tgBroadcast(env, tgCloseText(row, result, close, pips), { photo: chart, replyTo }));
   return json({ ok: true, pips });
+});
+
+// Chart picture of a signal. While the signal is still running only logged-in users may see it (it shows the levels).
+route('GET', '/signal/:id/chart', 'public', async ({ env, params, url, user }) => {
+  const id = int(params.id) || 0;
+  const kind = url.searchParams.get('kind') === 'close' ? 'close' : 'open';
+  const sig = await env.DB.prepare('SELECT status FROM signals WHERE id=?').bind(id).first();
+  if (!sig) fail(404, 'Sinyal tidak ditemukan');
+  if (sig.status === 'open' && !user) fail(403, 'Chart sinyal yang masih berjalan khusus member');
+  const c = await env.DB.prepare('SELECT mime, data FROM signal_charts WHERE signal_id=? AND kind=?').bind(id, kind).first();
+  if (!c) fail(404, 'Chart tidak ada');
+  return new Response(unb64(c.data), { headers: { 'content-type': c.mime, 'cache-control': sig.status === 'open' ? 'private, max-age=60' : 'public, max-age=86400' } });
 });
 
 // Public page /sinyal: BUY/SELL signals with their outcome. Entry/SL/TP of a still-running signal are shown to
@@ -296,7 +409,9 @@ route('GET', '/signal/feed', 'public', async ({ env, url, user }) => {
   const limit = Math.max(1, Math.min(int(url.searchParams.get('limit')) || 50, 200));
   const t = now();
   const [{ results }, last, stat] = await Promise.all([
-    env.DB.prepare(`SELECT * FROM signals WHERE decision IN ('BUY','SELL') ORDER BY id DESC LIMIT ?`).bind(limit).all(),
+    env.DB.prepare(`SELECT s.*, (SELECT COUNT(*) FROM signal_charts c WHERE c.signal_id=s.id AND c.kind='open') AS has_chart,
+        (SELECT COUNT(*) FROM signal_charts c WHERE c.signal_id=s.id AND c.kind='close') AS has_close_chart
+        FROM signals s WHERE decision IN ('BUY','SELL') ORDER BY id DESC LIMIT ?`).bind(limit).all(),
     env.DB.prepare('SELECT decision, created_at, reason, trend_h4, trend_h1, confidence FROM signals ORDER BY id DESC LIMIT 1').first(),
     env.DB.prepare(`SELECT COUNT(*) AS closed, COALESCE(SUM(CASE WHEN pips > 0 THEN 1 ELSE 0 END),0) AS wins,
         COALESCE(SUM(CASE WHEN pips < 0 THEN 1 ELSE 0 END),0) AS losses, COALESCE(SUM(pips),0) AS pips
@@ -304,8 +419,8 @@ route('GET', '/signal/feed', 'public', async ({ env, url, user }) => {
   ]);
   const member = !!user;
   const signals = results.map((r) => {
-    const v = signalView(r);
-    if (r.status === 'open' && !member) { v.price = null; v.sl = null; v.tp = null; v.reason = ''; v.locked = true; }
+    const v = { ...signalView(r), has_chart: !!r.has_chart, has_close_chart: !!r.has_close_chart };
+    if (r.status === 'open' && !member) { v.price = null; v.sl = null; v.tp = null; v.reason = ''; v.locked = true; v.has_chart = false; }
     return v;
   });
   const lastView = last ? { ...last, reason: last.decision === 'WAIT' || member ? last.reason : '' } : null;
@@ -318,6 +433,32 @@ route('GET', '/signal/latest', 'signal_read', async ({ env, url }) => {
     .bind(...(symbol ? [symbol] : [])).first();
   const t = now();
   return json({ ok: true, server_time: t, signal: signalView(row) || null, next: nextSignalCheck(t, row) });
+});
+
+// ---- Admin: Telegram bot ----
+route('POST', '/admin/telegram/test', 'admin', async ({ env }) => {
+  const c = await tgConfig(env);
+  if (!c.token) fail(400, 'Token bot belum disimpan');
+  if (!c.targets.length) fail(400, 'Belum ada target aktif');
+  const results = await Promise.all(c.targets.map(async (t) => {
+    const r = await tgSend(c.token, t.chat_id, '🦅 <b>GARUDA AI</b>\nTes koneksi berhasil. Sinyal BUY / SELL beserta chart dan hasilnya akan dikirim ke sini.');
+    return { name: t.name, chat_id: t.chat_id, ok: r.ok, error: r.error || '' };
+  }));
+  return json({ ok: true, enabled: c.on, results });
+});
+// Chats the bot has seen recently (helps the admin find the chat id of a group / channel)
+route('POST', '/admin/telegram/chats', 'admin', async ({ env }) => {
+  const c = await tgConfig(env);
+  if (!c.token) fail(400, 'Token bot belum disimpan');
+  const r = await (await fetch(`https://api.telegram.org/bot${c.token}/getUpdates?limit=100&allowed_updates=${encodeURIComponent('["message","channel_post","my_chat_member"]')}`)).json();
+  if (!r.ok) fail(400, 'Telegram menolak token: ' + (r.description || ''));
+  const me = await (await fetch(`https://api.telegram.org/bot${c.token}/getMe`)).json();
+  const chats = {};
+  for (const u of r.result || []) {
+    const ch = (u.message || u.channel_post || u.my_chat_member || {}).chat;
+    if (ch && ch.type !== 'private') chats[ch.id] = { chat_id: String(ch.id), title: ch.title || ch.username || String(ch.id), type: ch.type };
+  }
+  return json({ ok: true, bot: me.ok ? '@' + me.result.username : '', chats: Object.values(chats) });
 });
 
 route('GET', '/admin/signals', 'admin', async ({ env, url }) => {
@@ -913,11 +1054,13 @@ route('PUT', '/admin/products/:id', 'admin', async ({ request, env, params }) =>
 
 const EDITABLE_SETTINGS = ['durations', 'discounts', 'bank_list', 'admin_notify_email', 'whatsapp', 'pay_deadline_hours', 'reminder_days', 'mt4_enabled',
   'ib_brokers', 'auto_complete_ea', 'auto_process_paid', 'welcome_email_password', 'email_provider', 'email_from', 'email_from_name', 'vps_spec',
-  'min_capital_usd', 'invoice_days_before', 'auto_rebuild_on_version', 'report_interval_min', 'board_enabled', 'board_name_mode', 'board_landing_top', 'board_stale_days', 'profit_est_enabled', 'profit_est_min_idr', 'profit_est_max_idr', 'profit_est_basis'];
+  'min_capital_usd', 'invoice_days_before', 'auto_rebuild_on_version', 'report_interval_min', 'board_enabled', 'board_name_mode', 'board_landing_top', 'board_stale_days', 'profit_est_enabled', 'profit_est_min_idr', 'profit_est_max_idr', 'profit_est_basis',
+  'telegram_enabled', 'telegram_targets'];
 route('GET', '/admin/settings', 'admin', async ({ env }) => {
   const s = await getSettings(env);
   const out = Object.fromEntries(EDITABLE_SETTINGS.map((k) => [k, s[k] ?? '']));
   out.email_api_key_set = !!s.email_api_key_enc;
+  out.telegram_bot_token_set = !!s.telegram_bot_token_enc;
   out._env = { email_provider: env.EMAIL_PROVIDER || 'log', email_from: env.EMAIL_FROM || '', site_url: env.SITE_URL || '',
     builder_token_set: !!env.BUILDER_TOKEN, cron_secret_set: !!env.CRON_SECRET, data_key_set: !!env.DATA_KEY };
   return json(out);
@@ -936,6 +1079,11 @@ route('PUT', '/admin/settings', 'admin', async ({ request, env }) => {
         .filter((x) => x.bank || x.number);
       for (const x of v) if (!x.bank || !x.number) fail(400, 'Setiap rekening wajib punya nama bank dan nomor');
     }
+    if (k === 'telegram_targets') {
+      if (!Array.isArray(v)) fail(400, 'Daftar target Telegram tidak valid');
+      v = v.map((x) => ({ name: str(x.name, 60), chat_id: str(x.chat_id, 64).replace(/\s/g, ''), active: x.active !== false })).filter((x) => x.chat_id);
+      for (const x of v) if (!/^(-?\d+|@[A-Za-z0-9_]{4,})$/.test(x.chat_id)) fail(400, `Chat ID "${x.chat_id}" tidak valid (angka seperti -1001234567890 atau @namachannel)`);
+    }
     if (k === 'ib_brokers') v = v.map((x) => ({ name: str(x.name, 40), link: str(x.link, 300), active: !!x.active })).filter((x) => x.name);
     if (k === 'email_provider' && !['', 'log', 'resend', 'brevo'].includes(v)) fail(400, 'Penyedia email tidak dikenal');
     if (k === 'email_from' && v && !isEmail(str(v, 120))) fail(400, 'Alamat pengirim email tidak valid');
@@ -943,6 +1091,11 @@ route('PUT', '/admin/settings', 'admin', async ({ request, env }) => {
   }
   if (typeof b.email_api_key === 'string' && b.email_api_key.trim()) await putSetting(env, 'email_api_key_enc', await encrypt(env, b.email_api_key.trim()));
   if (b.email_api_key_clear) await env.DB.prepare(`DELETE FROM settings WHERE key='email_api_key_enc'`).run();
+  if (typeof b.telegram_bot_token === 'string' && b.telegram_bot_token.trim()) {
+    const tok = b.telegram_bot_token.trim();
+    if (!/^\d+:[A-Za-z0-9_-]{30,}$/.test(tok)) fail(400, 'Format token bot tidak valid (contoh 123456789:AAH...)');
+    await putSetting(env, 'telegram_bot_token_enc', await encrypt(env, tok));
+  }
   return json({ ok: true });
 });
 
