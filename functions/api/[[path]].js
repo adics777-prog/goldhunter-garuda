@@ -356,7 +356,7 @@ function nextSignalCheck(t, latest, s = {}) {
   const fresh = latest && latest.created_at >= slotStart;
   if (!fresh && t - slotStart < Math.min(15 * 60, slot / 2)) return 45;
   const n = Math.max(30, Math.min(toNext, 3600));
-  return s.ai_level_trigger === '1' ? Math.min(n, 120) : n;
+  return s.ai_level_trigger === '1' || s.ai_momentum === '1' ? Math.min(n, 120) : n;
 }
 
 route('POST', '/signal/publish', 'signal_pub', async ({ request, env, base, waitUntil }) => {
@@ -483,7 +483,7 @@ const AI_KEYS = {               // key: [type, min, max]
   ai_paused: ['bool'], ai_model: ['model'], ai_effort: ['effort'], ai_news: ['bool'], ai_news_effort: ['effort'],
   ai_news_max: ['int', 1, 10], ai_research_every: ['int', 1, 12], ai_web_tool: ['tool'], ai_intermarket: ['bool'], ai_vision: ['bool'], ai_chart: ['bool'],
   ai_session_start: ['int', 0, 23], ai_session_end: ['int', 1, 24], ai_friday_last: ['int', 0, 24],
-  ai_interval_min: ['int', 15, 60], ai_level_trigger: ['bool'],
+  ai_interval_min: ['int', 15, 240], ai_level_trigger: ['bool'], ai_momentum: ['bool'],
   ai_min_conf: ['int', 0, 100], ai_min_rr: ['num', 0.5, 10], ai_min_sl: ['num', 0.5, 200], ai_max_sl: ['num', 1, 500], ai_valid_min: ['int', 1, 60],
   ai_cost_cap: ['num', 0, 1000], ai_master_trade: ['bool'],
 };
@@ -569,7 +569,7 @@ route('PUT', '/admin/ai', 'admin', async ({ request, env }) => {
     if (b[name] === undefined) continue;
     let v = b[name];
     if (t === 'bool') v = v === true || v === '1' || v === 'on' ? '1' : '0';
-    else if (k === 'ai_interval_min') { if (![15, 30, 60].includes(Number(v))) fail(400, 'Interval analisis harus 15, 30 atau 60 menit'); v = String(Number(v)); }
+    else if (k === 'ai_interval_min') { if (![15, 30, 60, 120, 240].includes(Number(v))) fail(400, 'Interval analisis harus 15, 30, 60, 120 atau 240 menit'); v = String(Number(v)); }
     else if (t === 'int' || t === 'num') {
       const n = Number(v);
       if (!Number.isFinite(n) || n < mn || n > mx) fail(400, `Nilai ${name} harus ${mn} sampai ${mx}`);
