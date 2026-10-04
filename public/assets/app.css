@@ -207,3 +207,5 @@ label.row{flex-wrap:nowrap}
 /* long links, emails, account numbers never push past the screen edge */
 .copy,.mono,.card p,.card li,.card dd,.alert,.help,.kv dd,.notif div,.summary{overflow-wrap:anywhere}
 .main,.card,.grid>*{min-width:0}
+.auth-back{display:inline-block;margin-bottom:14px;color:var(--muted);font-size:.9rem;text-decoration:none!important}
+.auth-back:hover{color:var(--gold)}

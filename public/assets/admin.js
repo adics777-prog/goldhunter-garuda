@@ -545,6 +545,9 @@
           <div class="grid c2" style="margin-top:14px;align-items:start">
             <div>
               <label class="row small" style="color:var(--text);margin-bottom:12px"><input type="checkbox" name="telegram_enabled" ${s.telegram_enabled === '1' ? 'checked' : ''}> Kirim setiap sinyal BUY / SELL (dengan gambar chart) dan hasilnya ke Telegram</label>
+              <label class="row small" style="color:var(--text);margin-bottom:6px"><input type="checkbox" name="telegram_wait" ${s.telegram_wait === '1' ? 'checked' : ''}> Kirim juga analisis <b>TUNGGU</b> sebagai edukasi (alasan belum entry + level yang ditunggu + chart)</label>
+              <div class="field" style="max-width:260px"><label>Analisis TUNGGU paling sering tiap (jam, per pasar)</label><input name="telegram_wait_hours" type="number" min="1" max="24" value="${esc(s.telegram_wait_hours || '3')}">
+                <div class="help">Supaya grup tidak kebanjiran pesan. Sinyal BUY / SELL selalu dikirim.</div></div>
               <div class="field"><label>Token bot ${s.telegram_bot_token_set ? '<span class="badge b-green">tersimpan</span>' : ''}</label><input name="telegram_bot_token" type="password" autocomplete="off" placeholder="${s.telegram_bot_token_set ? 'kosongkan = tidak diubah' : '123456789:AAH... (dari @BotFather)'}">
                 <div class="help">Disimpan terenkripsi di database.</div></div>
               <label>Target channel / grup (boleh lebih dari satu)</label>
@@ -635,6 +638,7 @@
         email_provider: d.email_provider, email_from: d.email_from, email_from_name: d.email_from_name, email_api_key: d.email_api_key,
         welcome_email_password: d.welcome_email_password ? '1' : '0',
         telegram_enabled: d.telegram_enabled ? '1' : '0', telegram_bot_token: d.telegram_bot_token,
+        telegram_wait: d.telegram_wait ? '1' : '0', telegram_wait_hours: d.telegram_wait_hours,
         telegram_targets: $$('.tgr').map((r) => ({ name: $('.tg-name', r).value.trim(), chat_id: $('.tg-id', r).value.trim(), active: $('.tg-act', r).checked }))
           .filter((x) => x.chat_id),
       };

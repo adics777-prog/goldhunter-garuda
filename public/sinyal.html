@@ -18,10 +18,20 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@700;900&family=Poppins:wght@300;400;600;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="/assets/app.css?v=1c3d3e1e">
+<link rel="stylesheet" href="/assets/app.css?v=2c54d69e">
 <style>
   .pub-top{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:14px clamp(16px,4vw,40px);border-bottom:1px solid var(--line);background:var(--bg-2);position:sticky;top:0;z-index:20}
   .pub-top .brand{padding:0}
+  .now-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:14px}
+  .now-card{border:1px solid var(--line);border-radius:14px;padding:14px;background:var(--bg-2);min-width:0}
+  .now-pic{display:block;margin-top:10px;border:1px solid var(--line);border-radius:10px;overflow:hidden;text-decoration:none!important}
+  .now-pic img{display:block;width:100%;height:auto}
+  .now-pic span{display:block;padding:6px 10px;font-size:.78rem;color:var(--muted)}
+  .pub-top .row{flex-wrap:nowrap}
+  .pub-top .btn{white-space:nowrap}
+  .pub-top .brand{flex-shrink:0}
+  @media(max-width:370px){.pub-top a[href="/masuk"]{display:none}}
+  @media(max-width:560px){.pub-top .brand span{display:none}.pub-top .btn{padding:7px 10px;font-size:.78rem}.pub-top .row{gap:6px!important}}
   .pub-wrap{max-width:1000px;margin:0 auto;padding:34px clamp(16px,4vw,32px) 60px}
   .pub-hero{text-align:center;margin-bottom:26px}
   .pub-hero h1{font-family:'Cinzel',serif;font-size:clamp(1.6rem,4.5vw,2.4rem);margin-bottom:8px}
@@ -42,7 +52,7 @@
 <body>
 <header class="pub-top">
   <a class="brand" href="/"><img src="/assets/brand/goldhunter-garuda-logo-128.png" width="38" height="38" alt="GoldHunter Garuda"><span class="gold-text">GOLDHUNTER</span></a>
-  <div class="row" id="top-btn"><a class="btn btn-ghost btn-sm" href="/masuk">Masuk</a><a class="btn btn-gold btn-sm" href="/daftar">Daftar Gratis</a></div>
+  <div class="row" style="gap:8px"><a class="btn btn-ghost btn-sm" href="/">🏠 Beranda</a><span class="row" id="top-btn" style="gap:8px"><a class="btn btn-ghost btn-sm" href="/masuk">Masuk</a><a class="btn btn-gold btn-sm" href="/daftar">Daftar Gratis</a></span></div>
 </header>
 <main class="pub-wrap">
   <div class="pub-hero">
@@ -86,14 +96,28 @@
     $('#pipnote').textContent = (d.markets || []).map(pipDesc).join(' · ') + '.';
     if (d.member) $('#top-btn').innerHTML = '<a class="btn btn-gold btn-sm" href="/member">Member Area</a>';
 
+    const cards = (d.last_by_market || []).filter((x) => !cur || x.symbol === cur);
+    if (cards.length) {
+      const dec = (x) => x.decision === 'WAIT' ? '<span class="badge b-gold">◆ TUNGGU</span>' : side(x.decision);
+      const tr = (t) => t === 'UP' ? '▲ naik' : t === 'DOWN' ? '▼ turun' : '◆ sideways';
+      $('#now').innerHTML = `<div class="small muted" style="margin-bottom:10px">Analisis terakhir tiap pasar</div>
+        <div class="now-grid">${cards.map((x) => `<div class="now-card">
+          <div class="row" style="gap:8px;flex-wrap:wrap"><span class="mk">${esc(x.symbol)}</span>${dec(x)}<span class="small muted">${esc(ago(x.created_at))}</span></div>
+          <div class="small muted" style="margin-top:6px">Tren H4 ${tr(x.trend_h4)} · H1 ${tr(x.trend_h1)}</div>
+          ${x.reason ? `<div class="small" style="margin-top:8px;overflow-wrap:anywhere">${esc(x.reason)}</div>` : '<div class="small muted" style="margin-top:8px">🔒 Detail sinyal yang masih berjalan khusus member.</div>'}
+          ${x.news ? `<div class="small muted" style="margin-top:6px;overflow-wrap:anywhere">📰 ${esc(x.news)}</div>` : ''}
+          ${x.wait_chart ? `<a class="now-pic" href="/api/signal/${x.wait_chart}/chart" target="_blank" rel="noopener"><img loading="lazy" src="/api/signal/${x.wait_chart}/chart" alt="Chart analisis ${esc(x.symbol)}"><span>Chart analisis AI · ${esc(ago(x.wait_chart_at))}</span></a>` : ''}
+        </div>`).join('')}</div>`;
+    } else {
     const l = d.last;
     $('#now').innerHTML = l
       ? `<div class="small muted">Analisis terakhir · ${esc(ago(l.created_at))}</div>
-         <div style="margin-top:6px"><span class="mk">${esc(l.symbol || '')}</span> <b>${l.decision === 'WAIT' ? '⏸ WAIT' : (l.decision === 'BUY' ? '▲ BUY' : '▼ SELL')}</b>
+         <div style="margin-top:6px"><span class="mk">${esc(l.symbol || '')}</span> <b>${l.decision === 'WAIT' ? '◆ TUNGGU' : (l.decision === 'BUY' ? '▲ BUY' : '▼ SELL')}</b>
          <span class="small muted"> · tren H4 ${esc(l.trend_h4 || '-')}, H1 ${esc(l.trend_h1 || '-')}</span></div>
          ${l.decision === 'WAIT' && l.reason ? `<div class="small" style="margin-top:6px;overflow-wrap:anywhere">${esc(l.reason)}</div>` : ''}
          ${l.news ? `<div class="small muted" style="margin-top:6px;overflow-wrap:anywhere">📰 ${esc(l.news)}</div>` : ''}`
       : '<div class="small muted">Belum ada analisis. Analisis berikutnya berjalan tiap jam pada jam aktif pasar, atau lebih cepat saat ada momentum.</div>';
+    }
 
     const s = d.stats30 || {};
     const closed = s.closed || 0;

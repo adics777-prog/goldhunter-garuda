@@ -18,10 +18,15 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@700;900&family=Poppins:wght@300;400;600;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="/assets/app.css?v=1c3d3e1e">
+<link rel="stylesheet" href="/assets/app.css?v=2c54d69e">
 <style>
   .pub-top{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:14px clamp(16px,4vw,40px);border-bottom:1px solid var(--line);background:var(--bg-2);position:sticky;top:0;z-index:20}
   .pub-top .brand{padding:0}
+  .pub-top .row{flex-wrap:nowrap}
+  .pub-top .btn{white-space:nowrap}
+  .pub-top .brand{flex-shrink:0}
+  @media(max-width:370px){.pub-top a[href="/masuk"]{display:none}}
+  @media(max-width:560px){.pub-top .brand span{display:none}.pub-top .btn{padding:7px 10px;font-size:.78rem}.pub-top .row{gap:6px!important}}
   .pub-wrap{max-width:1000px;margin:0 auto;padding:34px clamp(16px,4vw,32px) 60px}
   .pub-hero{text-align:center;margin-bottom:26px}
   .pub-hero h1{font-family:'Cinzel',serif;font-size:clamp(1.6rem,4.5vw,2.4rem);margin-bottom:8px}
@@ -36,7 +41,7 @@
 <body>
 <header class="pub-top">
   <a class="brand" href="/"><img src="/assets/brand/goldhunter-garuda-logo-128.png" width="38" height="38" alt="GoldHunter Garuda"><span class="gold-text">GOLDHUNTER</span></a>
-  <div class="row"><a class="btn btn-ghost btn-sm" href="/masuk">Masuk</a><a class="btn btn-gold btn-sm" href="/daftar">Daftar Gratis</a></div>
+  <div class="row" style="gap:8px"><a class="btn btn-ghost btn-sm" href="/">🏠 Beranda</a><a class="btn btn-ghost btn-sm" href="/masuk">Masuk</a><a class="btn btn-gold btn-sm" href="/daftar">Daftar Gratis</a></div>
 </header>
 <main class="pub-wrap">
   <div class="pub-hero">
