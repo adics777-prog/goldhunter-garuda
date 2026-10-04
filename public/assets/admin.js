@@ -700,7 +700,7 @@
         <div class="card" style="grid-column:1/-1"><div class="row between"><h3 style="margin:0">📊 Pasar yang dianalisis</h3>
             <label class="small row" style="margin:0;color:var(--text)">Riset berita dibuat oleh master
               <select name="research_symbol" style="width:auto">${d.markets.map((m) => opt(m.symbol, d.research_symbol, m.symbol)).join('')}</select></label></div>
-          <p class="help" style="margin:8px 0 14px">Satu EA MASTER per pasar (satu chart per pasar di MT5 master). Batas SL memakai satuan pasar itu (emas 1 pip = 0.10, EURUSD 0.0001, USDJPY 0.01, BTC dalam poin = $1). Profil karakter dibaca Claude di setiap analisis pasar itu.</p>
+          <p class="help" style="margin:8px 0 14px">Satu EA MASTER per pasar (satu chart per pasar di MT5 master). Batas SL memakai satuan pasar itu (emas 1 pip = 0.10, EURUSD 0.0001, USDJPY 0.01, BTC dalam poin = $1). Profil karakter dibaca Claude di setiap analisis pasar itu, ditambah statistik otomatis dari data broker (range harian, range per sesi, volatilitas, kecenderungan tren). Riset berita dibuat satu master lalu dipakai bersama semua pasar; pilih BTCUSD supaya riset tetap jalan di malam hari dan akhir pekan.</p>
           ${d.markets.map((m) => {
             const seen = m.master_seen ? Math.floor(Date.now() / 1000) - m.master_seen : null;
             const st = m.stats30;

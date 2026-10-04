@@ -504,6 +504,10 @@ route('GET', '/master/config', 'signal_pub', async ({ env, url }) => {
   cfg.market = symView(m);
   cfg.research_role = sym === canonSymbol(s.ai_research_symbol || 'XAUUSD');
   cfg.markets = (await allSymbols(env)).filter((x) => x.enabled).map((x) => x.symbol);
+  // Claude cost of every master today (UTC), so the daily cap covers all markets together
+  const t0 = now() - (now() % DAY);
+  const ct = await env.DB.prepare('SELECT COALESCE(SUM(cost_usd),0) AS c FROM signals WHERE created_at > ?').bind(t0).first();
+  cfg.cost_today = Number(ct.c) || 0;
   const info = `${str(url.searchParams.get('acct'), 30)} · ${str(url.searchParams.get('ver'), 12)} · ${str(url.searchParams.get('status'), 80)}`;
   await putSetting(env, 'ai_master_seen', String(now()));
   await putSetting(env, 'ai_master_info', `${sym} · ${info}`);
