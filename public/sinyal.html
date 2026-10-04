@@ -77,7 +77,8 @@
       ? `<div class="small muted">Analisis terakhir · ${esc(ago(l.created_at))}</div>
          <div style="margin-top:6px"><b>${l.decision === 'WAIT' ? '⏸ WAIT' : (l.decision === 'BUY' ? '▲ BUY' : '▼ SELL')}</b>
          <span class="small muted"> · tren H4 ${esc(l.trend_h4 || '-')}, H1 ${esc(l.trend_h1 || '-')}</span></div>
-         ${l.decision === 'WAIT' && l.reason ? `<div class="small" style="margin-top:6px;overflow-wrap:anywhere">${esc(l.reason)}</div>` : ''}`
+         ${l.decision === 'WAIT' && l.reason ? `<div class="small" style="margin-top:6px;overflow-wrap:anywhere">${esc(l.reason)}</div>` : ''}
+         ${l.news ? `<div class="small muted" style="margin-top:6px;overflow-wrap:anywhere">📰 ${esc(l.news)}</div>` : ''}`
       : '<div class="small muted">Belum ada analisis. Sinyal pertama muncul di awal candle H1 berikutnya pada jam sesi London / New York.</div>';
 
     const s = d.stats30 || {};
@@ -96,7 +97,7 @@
           : `<div class="${r.pips > 0 ? 'pos' : (r.pips < 0 ? 'neg' : '')} nowrap">${pipsTxt(r.pips)}</div><span class="badge ${st[0]}">${st[1]}</span>`;
         return `<tr><td class="nowrap small">${esc(fmtDateTime(r.created_at))}</td>
           <td>${side(r.decision)} <span class="tiny muted">${r.confidence}%</span>
-            ${r.locked ? '<div class="lock">🔒 Entry, SL, TP sinyal yang masih berjalan khusus member. <a href="/masuk">Masuk</a></div>' : (r.reason ? `<div class="why">${esc(r.reason)}</div>` : '')}
+            ${r.locked ? '<div class="lock">🔒 Entry, SL, TP sinyal yang masih berjalan khusus member. <a href="/masuk">Masuk</a></div>' : (r.reason ? `<div class="why">${esc(r.reason)}</div>` : '') + (r.news ? `<div class="why">📰 ${esc(r.news)}</div>` : '')}
             ${r.has_chart || r.has_close_chart ? `<button type="button" class="btn btn-ghost btn-sm" style="margin-top:6px" data-chart="${r.id}" data-open="${r.has_chart ? 1 : 0}" data-close="${r.has_close_chart ? 1 : 0}">📈 Chart</button>` : ''}</td>
           <td class="right mono small">${num(r.price)}</td>
           <td class="right mono small hide-sm">${num(r.sl)}</td>

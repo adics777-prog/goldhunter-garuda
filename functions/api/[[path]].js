@@ -239,7 +239,7 @@ route('POST', '/ea/report', 'public', async ({ request, env }) => {
 const signalView = (r) => r && ({
   id: r.id, symbol: r.symbol, bar_time: r.bar_time, created_at: r.created_at, valid_until: r.valid_until,
   decision: r.decision, confidence: r.confidence, price: r.price, sl: r.sl, tp: r.tp,
-  trend_h4: r.trend_h4, trend_h1: r.trend_h1, reason: r.reason, model: r.model,
+  trend_h4: r.trend_h4, trend_h1: r.trend_h1, reason: r.reason, news: r.news || '', model: r.model,
   status: r.status, close_price: r.close_price, closed_at: r.closed_at, pips: r.pips,
 });
 // Gold: 1 pip = 0.10 USD of price (e.g. 2,000.00 -> 2,001.50 = 15 pips)
@@ -315,6 +315,7 @@ function tgOpenText(r, base) {
     `Keyakinan: ${r.confidence}% · Tren H4 ${esc(r.trend_h4)}, H1 ${esc(r.trend_h1)}`,
     '',
     `💬 ${esc(r.reason)}`,
+    ...(r.news ? [`📰 ${esc(r.news)}`] : []),
     '',
     `#S${r.id} · masuk maksimal ${Math.round((r.valid_until - r.created_at) / 60)} menit setelah sinyal · <a href="${base}/sinyal">rekam jejak</a>`,
     '<i>Bukan saran investasi. Trading berisiko tinggi.</i>',
@@ -350,11 +351,11 @@ route('POST', '/signal/publish', 'signal_pub', async ({ request, env, base, wait
   const num = (v) => { const n = Number(v); return Number.isFinite(n) ? n : 0; };
   const t = now();
   const validMin = Math.max(1, Math.min(int(b.valid_min) || 10, 60));
-  const r = await env.DB.prepare(`INSERT INTO signals (symbol, bar_time, created_at, valid_until, decision, confidence, price, sl, tp, trend_h4, trend_h1, reason, model, cost_usd, tokens_in, tokens_out, status)
-      VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`)
+  const r = await env.DB.prepare(`INSERT INTO signals (symbol, bar_time, created_at, valid_until, decision, confidence, price, sl, tp, trend_h4, trend_h1, reason, model, cost_usd, tokens_in, tokens_out, status, news)
+      VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`)
     .bind(symbol, int(b.bar_time) || 0, t, t + validMin * 60, decision, Math.max(0, Math.min(int(b.confidence) || 0, 100)),
       num(b.price), num(b.sl), num(b.tp), str(b.trend_h4, 8), str(b.trend_h1, 8), str(b.reason, 600), str(b.model, 40),
-      num(b.cost_usd), int(b.tokens_in) || 0, int(b.tokens_out) || 0, decision === 'WAIT' ? 'wait' : 'open')
+      num(b.cost_usd), int(b.tokens_in) || 0, int(b.tokens_out) || 0, decision === 'WAIT' ? 'wait' : 'open', str(b.news, 400))
     .run();
   const id = r.meta.last_row_id;
   const chart = chartB64(b.chart_png);
@@ -412,7 +413,7 @@ route('GET', '/signal/feed', 'public', async ({ env, url, user }) => {
     env.DB.prepare(`SELECT s.*, (SELECT COUNT(*) FROM signal_charts c WHERE c.signal_id=s.id AND c.kind='open') AS has_chart,
         (SELECT COUNT(*) FROM signal_charts c WHERE c.signal_id=s.id AND c.kind='close') AS has_close_chart
         FROM signals s WHERE decision IN ('BUY','SELL') ORDER BY id DESC LIMIT ?`).bind(limit).all(),
-    env.DB.prepare('SELECT decision, created_at, reason, trend_h4, trend_h1, confidence FROM signals ORDER BY id DESC LIMIT 1').first(),
+    env.DB.prepare('SELECT decision, created_at, reason, news, trend_h4, trend_h1, confidence FROM signals ORDER BY id DESC LIMIT 1').first(),
     env.DB.prepare(`SELECT COUNT(*) AS closed, COALESCE(SUM(CASE WHEN pips > 0 THEN 1 ELSE 0 END),0) AS wins,
         COALESCE(SUM(CASE WHEN pips < 0 THEN 1 ELSE 0 END),0) AS losses, COALESCE(SUM(pips),0) AS pips
         FROM signals WHERE decision IN ('BUY','SELL') AND status <> 'open' AND closed_at > ?`).bind(t - 30 * DAY).first(),
@@ -420,10 +421,10 @@ route('GET', '/signal/feed', 'public', async ({ env, url, user }) => {
   const member = !!user;
   const signals = results.map((r) => {
     const v = { ...signalView(r), has_chart: !!r.has_chart, has_close_chart: !!r.has_close_chart };
-    if (r.status === 'open' && !member) { v.price = null; v.sl = null; v.tp = null; v.reason = ''; v.locked = true; v.has_chart = false; }
+    if (r.status === 'open' && !member) { v.price = null; v.sl = null; v.tp = null; v.reason = ''; v.news = ''; v.locked = true; v.has_chart = false; }
     return v;
   });
-  const lastView = last ? { ...last, reason: last.decision === 'WAIT' || member ? last.reason : '' } : null;
+  const lastView = last ? { ...last, reason: last.decision === 'WAIT' || member ? last.reason : '' } : null;   // news is public context
   return json({ ok: true, server_time: t, member, signals, last: lastView, stats30: stat });
 });
 
