@@ -34,7 +34,7 @@
   }
 
   const routes = { '': dashboard, ib: ibOrders, pesanan: paidOrders, 'ganti-akun': changesPage, lisensi: licensesPage, build: buildsPage,
-    member: usersPage, profit: profitPage, produk: productsPage, pengaturan: settingsPage, email: emailsPage, 'garuda-ai': garudaAiPage };
+    member: usersPage, profit: profitPage, produk: productsPage, pengaturan: settingsPage, email: emailsPage, 'garuda-ai': garudaAiPage, konten: contentPage };
   async function render() {
     clearInterval(timer);
     const [name, arg] = location.hash.replace(/^#\/?/, '').split('/');
@@ -391,6 +391,56 @@
     });
   }
 
+
+  // ------------------------------------------------------------------ promo videos (TikTok / Reels / Shorts)
+  async function contentPage() {
+    const d = await api('/admin/content');
+    const s = d.settings;
+    const on = (k) => s[k] === '1' ? 'checked' : '';
+    const st = { queued: ['b-gold', 'antre'], rendering: ['b-blue', 'dirender'], done: ['b-green', 'selesai'], failed: ['b-red', 'gagal'] };
+    const builderOk = d.builder_seen && Date.now() / 1000 - d.builder_seen < 300;
+    view.innerHTML = `${title('🎬 Konten Video', `<span class="badge ${builderOk ? 'b-green' : 'b-red'}">${builderOk ? 'PC builder aktif' : 'PC builder tidak aktif'}</span>`)}
+      <div class="grid" style="grid-template-columns:repeat(auto-fit,minmax(min(360px,100%),1fr));align-items:start">
+        <div class="card"><h3>Otomatis</h3>
+          <form id="cs">
+            <label class="row small" style="color:var(--text);margin-bottom:8px"><input type="checkbox" name="content_enabled" ${on('content_enabled')}> <b>Buat video promo otomatis</b></label>
+            <label class="row small" style="color:var(--text);margin-bottom:8px"><input type="checkbox" name="content_on_signal" ${on('content_on_signal')}> Setiap sinyal selesai (TP / SL, rugi juga ditampilkan jujur)</label>
+            <label class="row small" style="color:var(--text);margin-bottom:8px"><input type="checkbox" name="content_weekly" ${on('content_weekly')}> Rekap mingguan (Sabtu mulai 10:00 WIB)</label>
+            <label class="row small" style="color:var(--text);margin-bottom:12px"><input type="checkbox" name="content_tg" ${on('content_tg')}> Kirim video ke channel / grup Telegram</label>
+            <div class="grid c2" style="gap:0 12px"><div class="field"><label>Bahasa video</label><select name="content_lang"><option value="id">Indonesia</option><option value="en" ${s.content_lang === 'en' ? 'selected' : ''}>English</option></select></div>
+              <div class="field"><label>Suara narator</label><select name="content_voice">${[['id-ID-ArdiNeural', 'Ardi (pria)'], ['id-ID-GadisNeural', 'Gadis (wanita)']].map(([v, l]) => `<option value="${v}" ${s.content_voice === v ? 'selected' : ''}>${l}</option>`).join('')}</select></div></div>
+            <button class="btn btn-gold btn-sm" type="submit">Simpan</button>
+          </form>
+          <p class="help" style="margin-top:12px">Format vertikal 1080×1920 (9:16), 20–30 detik: siap untuk TikTok, Instagram Reels dan YouTube Shorts. Naskah, caption &amp; hashtag ditulis Claude (± $0,01 per video), suara Microsoft Edge (gratis), video dirender di PC builder dan disimpan di folder <b>Documents\GarudaAI Konten</b>.</p></div>
+        <div class="card"><h3>Buat video sekarang</h3>
+          <div class="field"><label>Dari sinyal yang sudah selesai</label><select id="csig">${d.closed.map((x) => `<option value="${x.id}">#S${x.id} ${esc(x.symbol)} ${x.decision} · ${x.status} ${x.pips > 0 ? '+' : ''}${Number(x.pips).toFixed(1)}</option>`).join('') || '<option value="">Belum ada sinyal selesai</option>'}</select></div>
+          <div class="row" style="gap:8px;flex-wrap:wrap"><button class="btn btn-outline btn-sm" id="mk-sig" ${d.closed.length ? '' : 'disabled'}>🎬 Video sinyal ini</button><button class="btn btn-outline btn-sm" id="mk-week">📊 Video rekap minggu ini</button></div>
+          <p class="help" style="margin-top:10px">Video masuk antrean dan dirender oleh PC builder dalam ± 1 menit.</p></div>
+      </div>
+      <h3 style="margin:22px 0 10px">Video</h3>
+      ${d.jobs.length ? `<div class="stack">${d.jobs.map((j) => `<div class="card" style="padding:14px 16px">
+        <div class="row between" style="gap:10px;flex-wrap:wrap"><div><b>#${j.id} ${j.kind === 'weekly' ? '📊 Rekap mingguan' : `🎬 Sinyal #S${j.ref_id} ${esc(j.symbol || '')} ${esc(j.decision || '')} ${j.result ? '· ' + esc(j.result) : ''}`}</b>
+          <span class="tiny muted"> · ${fmtDateTime(j.created_at)} · ${j.lang.toUpperCase()}</span></div>
+          <span><span class="badge ${(st[j.status] || st.queued)[0]}">${(st[j.status] || st.queued)[1]}</span> ${j.on_telegram ? '<span class="badge b-green">terkirim Telegram</span>' : ''}</span></div>
+        ${j.error ? `<div class="alert err small" style="margin-top:8px">${esc(j.error)}</div>` : ''}
+        ${j.caption ? `<pre class="small" style="white-space:pre-wrap;margin:10px 0 8px;background:var(--bg-2);padding:10px;border-radius:8px">${esc(j.caption)}</pre>` : ''}
+        <div class="row" style="gap:8px;flex-wrap:wrap">
+          ${j.caption ? `<button class="btn btn-ghost btn-sm" data-cap="${j.id}">Salin caption</button>` : ''}
+          ${j.on_telegram ? `<a class="btn btn-gold btn-sm" href="/api/admin/content/${j.id}/video">⬇ Unduh video</a>` : (j.status === 'done' ? `<span class="tiny muted">File: Documents\\GarudaAI Konten\\${esc(j.file_name)} (${(j.size / 1048576).toFixed(1)} MB, ${Math.round(j.duration)} dtk)</span>` : '')}
+          ${j.status === 'failed' ? `<button class="btn btn-outline btn-sm" data-retry="${j.id}">Coba lagi</button>` : ''}</div></div>`).join('')}</div>` : '<div class="card empty">Belum ada video.</div>'}`;
+    $('#cs').onsubmit = async (e) => {
+      e.preventDefault();
+      const f = Object.fromEntries(new FormData(e.target));
+      await api('/admin/content/settings', { method: 'PUT', body: { content_enabled: !!f.content_enabled, content_on_signal: !!f.content_on_signal, content_weekly: !!f.content_weekly,
+        content_tg: !!f.content_tg, content_lang: f.content_lang, content_voice: f.content_voice } });
+      toast('Pengaturan konten disimpan');
+    };
+    const queue = async (body) => { await api('/admin/content', { method: 'POST', body }); toast('Masuk antrean, dirender PC builder sebentar lagi'); render(); };
+    $('#mk-sig').onclick = () => queue({ kind: 'signal', ref_id: $('#csig').value, lang: s.content_lang });
+    $('#mk-week').onclick = () => queue({ kind: 'weekly', lang: s.content_lang });
+    $$('[data-retry]').forEach((b) => b.onclick = () => queue({ retry: b.dataset.retry }));
+    $$('[data-cap]').forEach((b) => b.onclick = () => { const j = d.jobs.find((x) => x.id == b.dataset.cap); copy(j.caption); });
+  }
 
   // ------------------------------------------------------------------ signed risk statement (PDF, made in the browser)
   async function loadJsPdf() {

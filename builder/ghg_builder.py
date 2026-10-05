@@ -340,6 +340,52 @@ def sync_garuda_ai(cfg, server_sha, variant='client'):
     log(f'EA Garuda AI {variant.upper()} v{version} di-upload ke web ({len(data) * 3 // 4:,} byte)')
 
 
+def sync_content(cfg):
+    """Promo videos: take one queued job from the website, render it here (garuda_video.py), keep the MP4 in the
+    content folder and hand it to Telegram through the website."""
+    try:
+        res = api(cfg, '/api/builder/content/claim', {})
+    except Exception as e:
+        log(f'Konten: tidak bisa mengambil antrean ({e})')
+        return
+    job = res.get('job')
+    if res.get('error'):
+        log(f'Konten: {res["error"]}')
+    if not job:
+        return
+    import garuda_video
+    folder = cfg.get('content_dir') or os.path.join(os.path.expanduser('~'), 'Documents', 'GarudaAI Konten')
+    os.makedirs(folder, exist_ok=True)
+    tag = (job.get('signal') or {}).get('symbol', 'rekap').lower()
+    name = f"garuda-ai_{datetime.datetime.now():%Y%m%d_%H%M}_{job['kind']}_{tag}_{job['id']}.mp4"
+    out = os.path.join(folder, name)
+    for k in ('chart_open', 'chart_close'):
+        if job.get(k):
+            job[k] = base64.b64decode(job[k])
+    try:
+        secs = garuda_video.render_video(job, out)
+        with open(out[:-4] + '.txt', 'w', encoding='utf-8') as f:
+            f.write(job.get('caption') or '')
+        size = os.path.getsize(out)
+        api(cfg, f"/api/builder/content/{job['id']}/done", {'ok': True, 'file_name': name, 'duration': secs, 'size': size})
+        log(f'Konten #{job["id"]}: video {secs:.0f} dtk, {size / 1048576:.1f} MB -> {out}')
+        if job.get('send_telegram'):
+            req = urllib.request.Request(cfg['api_base'].rstrip('/') + f"/api/builder/content/{job['id']}/telegram", data=open(out, 'rb').read(),
+                                         headers={'content-type': 'video/mp4', 'x-builder-token': cfg['token'], 'user-agent': 'GHG-Builder/1.0'}, method='POST')
+            try:
+                with urllib.request.urlopen(req, timeout=180) as r:
+                    t = json.loads(r.read().decode())
+                log(f'Konten #{job["id"]}: Telegram {"terkirim" if t.get("ok") else "belum terkirim (" + (t.get("error") or "; ".join(t.get("errors") or [])) + ")"}')
+            except Exception as e:
+                log(f'Konten #{job["id"]}: gagal kirim ke Telegram ({e})')
+    except Exception as e:
+        log(f'Konten #{job["id"]}: GAGAL render - {e}')
+        try:
+            api(cfg, f"/api/builder/content/{job['id']}/done", {'ok': False, 'error': str(e)[:280]})
+        except Exception:
+            pass
+
+
 def main():
     cfg = load_config()
     if '--test' in sys.argv:
@@ -370,6 +416,7 @@ def main():
             if job:
                 handle(cfg, job)
                 continue          # look for the next job right away
+            sync_content(cfg)
         except Exception as e:
             log(f'Tidak bisa menghubungi web: {e}')
         if once:

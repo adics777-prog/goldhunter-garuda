@@ -530,7 +530,171 @@ route('POST', '/signal/close', 'signal_pub', async ({ request, env, waitUntil })
   let replyTo = null;
   try { replyTo = row.tg_msgs ? JSON.parse(row.tg_msgs) : null; } catch { replyTo = null; }
   waitUntil(tgBroadcast(env, tgCloseText(row, result, close, pips, mk), { photo: chart, replyTo }));
+  waitUntil(queueContent(env, 'signal', row.id));
   return json({ ok: true, pips });
+});
+
+// ---- Promo videos (TikTok / Reels / Shorts, 9:16). The website queues a job, the builder on the admin PC asks for it,
+// gets the data + a script written by Claude, renders the MP4 locally and sends it back to Telegram through here.
+async function queueContent(env, kind, refId = 0) {
+  const s = await getSettings(env);
+  if (s.content_enabled !== '1' || (kind === 'signal' && s.content_on_signal !== '1')) return;
+  const dup = await env.DB.prepare('SELECT 1 FROM content_jobs WHERE kind=? AND ref_id=?').bind(kind, refId).first();
+  if (kind === 'signal' && dup) return;
+  await env.DB.prepare('INSERT INTO content_jobs (created_at, kind, ref_id, lang) VALUES (?,?,?,?)').bind(now(), kind, refId, s.content_lang === 'en' ? 'en' : 'id').run();
+}
+async function contentStats(env, days) {
+  const t = now();
+  const { results } = await env.DB.prepare(`SELECT symbol, COALESCE(SUM(CASE WHEN pips > 0 THEN 1 ELSE 0 END),0) AS wins, COALESCE(SUM(CASE WHEN pips < 0 THEN 1 ELSE 0 END),0) AS losses,
+      COALESCE(SUM(pips),0) AS pips FROM signals WHERE decision IN ('BUY','SELL') AND status <> 'open' AND closed_at > ? GROUP BY symbol`).bind(t - days * DAY).all();
+  const markets = await allSymbols(env);
+  const w = results.reduce((a, r) => a + r.wins, 0), l = results.reduce((a, r) => a + r.losses, 0);
+  return { wr: w + l ? Math.round((w / (w + l)) * 100) : null, tp: w, sl: l,
+    markets: results.map((r) => ({ symbol: r.symbol, pips: Math.round(r.pips * 10) / 10, wins: r.wins, losses: r.losses,
+      pip_label: (markets.find((m) => m.symbol === r.symbol) || {}).pip_label || 'pips' })) };
+}
+const CONTENT_SCHEMA = { type: 'object', additionalProperties: false, required: ['hook', 'scenes', 'caption', 'hashtags'], properties: {
+  hook: { type: 'string', description: 'max 8 words, the first words on screen' },
+  scenes: { type: 'array', items: { type: 'object', additionalProperties: false, required: ['id', 'say', 'text'], properties: {
+    id: { type: 'string', enum: ['hook', 'signal', 'result', 'stats', 'cta'] },
+    say: { type: 'string', description: 'narration read by the voice, 1-2 short sentences, numbers as digits, the website as "goldhunter garuda dot com"' },
+    text: { type: 'string', description: 'subtitle shown on screen, same meaning as say, website written goldhuntergaruda.com' } } } },
+  caption: { type: 'string', description: 'post caption, 2-4 short lines, ends with the link goldhuntergaruda.com/sinyal and a one-line risk note' },
+  hashtags: { type: 'string', description: '5-8 hashtags separated by spaces' } } };
+async function contentScript(env, kind, lang, data) {
+  const s = await getSettings(env);
+  if (!s.ai_claude_key_enc) fail(400, 'API key Claude belum diatur');
+  const key = await decrypt(env, s.ai_claude_key_enc);
+  const L = lang === 'en' ? 'English' : 'Bahasa Indonesia (santai tapi sopan, gaya TikTok)';
+  const sys = `You write short vertical promo videos (TikTok / Reels / Shorts, about 25 seconds) for Garuda AI, an AI trading-signal service (analysis by Claude AI) at goldhuntergaruda.com. Write in ${L}.
+Rules: use only the facts in the data, never invent numbers. Never promise or imply guaranteed profit, never say "pasti untung", "passive income" or similar. Losses are shown honestly: for a stop loss say the loss was limited by the stop loss (risk about 1%) and that every signal is published, wins and losses. Keep every scene short: hook max 8 words that make people stop scrolling, total narration about 55-70 words. The cta scene invites people to check every signal and result themselves at goldhuntergaruda.com.`;
+  const scenes = kind === 'weekly' ? 'hook, stats, cta' : 'hook, signal, result, stats, cta';
+  const r = await fetch('https://api.anthropic.com/v1/messages', { method: 'POST',
+    headers: { 'content-type': 'application/json', 'x-api-key': key, 'anthropic-version': '2023-06-01' },
+    body: JSON.stringify({ model: 'claude-sonnet-5-5', max_tokens: 3000, system: sys,
+      output_config: { effort: 'low', format: { type: 'json_schema', schema: CONTENT_SCHEMA } },
+      messages: [{ role: 'user', content: `Video type: ${kind}. Scenes in this order: ${scenes}.\nData:\n${JSON.stringify(data)}` }] }) });
+  const j = await r.json();
+  if (!r.ok) fail(502, 'Claude: ' + ((j.error && j.error.message) || r.status));
+  const txt = (j.content || []).filter((c) => c.type === 'text').map((c) => c.text).join('');
+  return JSON.parse(txt);
+}
+route('POST', '/builder/content/claim', 'builder', async ({ env }) => {
+  const s = await getSettings(env);
+  if (s.content_enabled !== '1') return json({ job: null });
+  // weekly recap: Saturday from 10:00 WIB, once per week
+  const wib = new Date((now() + 7 * 3600) * 1000);
+  if (s.content_weekly === '1' && wib.getUTCDay() === 6 && wib.getUTCHours() >= 10) {
+    const last = await env.DB.prepare("SELECT MAX(created_at) AS t FROM content_jobs WHERE kind='weekly'").first();
+    if (!last.t || now() - last.t > 5 * DAY) await queueContent(env, 'weekly', 0);
+  }
+  await env.DB.prepare("UPDATE content_jobs SET status='queued' WHERE status='rendering' AND created_at < ?").bind(now() - 3600).run();
+  const job = await env.DB.prepare("SELECT * FROM content_jobs WHERE status='queued' ORDER BY id LIMIT 1").first();
+  if (!job) return json({ job: null });
+  await env.DB.prepare("UPDATE content_jobs SET status='rendering' WHERE id=?").bind(job.id).run();
+  try {
+    const out = { id: job.id, kind: job.kind, lang: job.lang, voice: job.lang === 'en' ? 'en-US-AndrewNeural' : (s.content_voice || 'id-ID-ArdiNeural'),
+      send_telegram: s.content_tg === '1' };
+    const st30 = await contentStats(env, 30);
+    const data = { stats_30_days: st30 };
+    if (job.kind === 'signal') {
+      const r = await env.DB.prepare('SELECT * FROM signals WHERE id=?').bind(job.ref_id).first();
+      if (!r || r.status === 'open') fail(404, 'Sinyal belum selesai');
+      const m = await getSymbol(env, r.symbol);
+      out.signal = { id: r.id, symbol: r.symbol, decision: r.decision, entry: r.price, sl: r.sl, tp: r.tp, close: r.close_price, pips: r.pips,
+        pip_label: m.pip_label, digits: m.digits, result: r.status, created_at: r.created_at, closed_at: r.closed_at, confidence: r.confidence };
+      const charts = await env.DB.prepare('SELECT kind, data FROM signal_charts WHERE signal_id=?').bind(r.id).all();
+      for (const c of charts.results) out['chart_' + c.kind] = c.data;
+      data.signal = { ...out.signal, reason: job.lang === 'en' ? (r.reason_en || r.reason) : r.reason, minutes_open: Math.round((r.closed_at - r.created_at) / 60) };
+    } else {
+      data.stats_7_days = await contentStats(env, 7);
+    }
+    const st = job.kind === 'weekly' ? data.stats_7_days : st30;
+    out.stats = { title: job.kind === 'weekly' ? (job.lang === 'en' ? 'THIS WEEK' : 'HASIL MINGGU INI') : (job.lang === 'en' ? '30-DAY TRACK RECORD' : 'TRACK RECORD 30 HARI'),
+      wr30: st.wr, tp30: st.tp, sl30: st.sl, markets: st.markets.map((x) => ({ symbol: x.symbol, pips30: x.pips, pip_label: x.pip_label })) };
+    let script = job.script ? JSON.parse(job.script) : null;
+    if (!script) {
+      script = await contentScript(env, job.kind, job.lang, data);
+      const caption = `${script.caption}\n\n${script.hashtags}`;
+      await env.DB.prepare('UPDATE content_jobs SET script=?, caption=? WHERE id=?').bind(JSON.stringify(script), caption, job.id).run();
+    }
+    out.script = script;
+    out.caption = `${script.caption}\n\n${script.hashtags}`;
+    return json({ job: out });
+  } catch (e) {
+    await env.DB.prepare("UPDATE content_jobs SET status='failed', error=? WHERE id=?").bind(str(e.message || e, 300), job.id).run();
+    return json({ job: null, error: String(e.message || e) });
+  }
+});
+route('POST', '/builder/content/:id/done', 'builder', async ({ request, env, params }) => {
+  const b = await readJson(request);
+  await env.DB.prepare('UPDATE content_jobs SET status=?, error=?, file_name=?, duration=?, size=?, rendered_at=? WHERE id=?')
+    .bind(b.ok ? 'done' : 'failed', str(b.error, 300), str(b.file_name, 200), Number(b.duration) || 0, int(b.size) || 0, now(), int(params.id)).run();
+  return json({ ok: true });
+});
+// The rendered MP4 (raw body) goes straight to the Telegram targets; nothing is stored on the website
+route('POST', '/builder/content/:id/telegram', 'builder', async ({ request, env, params }) => {
+  const job = await env.DB.prepare('SELECT * FROM content_jobs WHERE id=?').bind(int(params.id)).first();
+  if (!job) fail(404, 'Konten tidak ditemukan');
+  const c = await tgConfig(env);
+  if (!c.on) return json({ ok: false, error: 'Telegram belum aktif' });
+  const buf = await request.arrayBuffer();
+  if (!buf.byteLength || buf.byteLength > 45 * 1024 * 1024) fail(400, 'Ukuran video tidak valid');
+  const cap = esc(job.caption).slice(0, 1000);
+  let fileId = '';
+  const errs = [];
+  for (const t of c.targets) {
+    const fd = new FormData();
+    fd.append('chat_id', String(t.chat_id));
+    fd.append('caption', cap);
+    fd.append('parse_mode', 'HTML');
+    fd.append('supports_streaming', 'true');
+    fd.append('width', '1080');
+    fd.append('height', '1920');
+    fd.append('video', new Blob([buf], { type: 'video/mp4' }), job.file_name || 'garuda-ai.mp4');
+    const r = await (await fetch(`https://api.telegram.org/bot${c.token}/sendVideo`, { method: 'POST', body: fd })).json().catch(() => ({}));
+    if (r.ok) fileId = fileId || (r.result.video && r.result.video.file_id) || '';
+    else errs.push(`${t.name || t.chat_id}: ${r.description || 'gagal'}`);
+  }
+  if (fileId) await env.DB.prepare('UPDATE content_jobs SET tg_file_id=? WHERE id=?').bind(fileId, job.id).run();
+  return json({ ok: !!fileId, errors: errs });
+});
+route('GET', '/admin/content', 'admin', async ({ env }) => {
+  const s = await getSettings(env);
+  const { results } = await env.DB.prepare(`SELECT c.id, c.created_at, c.kind, c.ref_id, c.lang, c.status, c.caption, c.error, c.file_name, c.duration, c.size, c.rendered_at,
+      c.tg_file_id <> '' AS on_telegram, s.symbol, s.decision, s.pips, s.status AS result FROM content_jobs c LEFT JOIN signals s ON s.id = c.ref_id AND c.kind = 'signal'
+      ORDER BY c.id DESC LIMIT 60`).all();
+  const { results: closed } = await env.DB.prepare(`SELECT id, symbol, decision, pips, status, closed_at FROM signals WHERE decision IN ('BUY','SELL') AND status <> 'open'
+      ORDER BY id DESC LIMIT 20`).all();
+  const bs = (() => { try { return JSON.parse(s.builder_seen || '{}'); } catch { return {}; } })();
+  return json({ jobs: results, closed, builder_seen: bs.at || 0,
+    settings: { content_enabled: s.content_enabled, content_on_signal: s.content_on_signal, content_weekly: s.content_weekly, content_lang: s.content_lang,
+      content_voice: s.content_voice, content_tg: s.content_tg } });
+});
+route('POST', '/admin/content', 'admin', async ({ request, env }) => {
+  const b = await readJson(request);
+  if (b.kind === 'weekly') await env.DB.prepare('INSERT INTO content_jobs (created_at, kind, ref_id, lang) VALUES (?,?,0,?)').bind(now(), 'weekly', b.lang === 'en' ? 'en' : 'id').run();
+  else if (b.kind === 'signal' && int(b.ref_id)) await env.DB.prepare('INSERT INTO content_jobs (created_at, kind, ref_id, lang) VALUES (?,?,?,?)').bind(now(), 'signal', int(b.ref_id), b.lang === 'en' ? 'en' : 'id').run();
+  else if (b.retry && int(b.retry)) await env.DB.prepare("UPDATE content_jobs SET status='queued', error='' WHERE id=?").bind(int(b.retry)).run();
+  else fail(400, 'Permintaan tidak dikenal');
+  return json({ ok: true });
+});
+route('PUT', '/admin/content/settings', 'admin', async ({ request, env }) => {
+  const b = await readJson(request);
+  for (const k of ['content_enabled', 'content_on_signal', 'content_weekly', 'content_tg']) if (b[k] !== undefined) await putSetting(env, k, b[k] ? '1' : '0');
+  if (b.content_lang) await putSetting(env, 'content_lang', b.content_lang === 'en' ? 'en' : 'id');
+  if (b.content_voice && /^[a-z]{2}-[A-Z]{2}-[A-Za-z]+Neural$/.test(b.content_voice)) await putSetting(env, 'content_voice', b.content_voice);
+  return json({ ok: true });
+});
+// download a rendered video back from Telegram (no storage on the website)
+route('GET', '/admin/content/:id/video', 'admin', async ({ env, params }) => {
+  const job = await env.DB.prepare('SELECT file_name, tg_file_id FROM content_jobs WHERE id=?').bind(int(params.id)).first();
+  if (!job || !job.tg_file_id) fail(404, 'Video tidak ada di Telegram; ambil dari folder Konten di PC builder');
+  const c = await tgConfig(env);
+  const f = await (await fetch(`https://api.telegram.org/bot${c.token}/getFile?file_id=${encodeURIComponent(job.tg_file_id)}`)).json();
+  if (!f.ok) fail(502, 'Telegram: ' + (f.description || 'gagal'));
+  const v = await fetch(`https://api.telegram.org/file/bot${c.token}/${f.result.file_path}`);
+  return new Response(v.body, { headers: { 'content-type': 'video/mp4', 'content-disposition': `attachment; filename="${job.file_name || 'garuda-ai.mp4'}"`, 'cache-control': 'private, no-store' } });
 });
 
 // Chart picture of a signal. While the signal is still running only logged-in users may see it (it shows the levels).
