@@ -1115,6 +1115,7 @@
         <div class="card" data-tab="jadwal"><h3>🎯 Saringan sinyal (berlaku untuk semua EA client)</h3>
           <div class="grid c2" style="gap:0 12px">${num('min_conf', c.min_conf, 'Keyakinan minimal (%)')}${num('min_rr', c.min_rr, 'Reward : risk minimal', '', '0.1')}
 </div>
+          <div class="grid c2" style="gap:0 12px">${num('min_conf_pending', c.min_conf_pending, 'Keyakinan minimal pending order (%)', 'Pending di lokasi bagus dengan SL ketat boleh lebih rendah')}${num('min_ev', c.min_ev, 'Nilai harapan minimal (R)', 'keyakinan × R:R − (1 − keyakinan). 0,5 = rata-rata +0,5 kali risiko per trade', '0.1')}</div>
           ${num('valid_min', c.valid_min, 'Sinyal berlaku (menit)', 'Client tidak masuk lagi sesudah waktu ini')}
           ${num('cost_cap', c.cost_cap, 'Batas biaya Claude per hari ($)', 'Lewat batas: analisis berhenti sampai besok', '0.5')}</div>
         <div class="card" style="grid-column:1/-1" data-tab="pasar"><div class="row between"><h3 style="margin:0">📊 Pasar yang dianalisis</h3>
@@ -1185,7 +1186,7 @@
         model: f.model, effort: f.effort, news_effort: f.news_effort, claude_key: f.claude_key,
         news: !!f.news, intermarket: !!f.intermarket, vision: !!f.vision, chart: !!f.chart, paused: !!f.paused, master_trade: !!f.master_trade, level_trigger: !!f.level_trigger, momentum: !!f.momentum, momentum_24h: !!f.momentum_24h, interval_min: f.interval_min,
         news_max: f.news_max, research_every: f.research_every, session_start: f.session_start, session_end: f.session_end, friday_last: f.friday_last,
-        min_conf: f.min_conf, min_rr: f.min_rr, valid_min: f.valid_min, cost_cap: f.cost_cap, research_symbol: f.research_symbol,
+        min_conf: f.min_conf, min_rr: f.min_rr, min_conf_pending: f.min_conf_pending, min_ev: f.min_ev, valid_min: f.valid_min, cost_cap: f.cost_cap, research_symbol: f.research_symbol,
         markets: $$('.mkt').map((r) => ({ symbol: r.dataset.sym, enabled: $('.mk-on', r).checked, weekend: $('.mk-we', r).checked,
           session_start: $('.mk-st', r).value, session_end: $('.mk-en', r).value, min_sl: $('.mk-mn', r).value, max_sl: $('.mk-mx', r).value, profile: $('.mk-pr', r).value })),
       };
