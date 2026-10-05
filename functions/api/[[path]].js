@@ -1119,6 +1119,15 @@ route('GET', '/signal/feed', 'public', async ({ env, url, user }) => {
       WHERE id IN (SELECT MAX(id) FROM signals GROUP BY symbol)`).all();
   const { results: waitPics } = await env.DB.prepare(`SELECT s.symbol, MAX(s.id) AS id, MAX(s.created_at) AS at FROM signals s
       JOIN signal_charts c ON c.signal_id = s.id AND c.kind = 'open' WHERE s.decision = 'WAIT' AND s.created_at > ? GROUP BY s.symbol`).bind(t - DAY).all();
+  // a running position (then a waiting pending order) is shown instead of a later WAIT analysis of that market
+  const { results: liveRows } = await env.DB.prepare(`SELECT id, symbol, decision, created_at, valid_until, reason, news, reason_en, news_en, trend_h4, trend_h1, confidence, status,
+      order_type, price, sl, tp, sl_now, be_at, (SELECT COUNT(*) FROM signal_charts c WHERE c.signal_id = signals.id AND c.kind = 'open') AS has_chart FROM signals
+      WHERE decision IN ('BUY','SELL') AND status IN ('open','pending') AND created_at > ? ORDER BY CASE status WHEN 'open' THEN 0 ELSE 1 END, id DESC`).bind(t - 3 * DAY).all();
+  for (const lr of liveRows) {
+    const k = lastRows.findIndex((x) => x.symbol === lr.symbol);
+    if (k >= 0 && lastRows[k].id !== lr.id && !(lastRows[k].status === 'open' && lr.status === 'pending')) lastRows[k] = lr;
+    else if (k < 0) lastRows.push(lr);
+  }
   const enabledSyms = new Set(markets.filter((m) => m.enabled).map((m) => m.symbol));
   const lastByMarket = lastRows.filter((x) => enabledSyms.has(x.symbol)).map((x) => {
     const pic = waitPics.find((p) => p.symbol === x.symbol);
