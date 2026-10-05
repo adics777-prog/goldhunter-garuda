@@ -418,9 +418,10 @@
             <button class="btn btn-gold btn-sm" type="submit">Simpan</button>
           </form>
           <p class="help" style="margin-top:12px">Format vertikal 1080×1920 (9:16), 20–35 detik: siap untuk TikTok, Instagram Reels dan YouTube Shorts. Naskah, caption &amp; hashtag ditulis <b>${s.content_ai === 'claude' ? 'Claude' : aiN}</b>, suara Microsoft Edge (gratis), video dirender di PC builder dan disimpan di folder <b>Documents\GarudaAI Konten</b>.</p></div>
-        <div class="card"><h3>AI penulis naskah ${s.qwen_key_set ? `<span class="badge b-green">${aiN} siap</span>` : '<span class="badge b-red">API key belum diisi</span>'}</h3>
+        <div class="card"><h3>Pilihan AI ${s.qwen_key_set ? `<span class="badge b-green">${aiN} siap</span>` : '<span class="badge b-red">API key belum diisi</span>'}</h3>
+          <div class="small" style="margin:-4px 0 12px;padding:10px 12px;background:var(--bg-2);border-radius:8px">📈 <b>Analisis trading</b>: selalu Claude (diatur di menu Garuda AI)<br>🎬 <b>Naskah video</b>: pilih di bawah<br>💬 <b>CS otomatis</b>: menyusul, pilihan DeepSeek / Claude yang sama</div>
           <form id="cq">
-            <div class="field"><label>Mesin naskah</label><select name="content_ai"><option value="qwen">AI murah: DeepSeek / Qwen (kredit Claude khusus analisis trading)</option><option value="claude" ${s.content_ai === 'claude' ? 'selected' : ''}>Claude</option></select></div>
+            <div class="field"><label>Naskah video ditulis oleh</label><select name="content_ai"><option value="qwen">${aiN} · hemat (± Rp 5 per video)</option><option value="claude" ${s.content_ai === 'claude' ? 'selected' : ''}>Claude · lebih mahal (± Rp 200 per video, pakai kredit analisis)</option></select></div>
             <div class="field"><label>Penyedia</label><select name="qwen_base" id="qbase">${AI_PROV.map(([v, l]) => `<option value="${v}" ${s.qwen_base === v ? 'selected' : ''}>${l}</option>`).join('')}</select></div>
             <div class="field"><label>API key</label><input name="qwen_key" type="password" autocomplete="off" placeholder="${s.qwen_key_set ? '•••••• tersimpan (isi untuk mengganti)' : 'sk-...'}"></div>
             <div class="field"><label>Model</label><input name="qwen_model" id="qmodel" list="qmodels" value="${esc(s.qwen_model)}"><datalist id="qmodels"></datalist></div>

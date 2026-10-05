@@ -579,7 +579,7 @@ async function qwenJson(env, s, system, user) {
   const key = await decrypt(env, s.qwen_key_enc);
   const base = String(s.qwen_base || 'https://dashscope-intl.aliyuncs.com/compatible-mode/v1').replace(/\/+$/, '');
   const r = await fetch(base + '/chat/completions', { method: 'POST', headers: { 'content-type': 'application/json', authorization: 'Bearer ' + key },
-    body: JSON.stringify({ model: s.qwen_model || 'qwen-plus', temperature: 0.8, response_format: { type: 'json_object' },
+    body: JSON.stringify({ model: s.qwen_model || 'qwen-plus', temperature: 0.9, max_tokens: 2500, response_format: { type: 'json_object' },
       messages: [{ role: 'system', content: system }, { role: 'user', content: user }] }) });
   const j = await r.json().catch(() => ({}));
   if (!r.ok) fail(502, aiName(s) + ': ' + ((j.error && (j.error.message || j.error.code)) || r.status));
@@ -597,46 +597,36 @@ async function contentStats(env, days) {
     markets: results.map((r) => ({ symbol: r.symbol, pips: Math.round(r.pips * 10) / 10, wins: r.wins, losses: r.losses,
       pip_label: (markets.find((m) => m.symbol === r.symbol) || {}).pip_label || 'pips' })) };
 }
-const CONTENT_SCHEMA = { type: 'object', additionalProperties: false, required: ['hook', 'scenes', 'caption', 'hashtags'], properties: {
-  hook: { type: 'string', description: 'max 8 words, the first words on screen' },
-  scenes: { type: 'array', items: { type: 'object', additionalProperties: false, required: ['id', 'say', 'text'], properties: {
-    id: { type: 'string', enum: ['hook', 'signal', 'result', 'stats', 'cta'] },
-    say: { type: 'string', description: 'narration read by the voice, 1-2 short sentences, numbers as digits, the website as "goldhunter garuda dot com"' },
-    text: { type: 'string', description: 'subtitle shown on screen, same meaning as say, website written goldhuntergaruda.com' } } } },
-  caption: { type: 'string', description: 'post caption, 2-4 short lines, ends with the link goldhuntergaruda.com/sinyal and a one-line risk note' },
-  hashtags: { type: 'string', description: '5-8 hashtags separated by spaces' } } };
-async function contentScript(env, kind, lang, data) {
-  const s = await getSettings(env);
-  if (kind === 'edu') return eduScript(env, s, lang, data);
-  if (s.content_ai !== 'claude') {
-    const L = lang === 'en' ? 'English' : 'Bahasa Indonesia (santai tapi sopan, gaya TikTok)';
-    const scenes = kind === 'weekly' ? 'hook, stats, cta' : 'hook, signal, result, stats, cta';
-    return qwenJson(env, s, `You write short vertical promo videos (about 25 seconds) for Garuda AI, an AI trading-signal service (analysis by Claude AI) at goldhuntergaruda.com. Write in ${L}. Use only the facts in the data, never invent numbers. Never promise or imply guaranteed profit. Losses are shown honestly: for a stop loss say the loss was limited by the stop loss (risk about 1%) and every signal is published, wins and losses. Total narration about 55-70 words.
-Return JSON only: {"hook": "max 8 words", "scenes": [{"id": "hook|signal|result|stats|cta", "say": "narration, website spoken as goldhunter garuda dot com", "text": "subtitle, website written goldhuntergaruda.com"}], "caption": "2-4 short lines ending with goldhuntergaruda.com/sinyal and a one-line risk note", "hashtags": "5-8 hashtags"}`,
-      `Video type: ${kind}. Scenes in this order: ${scenes}.\nData:\n${JSON.stringify(data)}`);
-  }
+// One JSON call for a feature: 'claude' uses the Claude key (Sonnet, low effort), anything else the cheap model (DeepSeek / Qwen)
+async function aiJson(env, s, use, system, user) {
+  if (use !== 'claude') return qwenJson(env, s, system, user);
   if (!s.ai_claude_key_enc) fail(400, 'API key Claude belum diatur');
   const key = await decrypt(env, s.ai_claude_key_enc);
-  const L = lang === 'en' ? 'English' : 'Bahasa Indonesia (santai tapi sopan, gaya TikTok)';
-  const sys = `You write short vertical promo videos (TikTok / Reels / Shorts, about 25 seconds) for Garuda AI, an AI trading-signal service (analysis by Claude AI) at goldhuntergaruda.com. Write in ${L}.
-Rules: use only the facts in the data, never invent numbers. Never promise or imply guaranteed profit, never say "pasti untung", "passive income" or similar. Losses are shown honestly: for a stop loss say the loss was limited by the stop loss (risk about 1%) and that every signal is published, wins and losses. Keep every scene short: hook max 8 words that make people stop scrolling, total narration about 55-70 words. The cta scene invites people to check every signal and result themselves at goldhuntergaruda.com.`;
-  const scenes = kind === 'weekly' ? 'hook, stats, cta' : 'hook, signal, result, stats, cta';
   const r = await fetch('https://api.anthropic.com/v1/messages', { method: 'POST',
     headers: { 'content-type': 'application/json', 'x-api-key': key, 'anthropic-version': '2023-06-01' },
-    body: JSON.stringify({ model: 'claude-sonnet-5-5', max_tokens: 3000, system: sys,
-      output_config: { effort: 'low', format: { type: 'json_schema', schema: CONTENT_SCHEMA } },
-      messages: [{ role: 'user', content: `Video type: ${kind}. Scenes in this order: ${scenes}.\nData:\n${JSON.stringify(data)}` }] }) });
+    body: JSON.stringify({ model: 'claude-sonnet-5-5', max_tokens: 3000, system, output_config: { effort: 'low' },
+      messages: [{ role: 'user', content: user }] }) });
   const j = await r.json();
   if (!r.ok) fail(502, 'Claude: ' + ((j.error && j.error.message) || r.status));
   const txt = (j.content || []).filter((c) => c.type === 'text').map((c) => c.text).join('');
-  return JSON.parse(txt);
+  return JSON.parse(txt.slice(txt.indexOf('{'), txt.lastIndexOf('}') + 1));
 }
-// Educational / introduction video: Qwen writes 3 points about one topic, Garuda AI facts given so nothing is invented
+async function contentScript(env, kind, lang, data) {
+  const s = await getSettings(env);
+  if (kind === 'edu') return eduScript(env, s, lang, data);
+  const L = lang === 'en' ? 'English' : 'Bahasa Indonesia (santai tapi sopan, gaya TikTok)';
+  const scenes = kind === 'weekly' ? 'hook, stats, cta' : 'hook, signal, result, stats, cta';
+  return aiJson(env, s, s.content_ai, `You write short vertical promo videos (TikTok / Reels / Shorts, about 25 seconds) for Garuda AI, an AI trading-signal service (analysis by Claude AI) at goldhuntergaruda.com. Write in ${L}.
+Rules: use only the facts in the data, never invent numbers. Never promise or imply guaranteed profit, never say "pasti untung", "passive income" or similar. Style: friendly, confident, short punchy sentences; the hook creates curiosity about the result; say briefly WHY the AI took the trade (from the reason in the data). Losses are shown honestly: for a stop loss say the loss was limited by the stop loss (risk about 1%) and that every signal is published, wins and losses. Hook max 8 words that make people stop scrolling, total narration about 55-70 words. The cta scene invites people to check every signal and result themselves at goldhuntergaruda.com.
+Return JSON only: {"hook": "max 8 words", "scenes": [{"id": "hook|signal|result|stats|cta", "say": "narration, numbers as digits, website spoken as goldhunter garuda dot com", "text": "subtitle, website written goldhuntergaruda.com"}], "caption": "2-4 short lines ending with goldhuntergaruda.com/sinyal and a one-line risk note", "hashtags": "5-8 hashtags"}`,
+    `Video type: ${kind}. Scenes in this order: ${scenes}.\nData:\n${JSON.stringify(data)}`);
+}
+// Educational / introduction video: 3 points about one topic, Garuda AI facts given so nothing is invented
 async function eduScript(env, s, lang, data) {
-  if (s.content_ai === 'claude') fail(400, 'Konten edukasi memakai Qwen / DeepSeek: isi API key-nya di Admin > Konten Video');
   const L = lang === 'en' ? 'English' : 'Bahasa Indonesia (santai, jelas, gaya TikTok edukatif)';
-  return qwenJson(env, s, `You write short educational vertical videos (25-35 seconds, TikTok / Reels / Shorts) for Garuda AI (goldhuntergaruda.com), an AI trading-signal service for gold, Bitcoin and forex. Write in ${L}.
+  return aiJson(env, s, s.content_ai, `You write short educational vertical videos (25-35 seconds, TikTok / Reels / Shorts) for Garuda AI (goldhuntergaruda.com), an AI trading-signal service for gold, Bitcoin and forex. Write in ${L}.
 Teach one topic clearly and correctly for beginners. Use only the Garuda AI facts given; never invent results or numbers. Never promise profit, never say "pasti untung" or "passive income". Mention Garuda AI naturally (mostly in the last point and the cta).
+Style: the hook must stop the scroll in 2 seconds (pick one: a sharp question, a common mistake, a surprising fact, or "stop doing X"). Speak like a friendly mentor, short punchy sentences, explain every term with an everyday analogy, give one concrete example (e.g. gold at 4,150 bouncing from support). Each point adds something new, no filler, no repeated words. Titles are catchy and readable in one glance.
 Return JSON only: {"hook": "max 8 words that stop the scroll", "scenes": [{"id": "hook", "say": "...", "text": "..."}, {"id": "point", "icon": "one emoji", "title": "2-5 words", "say": "1-2 short sentences", "text": "short subtitle"} x3, ${data.chart ? '{"id": "chart", "title": "2-5 words", "say": "1-2 sentences about how the AI chart shows zones / levels", "text": "..."}, ' : ''}{"id": "cta", "say": "invite to follow the channel and check goldhunter garuda dot com", "text": "..."}], "caption": "3-4 short lines ending with goldhuntergaruda.com and a one-line risk note", "hashtags": "5-8 hashtags"}
 "say" is read by a voice (website as "goldhunter garuda dot com"), "text" is the subtitle (website written goldhuntergaruda.com). Total narration 70-90 words.`,
     `Topic: ${data.topic}\nGaruda AI facts: ${JSON.stringify(data.facts)}`);
@@ -651,6 +641,7 @@ route('POST', '/builder/content/claim', 'builder', async ({ env }) => {
   if (s.content_enabled !== '1') return json({ job: null });
   // the script writer must be configured (Qwen by default): jobs simply wait until then, no Claude credit is used
   if (s.content_ai !== 'claude' && !s.qwen_key_enc) return json({ job: null, waiting: 'API key AI konten belum diatur' });
+  if (s.content_ai === 'claude' && !s.ai_claude_key_enc) return json({ job: null, waiting: 'API key Claude belum diatur' });
   // scheduled educational videos: at each time of day (WIB) in content_times, the next topic in the rotation
   if (s.content_edu === '1') {
     const dayStart = now() - ((now() + 7 * 3600) % DAY);
@@ -743,6 +734,7 @@ route('POST', '/builder/content/:id/telegram', 'builder', async ({ request, env,
     fd.append('supports_streaming', 'true');
     fd.append('width', '1080');
     fd.append('height', '1920');
+    if (job.duration) fd.append('duration', String(Math.round(job.duration)));
     fd.append('video', new Blob([buf], { type: 'video/mp4' }), job.file_name || 'garuda-ai.mp4');
     const r = await (await fetch(`https://api.telegram.org/bot${c.token}/sendVideo`, { method: 'POST', body: fd })).json().catch(() => ({}));
     if (r.ok) fileId = fileId || (r.result.video && r.result.video.file_id) || '';

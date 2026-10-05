@@ -16,7 +16,7 @@ Frames are drawn with Pillow and piped to ffmpeg (bundled by imageio-ffmpeg); na
 """
 import asyncio, io, os, subprocess, tempfile, time
 
-from PIL import Image, ImageDraw, ImageFont
+from PIL import Image, ImageDraw, ImageFilter, ImageFont
 
 W, H, FPS = 1080, 1920, 30
 BG = (11, 14, 20)
@@ -136,7 +136,7 @@ def paste_chart(im, png, y, t, dur, width=980):
     vw, vh = cw / z, ch / z
     box = (int((cw - vw) / 2), int((ch - vh) / 2), int((cw + vw) / 2), int((ch + vh) / 2))
     h = int(width * ch / cw)
-    crop = src.crop(box).resize((width, h), Image.BILINEAR)
+    crop = src.crop(box).resize((width, h), Image.LANCZOS).filter(ImageFilter.UnsharpMask(radius=1.2, percent=60, threshold=2))
     x = (W - width) // 2
     d = ImageDraw.Draw(im)
     d.rounded_rectangle([x - 6, y - 6, x + width + 6, y + h + 6], radius=18, fill=LINE)
@@ -360,8 +360,9 @@ def render_video(job, out_path):
             filt.append(f"anullsrc=r=44100:cl=mono,atrim=duration={p['dur']:.3f}[s{len(labels)}]")
             labels.append(f'[s{len(labels)}]')
     filt.append(''.join(labels) + f'concat=n={len(labels)}:v=0:a=1[aout]')
-    cmd += ['-filter_complex', ';'.join(filt), '-map', '0:v', '-map', '[aout]', '-c:v', 'libx264', '-preset', 'veryfast', '-crf', '21',
-            '-pix_fmt', 'yuv420p', '-c:a', 'aac', '-b:a', '128k', '-movflags', '+faststart', '-shortest', out_path]
+    cmd += ['-filter_complex', ';'.join(filt), '-map', '0:v', '-map', '[aout]', '-c:v', 'libx264', '-preset', 'slow', '-crf', '16', '-profile:v', 'high', '-level', '4.2',
+            '-g', str(FPS * 2), '-maxrate', '12M', '-bufsize', '24M', '-pix_fmt', 'yuv420p', '-color_range', 'tv', '-colorspace', 'bt709',
+            '-color_primaries', 'bt709', '-color_trc', 'bt709', '-c:a', 'aac', '-b:a', '160k', '-ar', '44100', '-movflags', '+faststart', '-shortest', out_path]
     proc = subprocess.Popen(cmd, stdin=subprocess.PIPE)
     prev = None
     fade = int(FPS * 0.25)
