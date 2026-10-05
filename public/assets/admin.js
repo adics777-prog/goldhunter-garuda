@@ -87,7 +87,7 @@
         </div>
         ${lastSig.length ? `<div style="margin-top:8px">${lastSig.map((r) => `<div class="sig-mini"><div><span class="badge ${r.decision === 'BUY' ? 'b-green' : r.decision === 'SELL' ? 'b-red' : 'b-gold'}">${r.decision === 'WAIT' ? 'TUNGGU' : r.decision}</span> <b>${esc(r.symbol)}</b>
             ${r.decision === 'WAIT' ? '' : `<span class="small muted mono">${Number(r.price).toFixed(digits(r.symbol))}</span>`}</div>
-          <div class="small right">${r.status === 'open' ? '<span class="badge b-gold">berjalan</span>' : r.status === 'wait' ? '' : `<b style="color:${r.pips > 0 ? '#6ee7a2' : '#ff8b95'}">${r.pips > 0 ? '+' : ''}${Number(r.pips).toFixed(1)}</b> ${esc(r.status)}`} <span class="tiny muted">${ago(r.created_at)}</span></div></div>`).join('')}</div>` : ''}
+          <div class="small right">${r.status === 'open' ? '<span class="badge b-gold">berjalan</span>' : r.status === 'pending' ? '<span class="badge b-blue">pending</span>' : r.status === 'cancel' ? '<span class="badge b-gray">batal</span>' : r.status === 'wait' ? '' : `<b style="color:${r.pips > 0 ? '#6ee7a2' : '#ff8b95'}">${r.pips > 0 ? '+' : ''}${Number(r.pips).toFixed(1)}</b> ${esc(r.status)}`} <span class="tiny muted">${ago(r.created_at)}</span></div></div>`).join('')}</div>` : ''}
       </div>` : ''}
       <h3 style="margin:0 0 12px">💳 Penjualan</h3>
       <div class="grid c4" style="margin-bottom:22px">
@@ -1167,7 +1167,7 @@
         <td><span class="badge ${r.decision === 'BUY' ? 'b-green' : r.decision === 'SELL' ? 'b-red' : 'b-gold'}">${r.decision}</span> <span class="tiny muted">${r.confidence}%</span></td>
         <td class="right mono small">${r.decision === 'WAIT' ? '-' : Number(r.price).toFixed(dg(r.symbol))}</td>
         <td class="right mono small nowrap">${r.decision === 'WAIT' ? '-' : Number(r.sl).toFixed(dg(r.symbol)) + ' / ' + Number(r.tp).toFixed(dg(r.symbol))}</td>
-        <td class="small">${r.status === 'wait' ? '-' : r.status === 'open' ? '<span class="badge b-gold">berjalan</span>' : `<b style="color:${r.pips > 0 ? '#6ee7a2' : '#ff8b95'}">${r.pips > 0 ? '+' : ''}${Number(r.pips).toFixed(1)} ${esc(lb(r.symbol))}</b> ${esc(r.status)}`}</td>
+        <td class="small">${r.status === 'wait' ? '-' : r.status === 'open' ? '<span class="badge b-gold">berjalan</span>' : r.status === 'pending' ? '<span class="badge b-blue">pending</span>' : r.status === 'cancel' ? '<span class="badge b-gray">batal</span>' : `<b style="color:${r.pips > 0 ? '#6ee7a2' : '#ff8b95'}">${r.pips > 0 ? '+' : ''}${Number(r.pips).toFixed(1)} ${esc(lb(r.symbol))}</b> ${esc(r.status)}`}</td>
         <td class="right small">$${Number(r.cost_usd || 0).toFixed(3)}</td></tr>`).join('') || '<tr><td colspan="7" class="empty">Belum ada analisis</td></tr>'}</tbody></table></div></div>`;
     initTabs('garuda');
     $$('[data-copy]').forEach((b) => b.onclick = () => { if (b.dataset.copy) { copy(b.dataset.copy); toast('Disalin'); } });

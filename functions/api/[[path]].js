@@ -302,7 +302,11 @@ const signalView = (r) => r && ({
   decision: r.decision, confidence: r.confidence, price: r.price, sl: r.sl, tp: r.tp,
   trend_h4: r.trend_h4, trend_h1: r.trend_h1, reason: r.reason, news: r.news || '', reason_en: r.reason_en || '', news_en: r.news_en || '', model: r.model,
   status: r.status, close_price: r.close_price, closed_at: r.closed_at, pips: r.pips,
+  order_type: r.order_type || 'MARKET', filled_at: r.filled_at || 0, cancel_reason: r.cancel_reason || '',
 });
+// signals that finished with a result (pending, cancelled and running ones are not part of any statistic)
+const DONE_SQL = "status IN ('TP','SL','BE','CLOSE')";
+const isLive = (st) => st === 'open' || st === 'pending';
 // Markets: canonical symbol (broker suffix removed) and its pip size / decimals from table ai_symbols
 const canonSymbol = (v) => { const x = str(v, 20).toUpperCase(); const m = x.match(/^([A-Z]{6})/); return m ? m[1] : x; };
 const SYM_DEFAULT = { symbol: '', enabled: 0, pip: 0.1, digits: 2, pip_label: 'pips', session_start: 7, session_end: 20, weekend: 0, min_sl: 30, max_sl: 200 };
@@ -419,10 +423,13 @@ async function saveChart(env, id, kind, data) {
 function tgOpenText(r, base, m) {
   const slP = Math.abs(r.price - r.sl) / m.pip, tpP = Math.abs(r.tp - r.price) / m.pip;
   const rr = slP > 0 ? tpP / slP : 0;
+  const pend = r.order_type === 'LIMIT' || r.order_type === 'STOP';
+  const until = new Date((r.valid_until + 7 * 3600) * 1000);
+  const untilTxt = `${String(until.getUTCHours()).padStart(2, '0')}:${String(until.getUTCMinutes()).padStart(2, '0')} WIB`;
   return [
-    `🦅 <b>GARUDA AI · SINYAL ${SIDE_TXT[r.decision]} ${mkTitle(r.symbol)}</b>`,
+    pend ? `⏳ <b>GARUDA AI · PENDING ${SIDE_TXT[r.decision]} ${r.order_type} ${mkTitle(r.symbol)}</b>` : `🦅 <b>GARUDA AI · SINYAL ${SIDE_TXT[r.decision]} ${mkTitle(r.symbol)}</b>`,
     '',
-    `▶️ Entry: <b>${fx(r.price, m.digits)}</b>`,
+    pend ? `📌 Harga pending: <b>${fx(r.price, m.digits)}</b> (${r.order_type === 'LIMIT' ? 'menunggu harga kembali ke area ini' : 'masuk saat harga menembus level ini'})` : `▶️ Entry: <b>${fx(r.price, m.digits)}</b>`,
     `🛑 Stop loss: <b>${fx(r.sl, m.digits)}</b>  (−${slP.toFixed(0)} ${m.pip_label})`,
     `🎯 Take profit: <b>${fx(r.tp, m.digits)}</b>  (+${tpP.toFixed(0)} ${m.pip_label})`,
     `⚖️ Risk : reward 1 : ${rr.toFixed(2)} · keyakinan AI ${r.confidence}%`,
@@ -432,7 +439,8 @@ function tgOpenText(r, base, m) {
     esc(r.reason),
     ...(r.news ? ['', '📰 <b>Fundamental</b>', esc(r.news)] : []),
     '',
-    `⏱ Entry maksimal ${Math.round((r.valid_until - r.created_at) / 60)} menit setelah sinyal · #S${r.id}`,
+    pend ? `⏳ Berlaku sampai ${untilTxt}. Otomatis dibatalkan jika harga tidak tercapai atau setup gagal · #S${r.id}`
+      : `⏱ Entry maksimal ${Math.round((r.valid_until - r.created_at) / 60)} menit setelah sinyal · #S${r.id}`,
     `🔎 Track record: <a href="${base}/sinyal?s=${r.id}">goldhuntergaruda.com/sinyal</a>`,
     '<i>Risiko ±1% per sinyal. Bukan saran investasi, trading berisiko tinggi.</i>',
   ].join('\n');
@@ -477,12 +485,15 @@ route('POST', '/signal/publish', 'signal_pub', async ({ request, env, base, wait
   if (!symbol) fail(400, 'symbol kosong');
   const num = (v) => { const n = Number(v); return Number.isFinite(n) ? n : 0; };
   const t = now();
-  const validMin = Math.max(1, Math.min(int(b.valid_min) || 10, 60));
-  const r = await env.DB.prepare(`INSERT INTO signals (symbol, bar_time, created_at, valid_until, decision, confidence, price, sl, tp, trend_h4, trend_h1, reason, model, cost_usd, tokens_in, tokens_out, status, news, reason_en, news_en)
-      VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`)
+  const orderType = decision !== 'WAIT' && ['LIMIT', 'STOP'].includes(str(b.order_type, 8).toUpperCase()) ? str(b.order_type, 8).toUpperCase() : 'MARKET';
+  const pending = orderType !== 'MARKET';
+  const validMin = Math.max(1, Math.min(int(b.valid_min) || 10, pending ? 480 : 60));
+  const r = await env.DB.prepare(`INSERT INTO signals (symbol, bar_time, created_at, valid_until, decision, confidence, price, sl, tp, trend_h4, trend_h1, reason, model, cost_usd, tokens_in, tokens_out, status, news, reason_en, news_en, order_type)
+      VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`)
     .bind(symbol, int(b.bar_time) || 0, t, t + validMin * 60, decision, Math.max(0, Math.min(int(b.confidence) || 0, 100)),
       num(b.price), num(b.sl), num(b.tp), str(b.trend_h4, 8), str(b.trend_h1, 8), str(b.reason, 600), str(b.model, 40),
-      num(b.cost_usd), int(b.tokens_in) || 0, int(b.tokens_out) || 0, decision === 'WAIT' ? 'wait' : 'open', str(b.news, 400), str(b.reason_en, 600), str(b.news_en, 400))
+      num(b.cost_usd), int(b.tokens_in) || 0, int(b.tokens_out) || 0, decision === 'WAIT' ? 'wait' : (pending ? 'pending' : 'open'), str(b.news, 400), str(b.reason_en, 600), str(b.news_en, 400),
+      orderType)
     .run();
   const id = r.meta.last_row_id;
   const chart = chartB64(b.chart_png);
@@ -509,6 +520,36 @@ route('POST', '/signal/publish', 'signal_pub', async ({ request, env, base, wait
     })());
   }
   return json({ ok: true, id, valid_until: t + validMin * 60 });
+});
+
+// A pending signal was filled (price reached the pending level) or cancelled (not reached in time / setup failed)
+route('POST', '/signal/fill', 'signal_pub', async ({ request, env, waitUntil }) => {
+  const b = await readJson(request);
+  const row = await env.DB.prepare('SELECT * FROM signals WHERE id=?').bind(int(b.id) || 0).first();
+  if (!row) fail(404, 'Sinyal tidak ditemukan');
+  if (row.status !== 'pending') fail(409, 'Sinyal bukan pending');
+  const price = Number(b.price) > 0 ? Number(b.price) : row.price;
+  const t = now();
+  await env.DB.prepare("UPDATE signals SET status='open', price=?, filled_at=?, valid_until=? WHERE id=?").bind(price, t, t + 120, row.id).run();
+  const mk = await getSymbol(env, row.symbol);
+  let replyTo = null;
+  try { replyTo = row.tg_msgs ? JSON.parse(row.tg_msgs) : null; } catch { replyTo = null; }
+  waitUntil(tgBroadcast(env, [`✅ <b>PENDING TERISI</b> · ${SIDE_TXT[row.decision]} ${mkTitle(row.symbol)} · #S${row.id}`, '',
+    `Masuk di <b>${fx(price, mk.digits)}</b> · SL ${fx(row.sl, mk.digits)} · TP ${fx(row.tp, mk.digits)}`, 'Posisi sekarang berjalan, hasilnya dikirim saat TP / SL.'].join('\n'), { replyTo }));
+  return json({ ok: true });
+});
+route('POST', '/signal/cancel', 'signal_pub', async ({ request, env, waitUntil }) => {
+  const b = await readJson(request);
+  const row = await env.DB.prepare('SELECT * FROM signals WHERE id=?').bind(int(b.id) || 0).first();
+  if (!row) fail(404, 'Sinyal tidak ditemukan');
+  if (row.status !== 'pending') fail(409, 'Sinyal bukan pending');
+  const why = str(b.reason, 200) || 'harga tidak tercapai';
+  await env.DB.prepare("UPDATE signals SET status='cancel', closed_at=?, cancel_reason=? WHERE id=?").bind(now(), why, row.id).run();
+  let replyTo = null;
+  try { replyTo = row.tg_msgs ? JSON.parse(row.tg_msgs) : null; } catch { replyTo = null; }
+  waitUntil(tgBroadcast(env, [`🚫 <b>PENDING DIBATALKAN</b> · ${SIDE_TXT[row.decision]} ${mkTitle(row.symbol)} · #S${row.id}`, '',
+    `Alasan: ${esc(why)}`, 'Order belum pernah terisi, jadi tidak ada untung / rugi. Tidak dihitung di win rate.'].join('\n'), { replyTo }));
+  return json({ ok: true });
 });
 
 // The MASTER EA follows every BUY/SELL signal and reports how it ended; pips are computed here from the entry
@@ -590,7 +631,7 @@ async function qwenJson(env, s, system, user) {
 async function contentStats(env, days) {
   const t = now();
   const { results } = await env.DB.prepare(`SELECT symbol, COALESCE(SUM(CASE WHEN pips > 0 THEN 1 ELSE 0 END),0) AS wins, COALESCE(SUM(CASE WHEN pips < 0 THEN 1 ELSE 0 END),0) AS losses,
-      COALESCE(SUM(pips),0) AS pips FROM signals WHERE decision IN ('BUY','SELL') AND status <> 'open' AND closed_at > ? GROUP BY symbol`).bind(t - days * DAY).all();
+      COALESCE(SUM(pips),0) AS pips FROM signals WHERE decision IN ('BUY','SELL') AND ${DONE_SQL} AND closed_at > ? GROUP BY symbol`).bind(t - days * DAY).all();
   const markets = await allSymbols(env);
   const w = results.reduce((a, r) => a + r.wins, 0), l = results.reduce((a, r) => a + r.losses, 0);
   return { wr: w + l ? Math.round((w / (w + l)) * 100) : null, tp: w, sl: l,
@@ -681,7 +722,7 @@ route('POST', '/builder/content/claim', 'builder', async ({ env }) => {
       if (pic) { out.chart_open = pic.data; data.chart = true; }
     } else if (job.kind === 'signal') {
       const r = await env.DB.prepare('SELECT * FROM signals WHERE id=?').bind(job.ref_id).first();
-      if (!r || r.status === 'open') fail(404, 'Sinyal belum selesai');
+      if (!r || !['TP', 'SL', 'BE', 'CLOSE'].includes(r.status)) fail(404, 'Sinyal belum selesai');
       const m = await getSymbol(env, r.symbol);
       out.signal = { id: r.id, symbol: r.symbol, decision: r.decision, entry: r.price, sl: r.sl, tp: r.tp, close: r.close_price, pips: r.pips,
         pip_label: m.pip_label, digits: m.digits, result: r.status, created_at: r.created_at, closed_at: r.closed_at, confidence: r.confidence };
@@ -929,7 +970,7 @@ route('GET', '/admin/content', 'admin', async ({ env }) => {
   const { results } = await env.DB.prepare(`SELECT c.id, c.created_at, c.kind, c.ref_id, c.lang, c.status, c.caption, c.error, c.file_name, c.duration, c.size, c.rendered_at, c.topic,
       c.tg_file_id <> '' AS on_telegram, c.social, s.symbol, s.decision, s.pips, s.status AS result FROM content_jobs c LEFT JOIN signals s ON s.id = c.ref_id AND c.kind = 'signal'
       ORDER BY c.id DESC LIMIT 60`).all();
-  const { results: closed } = await env.DB.prepare(`SELECT id, symbol, decision, pips, status, closed_at FROM signals WHERE decision IN ('BUY','SELL') AND status <> 'open'
+  const { results: closed } = await env.DB.prepare(`SELECT id, symbol, decision, pips, status, closed_at FROM signals WHERE decision IN ('BUY','SELL') AND ${DONE_SQL}
       ORDER BY id DESC LIMIT 20`).all();
   const bs = (() => { try { return JSON.parse(s.builder_seen || '{}'); } catch { return {}; } })();
   return json({ jobs: results, closed, builder_seen: bs.at || 0,
@@ -996,10 +1037,10 @@ route('GET', '/signal/:id/chart', 'public', async ({ env, params, url, user }) =
   const kind = url.searchParams.get('kind') === 'close' ? 'close' : 'open';
   const sig = await env.DB.prepare('SELECT status FROM signals WHERE id=?').bind(id).first();
   if (!sig) fail(404, 'Sinyal tidak ditemukan');
-  if (sig.status === 'open' && !user) fail(403, 'Chart sinyal yang masih berjalan khusus member');
+  if (isLive(sig.status) && !user) fail(403, 'Chart sinyal yang masih berjalan khusus member');
   const c = await env.DB.prepare('SELECT mime, data FROM signal_charts WHERE signal_id=? AND kind=?').bind(id, kind).first();
   if (!c) fail(404, 'Chart tidak ada');
-  return new Response(unb64(c.data), { headers: { 'content-type': c.mime, 'cache-control': sig.status === 'open' ? 'private, max-age=60' : 'public, max-age=86400' } });
+  return new Response(unb64(c.data), { headers: { 'content-type': c.mime, 'cache-control': isLive(sig.status) ? 'private, max-age=60' : 'public, max-age=86400' } });
 });
 
 // Public page /sinyal: BUY/SELL signals with their outcome. Entry/SL/TP of a still-running signal are shown to
@@ -1017,7 +1058,7 @@ route('GET', '/signal/feed', 'public', async ({ env, url, user }) => {
     env.DB.prepare(`SELECT id, symbol, decision, created_at, reason, news, reason_en, news_en, trend_h4, trend_h1, confidence, price, status FROM signals WHERE 1=1${w} ORDER BY id DESC LIMIT 1`).bind(...a).first(),
     env.DB.prepare(`SELECT COUNT(*) AS closed, COALESCE(SUM(CASE WHEN pips > 0 THEN 1 ELSE 0 END),0) AS wins,
         COALESCE(SUM(CASE WHEN pips < 0 THEN 1 ELSE 0 END),0) AS losses, COALESCE(SUM(pips),0) AS pips
-        FROM signals WHERE decision IN ('BUY','SELL') AND status <> 'open' AND closed_at > ?${w}`).bind(t - 30 * DAY, ...a).first(),
+        FROM signals WHERE decision IN ('BUY','SELL') AND ${DONE_SQL} AND closed_at > ?${w}`).bind(t - 30 * DAY, ...a).first(),
     allSymbols(env),
   ]);
   // win rate per market: last 30 days and all time (closed BUY/SELL signals only)
@@ -1029,14 +1070,14 @@ route('GET', '/signal/feed', 'public', async ({ env, url, user }) => {
       COALESCE(SUM(CASE WHEN closed_at > ? AND pips < 0 THEN 1 ELSE 0 END),0) AS losses30,
       COALESCE(SUM(CASE WHEN closed_at > ? THEN pips ELSE 0 END),0) AS pips30,
       MIN(created_at) AS since
-      FROM signals WHERE decision IN ('BUY','SELL') AND status <> 'open' GROUP BY symbol`).bind(t - 30 * DAY, t - 30 * DAY, t - 30 * DAY, t - 30 * DAY).all();
+      FROM signals WHERE decision IN ('BUY','SELL') AND ${DONE_SQL} GROUP BY symbol`).bind(t - 30 * DAY, t - 30 * DAY, t - 30 * DAY, t - 30 * DAY).all();
   const member = !!user;
   const signals = results.map((r) => {
     const v = { ...signalView(r), has_chart: !!r.has_chart, has_close_chart: !!r.has_close_chart };
-    if (r.status === 'open' && !member) { v.price = null; v.sl = null; v.tp = null; v.reason = ''; v.news = ''; v.reason_en = ''; v.news_en = ''; v.locked = true; v.has_chart = false; }
+    if (isLive(r.status) && !member) { v.price = null; v.sl = null; v.tp = null; v.reason = ''; v.news = ''; v.reason_en = ''; v.news_en = ''; v.locked = true; v.has_chart = false; }
     return v;
   });
-  const openHidden = (x) => x.decision !== 'WAIT' && !member && x.status === 'open';
+  const openHidden = (x) => x.decision !== 'WAIT' && !member && isLive(x.status);
   const lastView = last ? { ...last, reason: openHidden(last) ? '' : last.reason, reason_en: openHidden(last) ? '' : last.reason_en } : null;   // news is public context
   // latest analysis of every market + its newest WAIT picture (last 24 h) for the live cards on /sinyal
   const { results: lastRows } = await env.DB.prepare(`SELECT id, symbol, decision, created_at, reason, news, reason_en, news_en, trend_h4, trend_h1, confidence, status FROM signals
@@ -1058,7 +1099,7 @@ route('GET', '/signal/detail/:id', 'public', async ({ env, params, user }) => {
       (SELECT COUNT(*) FROM signal_charts c WHERE c.signal_id=s.id AND c.kind='close') AS has_close_chart FROM signals s WHERE s.id=?`).bind(int(params.id) || 0).first();
   if (!r || r.decision === 'WAIT') fail(404, 'Sinyal tidak ditemukan');
   const v = { ...signalView(r), has_chart: !!r.has_chart, has_close_chart: !!r.has_close_chart };
-  if (r.status === 'open' && !user) { v.price = null; v.sl = null; v.tp = null; v.reason = ''; v.news = ''; v.reason_en = ''; v.news_en = ''; v.locked = true; v.has_chart = false; }
+  if (isLive(r.status) && !user) { v.price = null; v.sl = null; v.tp = null; v.reason = ''; v.news = ''; v.reason_en = ''; v.news_en = ''; v.locked = true; v.has_chart = false; }
   const m = await getSymbol(env, r.symbol);
   return json({ ok: true, member: !!user, signal: v, market: { symbol: m.symbol, digits: m.digits, pip: m.pip, pip_label: m.pip_label } });
 });
@@ -1287,8 +1328,10 @@ route('GET', '/signal/latest', 'signal_read', async ({ env, url }) => {
   const f = signalFilters(st);
   f.min_sl = m.min_sl * m.pip;                 // price units, like the client's own checks
   f.max_sl = m.max_sl * m.pip;
-  return json({ ok: true, server_time: t, symbol, enabled: !!m.enabled, signal: signalView(row) || null, next: nextSignalCheck(t, row, st), filters: f,
-    market: symView(m) });
+  const trackId = int(url.searchParams.get('track')) || 0;
+  const tr = trackId && trackId !== (row && row.id) ? await env.DB.prepare('SELECT * FROM signals WHERE id=? AND symbol=?').bind(trackId, symbol).first() : null;
+  return json({ ok: true, server_time: t, symbol, enabled: !!m.enabled, signal: signalView(row) || null, tracked: signalView(tr) || null,
+    next: trackId ? Math.min(nextSignalCheck(t, row, st), 60) : nextSignalCheck(t, row, st), filters: f, market: symView(m) });
 });
 
 // ---- Admin: Telegram bot ----

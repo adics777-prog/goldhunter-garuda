@@ -69,8 +69,8 @@
     const dgt = (sym) => (mk[sym] || { digits: 2 }).digits;
     const st = f && f.stats30 ? f.stats30 : { wins: 0, losses: 0 };
     const wr = st.wins + st.losses ? Math.round(st.wins / (st.wins + st.losses) * 100) + '%' : '-';
-    const running = f ? f.signals.filter((x) => x.status === 'open') : [];
-    const closed = f ? f.signals.filter((x) => x.status !== 'open').slice(0, 4) : [];
+    const running = f ? f.signals.filter((x) => x.status === 'open' || x.status === 'pending') : [];
+    const closed = f ? f.signals.filter((x) => ['TP', 'SL', 'BE', 'CLOSE'].includes(x.status)).slice(0, 4) : [];
     const dec = (d) => `<span class="badge ${d === 'BUY' ? 'b-green' : d === 'SELL' ? 'b-red' : 'b-gold'}">${d === 'WAIT' ? 'TUNGGU' : d}</span>`;
     const aiCard = f ? `<div class="card gold" style="margin-bottom:22px">
         <div class="row between" style="flex-wrap:wrap;gap:10px;margin-bottom:12px"><h3 style="margin:0">🤖 Sinyal Garuda AI</h3>
@@ -81,7 +81,7 @@
           <div class="stat"><b>${running.length}</b><span>Sinyal berjalan</span></div></div>
         ${(f.last_by_market || []).map((x) => `<div class="sig-mini"><div>${dec(x.decision)} <b>${esc(x.symbol)}</b> <span class="tiny muted">${ago(x.created_at)}</span>
             <div class="small muted" style="margin-top:4px;max-width:720px">${esc(String(x.reason || '').slice(0, 170))}${String(x.reason || '').length > 170 ? '…' : ''}</div></div></div>`).join('')}
-        ${running.map((x) => `<div class="sig-mini"><div>${dec(x.decision)} <b>${esc(x.symbol)}</b> <span class="badge b-gold">berjalan</span></div>
+        ${running.map((x) => `<div class="sig-mini"><div>${dec(x.decision)} <b>${esc(x.symbol)}</b> ${x.status === 'pending' ? `<span class="badge b-blue">pending ${esc(x.order_type)}</span>` : '<span class="badge b-gold">berjalan</span>'}</div>
             <div class="small mono right">Entry ${Number(x.price).toFixed(dgt(x.symbol))}<div class="tiny"><span style="color:#ff8b95">SL ${Number(x.sl).toFixed(dgt(x.symbol))}</span> · <span style="color:#6ee7a2">TP ${Number(x.tp).toFixed(dgt(x.symbol))}</span></div></div></div>`).join('')}
         ${closed.length ? `<div class="tiny muted" style="margin:14px 0 4px;letter-spacing:1px">HASIL TERAKHIR</div>${closed.map((x) => `<div class="sig-mini"><div>${dec(x.decision)} <b>${esc(x.symbol)}</b> <span class="tiny muted">${fmtDate(x.created_at)}</span></div>
             <b class="small" style="color:${x.pips > 0 ? '#6ee7a2' : x.pips < 0 ? '#ff8b95' : 'inherit'}">${x.pips > 0 ? '+' : ''}${Number(x.pips).toFixed(1)} ${esc((mk[x.symbol] || { pip_label: 'pips' }).pip_label)} · ${esc(x.status)}</b></div>`).join('')}` : ''}

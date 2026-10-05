@@ -90,7 +90,9 @@
   const pipsTxt = (p, sym) => p == null ? '-' : mk(sym).pip_label === 'pips'
     ? (p > 0 ? '+' : '') + Number(p).toFixed(1) + ' pips' : (p > 0 ? '+' : '') + Math.round(p).toLocaleString(T('id-ID', 'en-US')) + ' ' + UL(mk(sym).pip_label);
   const pipDesc = (m) => m.pip_label === 'pips' ? `${NAMES[m.symbol] || m.symbol}: 1 pip = ${m.pip}` : `${NAMES[m.symbol] || m.symbol}: 1 ${UL(m.pip_label)} = ${m.pip}`;
-  const STATUS_ = () => ({ open: ['b-gold', T('BERJALAN', 'RUNNING')], TP: ['b-green', 'TP'], SL: ['b-red', 'SL'], BE: ['b-gold', 'BREAK EVEN'], CLOSE: ['b-gold', T('DITUTUP', 'CLOSED')] });
+  const STATUS_ = () => ({ open: ['b-gold', T('BERJALAN', 'RUNNING')], pending: ['b-blue', T('PENDING', 'PENDING')], cancel: ['b-gray', T('DIBATALKAN', 'CANCELLED')],
+    TP: ['b-green', 'TP'], SL: ['b-red', 'SL'], BE: ['b-gold', 'BREAK EVEN'], CLOSE: ['b-gold', T('DITUTUP', 'CLOSED')] });
+  const ordTag = (r) => r.order_type === 'LIMIT' || r.order_type === 'STOP' ? ` <span class="tiny muted">${r.order_type}</span>` : '';
   const side = (d) => `<span class="badge ${d === 'BUY' ? 'b-green' : 'b-red'}">${d === 'BUY' ? '▲ BUY' : '▼ SELL'}</span>`;
 
   async function load() {
@@ -151,10 +153,10 @@
         <th>${T('Waktu', 'Time')}</th><th>${T('Sinyal', 'Signal')}</th><th class="right">Entry</th><th class="right hide-sm">SL</th><th class="right hide-sm">TP</th><th class="right">${T('Hasil', 'Result')}</th></tr></thead><tbody>
       ${d.signals.map((r) => {
         const st = STATUS[r.status] || STATUS.open;
-        const res = r.status === 'open' ? `<span class="badge ${st[0]}">${st[1]}</span>`
+        const res = ['open', 'pending', 'cancel'].includes(r.status) ? `<span class="badge ${st[0]}">${st[1]}</span>`
           : `<div class="${r.pips > 0 ? 'pos' : (r.pips < 0 ? 'neg' : '')} nowrap">${pipsTxt(r.pips, r.symbol)}</div><span class="badge ${st[0]}">${st[1]}</span>`;
         return `<tr><td class="nowrap small">${esc(fmtDateTime(r.created_at))}</td>
-          <td><span class="mk">${esc(r.symbol)}</span>${side(r.decision)} <span class="tiny muted">${r.confidence}%</span>
+          <td><span class="mk">${esc(r.symbol)}</span>${side(r.decision)}${ordTag(r)} <span class="tiny muted">${r.confidence}%</span>
             ${r.locked ? `<div class="lock">🔒 ${T('Entry, SL, TP sinyal yang masih berjalan khusus member.', 'Entry, SL and TP of a running signal are for members only.')} <a href="/masuk">${T('Masuk', 'Log in')}</a></div>` : (RS(r) ? `<div class="why">${esc(RS(r))}</div>` : '') + (NW(r) ? `<div class="why">📰 ${esc(NW(r))}</div>` : '')}
             <button type="button" class="btn btn-ghost btn-sm" style="margin-top:6px" data-detail="${r.id}">🔎 ${T('Detail', 'Details')}${r.has_chart || r.has_close_chart ? ' & chart' : ''}</button></td>
           <td class="right mono small nowrap">${num(r.price, r.symbol)}</td>
