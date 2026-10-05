@@ -406,20 +406,38 @@
             <label class="row small" style="color:var(--text);margin-bottom:8px"><input type="checkbox" name="content_enabled" ${on('content_enabled')}> <b>Buat video promo otomatis</b></label>
             <label class="row small" style="color:var(--text);margin-bottom:8px"><input type="checkbox" name="content_on_signal" ${on('content_on_signal')}> Setiap sinyal selesai (TP / SL, rugi juga ditampilkan jujur)</label>
             <label class="row small" style="color:var(--text);margin-bottom:8px"><input type="checkbox" name="content_weekly" ${on('content_weekly')}> Rekap mingguan (Sabtu mulai 10:00 WIB)</label>
+            <label class="row small" style="color:var(--text);margin-bottom:8px"><input type="checkbox" name="content_edu" ${on('content_edu')}> Video edukasi / perkenalan / kelebihan AI terjadwal (topik bergiliran)</label>
+            <div class="field"><label>Jam posting edukasi (WIB, pisahkan koma)</label><input name="content_times" value="${esc(s.content_times)}" placeholder="12:00, 19:00"></div>
             <label class="row small" style="color:var(--text);margin-bottom:12px"><input type="checkbox" name="content_tg" ${on('content_tg')}> Kirim video ke channel / grup Telegram</label>
             <div class="grid c2" style="gap:0 12px"><div class="field"><label>Bahasa video</label><select name="content_lang"><option value="id">Indonesia</option><option value="en" ${s.content_lang === 'en' ? 'selected' : ''}>English</option></select></div>
               <div class="field"><label>Suara narator</label><select name="content_voice">${[['id-ID-ArdiNeural', 'Ardi (pria)'], ['id-ID-GadisNeural', 'Gadis (wanita)']].map(([v, l]) => `<option value="${v}" ${s.content_voice === v ? 'selected' : ''}>${l}</option>`).join('')}</select></div></div>
             <button class="btn btn-gold btn-sm" type="submit">Simpan</button>
           </form>
-          <p class="help" style="margin-top:12px">Format vertikal 1080×1920 (9:16), 20–30 detik: siap untuk TikTok, Instagram Reels dan YouTube Shorts. Naskah, caption &amp; hashtag ditulis Claude (± $0,01 per video), suara Microsoft Edge (gratis), video dirender di PC builder dan disimpan di folder <b>Documents\GarudaAI Konten</b>.</p></div>
+          <p class="help" style="margin-top:12px">Format vertikal 1080×1920 (9:16), 20–35 detik: siap untuk TikTok, Instagram Reels dan YouTube Shorts. Naskah, caption &amp; hashtag ditulis <b>${s.content_ai === 'claude' ? 'Claude' : 'Qwen'}</b>, suara Microsoft Edge (gratis), video dirender di PC builder dan disimpan di folder <b>Documents\GarudaAI Konten</b>.</p></div>
+        <div class="card"><h3>AI penulis naskah ${s.qwen_key_set ? '<span class="badge b-green">Qwen siap</span>' : '<span class="badge b-red">API key Qwen belum diisi</span>'}</h3>
+          <form id="cq">
+            <div class="field"><label>Mesin naskah</label><select name="content_ai"><option value="qwen">Qwen (murah, kredit Claude khusus analisis trading)</option><option value="claude" ${s.content_ai === 'claude' ? 'selected' : ''}>Claude</option></select></div>
+            <div class="field"><label>API key Qwen (Alibaba Cloud Model Studio)</label><input name="qwen_key" type="password" autocomplete="off" placeholder="${s.qwen_key_set ? '•••••• tersimpan (isi untuk mengganti)' : 'sk-...'}"></div>
+            <div class="grid c2" style="gap:0 12px"><div class="field"><label>Model</label><select name="qwen_model">${['qwen-plus', 'qwen-turbo', 'qwen-flash', 'qwen-max'].concat([s.qwen_model]).filter((v, i, a) => v && a.indexOf(v) === i).map((v) => `<option ${s.qwen_model === v ? 'selected' : ''}>${esc(v)}</option>`).join('')}</select></div>
+              <div class="field"><label>Region</label><select name="qwen_base">${[['https://dashscope-intl.aliyuncs.com/compatible-mode/v1', 'Internasional (Singapura)'], ['https://dashscope.aliyuncs.com/compatible-mode/v1', 'China (Beijing)'], ['https://dashscope-us.aliyuncs.com/compatible-mode/v1', 'Amerika (Virginia)']].map(([v, l]) => `<option value="${v}" ${s.qwen_base === v ? 'selected' : ''}>${l}</option>`).join('')}</select></div></div>
+            <div class="row" style="gap:8px;flex-wrap:wrap"><button class="btn btn-gold btn-sm" type="submit">Simpan</button><button class="btn btn-outline btn-sm" type="button" id="qtest" ${s.qwen_key_set ? '' : 'disabled'}>Tes koneksi</button></div>
+          </form>
+          <p class="help" style="margin-top:12px">Buat key di <b>modelstudio.console.alibabacloud.com</b> › API Key. Region harus sama dengan tempat key dibuat. qwen-plus ± Rp 10–20 per video. Key disimpan terenkripsi.</p></div>
         <div class="card"><h3>Buat video sekarang</h3>
           <div class="field"><label>Dari sinyal yang sudah selesai</label><select id="csig">${d.closed.map((x) => `<option value="${x.id}">#S${x.id} ${esc(x.symbol)} ${x.decision} · ${x.status} ${x.pips > 0 ? '+' : ''}${Number(x.pips).toFixed(1)}</option>`).join('') || '<option value="">Belum ada sinyal selesai</option>'}</select></div>
           <div class="row" style="gap:8px;flex-wrap:wrap"><button class="btn btn-outline btn-sm" id="mk-sig" ${d.closed.length ? '' : 'disabled'}>🎬 Video sinyal ini</button><button class="btn btn-outline btn-sm" id="mk-week">📊 Video rekap minggu ini</button></div>
-          <p class="help" style="margin-top:10px">Video masuk antrean dan dirender oleh PC builder dalam ± 1 menit.</p></div>
+          <div class="field" style="margin-top:14px"><label>Video edukasi tentang topik</label><select id="ctopic">${d.topics.map((t, i) => `<option value="${esc(t)}" ${i === d.next_topic ? 'selected' : ''}>${i + 1}. ${esc(t)}</option>`).join('')}</select></div>
+          <button class="btn btn-outline btn-sm" id="mk-edu">🎓 Video edukasi ini</button>
+          <p class="help" style="margin-top:10px">Video masuk antrean dan dirender oleh PC builder dalam ± 1 menit. Topik terjadwal berikutnya: <b>${d.next_topic + 1}</b>.</p></div>
+        <div class="card"><h3>Topik tambahan</h3>
+          <form id="ct"><div class="field"><label>Satu topik per baris, ikut bergiliran setelah ${d.topics.length - (s.content_topics ? s.content_topics.split(/\n/).filter((x) => x.trim()).length : 0)} topik bawaan</label>
+            <textarea name="content_topics" rows="6" placeholder="Edukasi: apa itu lot dan margin&#10;Kelebihan AI: ...">${esc(s.content_topics)}</textarea></div>
+            <button class="btn btn-gold btn-sm" type="submit">Simpan topik</button></form>
+          <p class="help" style="margin-top:10px">Awali dengan kategori lalu titik dua (Edukasi:, Perkenalan:, Kelebihan AI:, Psikologi trading:). Kategori tampil sebagai label di video.</p></div>
       </div>
       <h3 style="margin:22px 0 10px">Video</h3>
       ${d.jobs.length ? `<div class="stack">${d.jobs.map((j) => `<div class="card" style="padding:14px 16px">
-        <div class="row between" style="gap:10px;flex-wrap:wrap"><div><b>#${j.id} ${j.kind === 'weekly' ? '📊 Rekap mingguan' : `🎬 Sinyal #S${j.ref_id} ${esc(j.symbol || '')} ${esc(j.decision || '')} ${j.result ? '· ' + esc(j.result) : ''}`}</b>
+        <div class="row between" style="gap:10px;flex-wrap:wrap"><div><b>#${j.id} ${j.kind === 'edu' ? '🎓 ' + esc(j.topic || 'Edukasi') : j.kind === 'weekly' ? '📊 Rekap mingguan' : `🎬 Sinyal #S${j.ref_id} ${esc(j.symbol || '')} ${esc(j.decision || '')} ${j.result ? '· ' + esc(j.result) : ''}`}</b>
           <span class="tiny muted"> · ${fmtDateTime(j.created_at)} · ${j.lang.toUpperCase()}</span></div>
           <span><span class="badge ${(st[j.status] || st.queued)[0]}">${(st[j.status] || st.queued)[1]}</span> ${j.on_telegram ? '<span class="badge b-green">terkirim Telegram</span>' : ''}</span></div>
         ${j.error ? `<div class="alert err small" style="margin-top:8px">${esc(j.error)}</div>` : ''}
@@ -432,9 +450,28 @@
       e.preventDefault();
       const f = Object.fromEntries(new FormData(e.target));
       await api('/admin/content/settings', { method: 'PUT', body: { content_enabled: !!f.content_enabled, content_on_signal: !!f.content_on_signal, content_weekly: !!f.content_weekly,
-        content_tg: !!f.content_tg, content_lang: f.content_lang, content_voice: f.content_voice } });
+        content_tg: !!f.content_tg, content_lang: f.content_lang, content_voice: f.content_voice, content_edu: !!f.content_edu, content_times: f.content_times } });
       toast('Pengaturan konten disimpan');
     };
+    $('#cq').onsubmit = async (e) => {
+      e.preventDefault();
+      const f = Object.fromEntries(new FormData(e.target));
+      await api('/admin/content/settings', { method: 'PUT', body: { content_ai: f.content_ai, qwen_key: f.qwen_key, qwen_model: f.qwen_model, qwen_base: f.qwen_base } });
+      toast('Pengaturan AI disimpan');
+      render();
+    };
+    $('#qtest').onclick = async (e) => {
+      e.target.disabled = true;
+      try { const r = await api('/admin/content/qwen-test', { method: 'POST', body: {} }); toast(`Qwen OK (${r.model}, ${(r.ms / 1000).toFixed(1)} dtk): ${r.text}`); }
+      finally { e.target.disabled = false; }
+    };
+    $('#ct').onsubmit = async (e) => {
+      e.preventDefault();
+      await api('/admin/content/settings', { method: 'PUT', body: { content_topics: new FormData(e.target).get('content_topics') } });
+      toast('Topik disimpan');
+      render();
+    };
+    $('#mk-edu').onclick = () => queue({ kind: 'edu', topic: $('#ctopic').value, lang: s.content_lang });
     const queue = async (body) => { await api('/admin/content', { method: 'POST', body }); toast('Masuk antrean, dirender PC builder sebentar lagi'); render(); };
     $('#mk-sig').onclick = () => queue({ kind: 'signal', ref_id: $('#csig').value, lang: s.content_lang });
     $('#mk-week').onclick = () => queue({ kind: 'weekly', lang: s.content_lang });

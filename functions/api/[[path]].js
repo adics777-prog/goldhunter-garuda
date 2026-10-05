@@ -543,6 +543,49 @@ async function queueContent(env, kind, refId = 0) {
   if (kind === 'signal' && dup) return;
   await env.DB.prepare('INSERT INTO content_jobs (created_at, kind, ref_id, lang) VALUES (?,?,?,?)').bind(now(), kind, refId, s.content_lang === 'en' ? 'en' : 'id').run();
 }
+// Rotating topics for the scheduled videos (admin can add more in Admin > Konten Video)
+const CONTENT_TOPICS = [
+  'Perkenalan: apa itu Garuda AI dan bagaimana cara kerjanya dari analisis sampai sinyal',
+  'Kelebihan AI: bagaimana Claude menggabungkan analisis teknikal dan fundamental dalam satu keputusan',
+  'Edukasi: apa itu stop loss dan kenapa setiap sinyal wajib punya stop loss',
+  'Kelebihan AI: momentum dipantau tiap 5 menit, lalu dinilai AI dulu, layak entry atau jebakan',
+  'Edukasi: arti reward : risk 1 : 1,5 dan kenapa itu penting',
+  'Transparansi: kenapa semua sinyal dicatat terbuka, termasuk yang rugi',
+  'Edukasi: kenapa risiko 1% per trade membuat akun bertahan lama',
+  'Edukasi: cara membaca EMA 20, 50 dan 200 untuk melihat tren',
+  'Kelebihan AI: AI mencari dan membaca berita sendiri sebelum menganalisis',
+  'Edukasi: apa itu support dan resistance',
+  'Edukasi: bahaya martingale dan averaging untuk akun trading',
+  'Edukasi: apa itu zona demand dan supply',
+  'Kelebihan AI: kenapa AI berani bilang TUNGGU dan tidak mengejar harga',
+  'Edukasi: false breakout dan sapuan likuiditas, jebakan yang sering terjadi',
+  'Edukasi: sesi Asia, London dan New York, kapan emas paling aktif',
+  'Edukasi: kenapa data CPI, NFP dan FOMC bisa membuat emas bergerak kencang',
+  'Edukasi: hubungan dolar AS dan harga emas',
+  'Kelebihan AI: AI memahami karakter tiap pasar, emas berbeda dengan Bitcoin',
+  'Edukasi: kenapa RSI terlalu tinggi bukan saat yang tepat untuk mengejar BUY',
+  'Psikologi trading: jangan balas dendam setelah loss',
+  'Panduan: cara membaca chart analisis Garuda AI (zona, level, skenario)',
+  'Edukasi: trading santai dengan risiko terukur, tanpa harus memantau chart seharian',
+];
+function contentTopics(s) {
+  const extra = String(s.content_topics || '').split(/\r?\n/).map((x) => x.trim()).filter(Boolean);
+  return [...CONTENT_TOPICS, ...extra];
+}
+
+// Script writer for videos: Qwen (Alibaba Cloud Model Studio, OpenAI-compatible) so Claude credit is kept for trading
+async function qwenJson(env, s, system, user) {
+  const key = await decrypt(env, s.qwen_key_enc);
+  const base = String(s.qwen_base || 'https://dashscope-intl.aliyuncs.com/compatible-mode/v1').replace(/\/+$/, '');
+  const r = await fetch(base + '/chat/completions', { method: 'POST', headers: { 'content-type': 'application/json', authorization: 'Bearer ' + key },
+    body: JSON.stringify({ model: s.qwen_model || 'qwen-plus', temperature: 0.8, response_format: { type: 'json_object' },
+      messages: [{ role: 'system', content: system }, { role: 'user', content: user }] }) });
+  const j = await r.json().catch(() => ({}));
+  if (!r.ok) fail(502, 'Qwen: ' + ((j.error && (j.error.message || j.error.code)) || r.status));
+  const txt = (((j.choices || [])[0] || {}).message || {}).content || '';
+  return JSON.parse(txt.replace(/^```(?:json)?\s*|\s*```$/g, ''));
+}
+
 async function contentStats(env, days) {
   const t = now();
   const { results } = await env.DB.prepare(`SELECT symbol, COALESCE(SUM(CASE WHEN pips > 0 THEN 1 ELSE 0 END),0) AS wins, COALESCE(SUM(CASE WHEN pips < 0 THEN 1 ELSE 0 END),0) AS losses,
@@ -563,6 +606,14 @@ const CONTENT_SCHEMA = { type: 'object', additionalProperties: false, required: 
   hashtags: { type: 'string', description: '5-8 hashtags separated by spaces' } } };
 async function contentScript(env, kind, lang, data) {
   const s = await getSettings(env);
+  if (kind === 'edu') return eduScript(env, s, lang, data);
+  if (s.content_ai !== 'claude') {
+    const L = lang === 'en' ? 'English' : 'Bahasa Indonesia (santai tapi sopan, gaya TikTok)';
+    const scenes = kind === 'weekly' ? 'hook, stats, cta' : 'hook, signal, result, stats, cta';
+    return qwenJson(env, s, `You write short vertical promo videos (about 25 seconds) for Garuda AI, an AI trading-signal service (analysis by Claude AI) at goldhuntergaruda.com. Write in ${L}. Use only the facts in the data, never invent numbers. Never promise or imply guaranteed profit. Losses are shown honestly: for a stop loss say the loss was limited by the stop loss (risk about 1%) and every signal is published, wins and losses. Total narration about 55-70 words.
+Return JSON only: {"hook": "max 8 words", "scenes": [{"id": "hook|signal|result|stats|cta", "say": "narration, website spoken as goldhunter garuda dot com", "text": "subtitle, website written goldhuntergaruda.com"}], "caption": "2-4 short lines ending with goldhuntergaruda.com/sinyal and a one-line risk note", "hashtags": "5-8 hashtags"}`,
+      `Video type: ${kind}. Scenes in this order: ${scenes}.\nData:\n${JSON.stringify(data)}`);
+  }
   if (!s.ai_claude_key_enc) fail(400, 'API key Claude belum diatur');
   const key = await decrypt(env, s.ai_claude_key_enc);
   const L = lang === 'en' ? 'English' : 'Bahasa Indonesia (santai tapi sopan, gaya TikTok)';
@@ -579,9 +630,41 @@ Rules: use only the facts in the data, never invent numbers. Never promise or im
   const txt = (j.content || []).filter((c) => c.type === 'text').map((c) => c.text).join('');
   return JSON.parse(txt);
 }
+// Educational / introduction video: Qwen writes 3 points about one topic, Garuda AI facts given so nothing is invented
+async function eduScript(env, s, lang, data) {
+  if (s.content_ai === 'claude') fail(400, 'Konten edukasi memakai Qwen: isi API key Qwen di Admin > Konten Video');
+  const L = lang === 'en' ? 'English' : 'Bahasa Indonesia (santai, jelas, gaya TikTok edukatif)';
+  return qwenJson(env, s, `You write short educational vertical videos (25-35 seconds, TikTok / Reels / Shorts) for Garuda AI (goldhuntergaruda.com), an AI trading-signal service for gold, Bitcoin and forex. Write in ${L}.
+Teach one topic clearly and correctly for beginners. Use only the Garuda AI facts given; never invent results or numbers. Never promise profit, never say "pasti untung" or "passive income". Mention Garuda AI naturally (mostly in the last point and the cta).
+Return JSON only: {"hook": "max 8 words that stop the scroll", "scenes": [{"id": "hook", "say": "...", "text": "..."}, {"id": "point", "icon": "one emoji", "title": "2-5 words", "say": "1-2 short sentences", "text": "short subtitle"} x3, ${data.chart ? '{"id": "chart", "title": "2-5 words", "say": "1-2 sentences about how the AI chart shows zones / levels", "text": "..."}, ' : ''}{"id": "cta", "say": "invite to follow the channel and check goldhunter garuda dot com", "text": "..."}], "caption": "3-4 short lines ending with goldhuntergaruda.com and a one-line risk note", "hashtags": "5-8 hashtags"}
+"say" is read by a voice (website as "goldhunter garuda dot com"), "text" is the subtitle (website written goldhuntergaruda.com). Total narration 70-90 words.`,
+    `Topic: ${data.topic}\nGaruda AI facts: ${JSON.stringify(data.facts)}`);
+}
+const GARUDA_FACTS = ['analysis by Claude AI combining technical (H4/H1/M15 chart, EMA 20/50/200, RSI, ATR, structure) and fundamental (news searched on the web, economic calendar, dollar strength)',
+  'markets: gold XAUUSD, Bitcoin BTCUSD, EURUSD, USDJPY', 'routine analysis every hour in active hours + momentum checked every 5 minutes and judged by the AI before any entry',
+  'every signal has entry, stop loss and take profit; reward:risk at least 1:1.5; about 1% risk per signal; max 1 position per market; stops for the day at 3% loss; no martingale',
+  'every signal and its result (wins and losses) is published at goldhuntergaruda.com/sinyal and on Telegram', 'the AI can answer WAIT when the setup is not clear'];
+
 route('POST', '/builder/content/claim', 'builder', async ({ env }) => {
   const s = await getSettings(env);
   if (s.content_enabled !== '1') return json({ job: null });
+  // the script writer must be configured (Qwen by default): jobs simply wait until then, no Claude credit is used
+  if (s.content_ai !== 'claude' && !s.qwen_key_enc) return json({ job: null, waiting: 'API key Qwen belum diatur' });
+  // scheduled educational videos: at each time of day (WIB) in content_times, the next topic in the rotation
+  if (s.content_edu === '1') {
+    const dayStart = now() - ((now() + 7 * 3600) % DAY);
+    for (const hm of String(s.content_times || '').split(/[,\s]+/).filter((x) => /^\d{1,2}:\d{2}$/.test(x))) {
+      const [h, m] = hm.split(':').map(Number);
+      const slot = dayStart + h * 3600 + m * 60;
+      if (now() < slot || now() - slot > 3 * 3600) continue;
+      const done = await env.DB.prepare("SELECT 1 FROM content_jobs WHERE kind='edu' AND created_at >= ?").bind(slot).first();
+      if (done) continue;
+      const topics = contentTopics(s);
+      const idx = (Number(s.content_topic_idx) || 0) % topics.length;
+      await env.DB.prepare('INSERT INTO content_jobs (created_at, kind, ref_id, lang, topic) VALUES (?,?,?,?,?)').bind(now(), 'edu', idx, s.content_lang === 'en' ? 'en' : 'id', topics[idx]).run();
+      await putSetting(env, 'content_topic_idx', String(idx + 1));
+    }
+  }
   // weekly recap: Saturday from 10:00 WIB, once per week
   const wib = new Date((now() + 7 * 3600) * 1000);
   if (s.content_weekly === '1' && wib.getUTCDay() === 6 && wib.getUTCHours() >= 10) {
@@ -597,7 +680,14 @@ route('POST', '/builder/content/claim', 'builder', async ({ env }) => {
       send_telegram: s.content_tg === '1' };
     const st30 = await contentStats(env, 30);
     const data = { stats_30_days: st30 };
-    if (job.kind === 'signal') {
+    if (job.kind === 'edu') {
+      delete data.stats_30_days;
+      data.topic = job.topic;
+      data.facts = GARUDA_FACTS;
+      const pic = await env.DB.prepare(`SELECT c.data FROM signal_charts c JOIN signals s ON s.id = c.signal_id WHERE c.kind='open' AND s.created_at > ? ORDER BY s.id DESC LIMIT 1`)
+        .bind(now() - 3 * DAY).first();
+      if (pic) { out.chart_open = pic.data; data.chart = true; }
+    } else if (job.kind === 'signal') {
       const r = await env.DB.prepare('SELECT * FROM signals WHERE id=?').bind(job.ref_id).first();
       if (!r || r.status === 'open') fail(404, 'Sinyal belum selesai');
       const m = await getSymbol(env, r.symbol);
@@ -610,6 +700,7 @@ route('POST', '/builder/content/claim', 'builder', async ({ env }) => {
       data.stats_7_days = await contentStats(env, 7);
     }
     const st = job.kind === 'weekly' ? data.stats_7_days : st30;
+    out.topic = job.topic || '';
     out.stats = { title: job.kind === 'weekly' ? (job.lang === 'en' ? 'THIS WEEK' : 'HASIL MINGGU INI') : (job.lang === 'en' ? '30-DAY TRACK RECORD' : 'TRACK RECORD 30 HARI'),
       wr30: st.wr, tp30: st.tp, sl30: st.sl, markets: st.markets.map((x) => ({ symbol: x.symbol, pips30: x.pips, pip_label: x.pip_label })) };
     let script = job.script ? JSON.parse(job.script) : null;
@@ -661,7 +752,7 @@ route('POST', '/builder/content/:id/telegram', 'builder', async ({ request, env,
 });
 route('GET', '/admin/content', 'admin', async ({ env }) => {
   const s = await getSettings(env);
-  const { results } = await env.DB.prepare(`SELECT c.id, c.created_at, c.kind, c.ref_id, c.lang, c.status, c.caption, c.error, c.file_name, c.duration, c.size, c.rendered_at,
+  const { results } = await env.DB.prepare(`SELECT c.id, c.created_at, c.kind, c.ref_id, c.lang, c.status, c.caption, c.error, c.file_name, c.duration, c.size, c.rendered_at, c.topic,
       c.tg_file_id <> '' AS on_telegram, s.symbol, s.decision, s.pips, s.status AS result FROM content_jobs c LEFT JOIN signals s ON s.id = c.ref_id AND c.kind = 'signal'
       ORDER BY c.id DESC LIMIT 60`).all();
   const { results: closed } = await env.DB.prepare(`SELECT id, symbol, decision, pips, status, closed_at FROM signals WHERE decision IN ('BUY','SELL') AND status <> 'open'
@@ -669,10 +760,28 @@ route('GET', '/admin/content', 'admin', async ({ env }) => {
   const bs = (() => { try { return JSON.parse(s.builder_seen || '{}'); } catch { return {}; } })();
   return json({ jobs: results, closed, builder_seen: bs.at || 0,
     settings: { content_enabled: s.content_enabled, content_on_signal: s.content_on_signal, content_weekly: s.content_weekly, content_lang: s.content_lang,
-      content_voice: s.content_voice, content_tg: s.content_tg } });
+      content_voice: s.content_voice, content_tg: s.content_tg, content_edu: s.content_edu, content_times: s.content_times || '', content_topics: s.content_topics || '',
+      content_ai: s.content_ai || 'qwen', qwen_base: s.qwen_base || '', qwen_model: s.qwen_model || 'qwen-plus', qwen_key_set: !!s.qwen_key_enc },
+    topics: contentTopics(s), next_topic: (Number(s.content_topic_idx) || 0) % contentTopics(s).length });
+});
+// Test the Qwen connection with the saved key / model
+route('POST', '/admin/content/qwen-test', 'admin', async ({ env }) => {
+  const s = await getSettings(env);
+  if (!s.qwen_key_enc) fail(400, 'API key Qwen belum disimpan');
+  const t0 = Date.now();
+  const j = await qwenJson(env, s, 'Return JSON only.', 'Return {"ok": true, "text": "Garuda AI siap"}');
+  return json({ ok: true, ms: Date.now() - t0, text: j.text || JSON.stringify(j), model: s.qwen_model || 'qwen-plus' });
 });
 route('POST', '/admin/content', 'admin', async ({ request, env }) => {
   const b = await readJson(request);
+  if (b.kind === 'edu') {
+    const s = await getSettings(env);
+    const topics = contentTopics(s);
+    const topic = str(b.topic, 300) || topics[(Number(s.content_topic_idx) || 0) % topics.length];
+    await env.DB.prepare('INSERT INTO content_jobs (created_at, kind, ref_id, lang, topic) VALUES (?,?,0,?,?)').bind(now(), 'edu', b.lang === 'en' ? 'en' : 'id', topic).run();
+    if (!b.topic) await putSetting(env, 'content_topic_idx', String((Number(s.content_topic_idx) || 0) + 1));
+    return json({ ok: true });
+  }
   if (b.kind === 'weekly') await env.DB.prepare('INSERT INTO content_jobs (created_at, kind, ref_id, lang) VALUES (?,?,0,?)').bind(now(), 'weekly', b.lang === 'en' ? 'en' : 'id').run();
   else if (b.kind === 'signal' && int(b.ref_id)) await env.DB.prepare('INSERT INTO content_jobs (created_at, kind, ref_id, lang) VALUES (?,?,?,?)').bind(now(), 'signal', int(b.ref_id), b.lang === 'en' ? 'en' : 'id').run();
   else if (b.retry && int(b.retry)) await env.DB.prepare("UPDATE content_jobs SET status='queued', error='' WHERE id=?").bind(int(b.retry)).run();
@@ -681,7 +790,17 @@ route('POST', '/admin/content', 'admin', async ({ request, env }) => {
 });
 route('PUT', '/admin/content/settings', 'admin', async ({ request, env }) => {
   const b = await readJson(request);
-  for (const k of ['content_enabled', 'content_on_signal', 'content_weekly', 'content_tg']) if (b[k] !== undefined) await putSetting(env, k, b[k] ? '1' : '0');
+  for (const k of ['content_enabled', 'content_on_signal', 'content_weekly', 'content_tg', 'content_edu']) if (b[k] !== undefined) await putSetting(env, k, b[k] ? '1' : '0');
+  if (b.content_times !== undefined) {
+    const t = String(b.content_times).split(/[,\s]+/).filter(Boolean);
+    if (t.some((x) => !/^([01]?\d|2[0-3]):[0-5]\d$/.test(x))) fail(400, 'Jam harus format HH:MM, pisahkan koma (contoh 12:00, 19:00)');
+    await putSetting(env, 'content_times', t.join(', '));
+  }
+  if (b.content_topics !== undefined) await putSetting(env, 'content_topics', str(b.content_topics, 6000));
+  if (b.content_ai) await putSetting(env, 'content_ai', b.content_ai === 'claude' ? 'claude' : 'qwen');
+  if (b.qwen_model) await putSetting(env, 'qwen_model', str(b.qwen_model, 60));
+  if (b.qwen_base) { if (!/^https:\/\/[a-z0-9.-]+\/[\w/.-]*$/i.test(b.qwen_base)) fail(400, 'Alamat API Qwen tidak valid'); await putSetting(env, 'qwen_base', str(b.qwen_base, 200)); }
+  if (typeof b.qwen_key === 'string' && b.qwen_key.trim()) await putSetting(env, 'qwen_key_enc', await encrypt(env, b.qwen_key.trim()));
   if (b.content_lang) await putSetting(env, 'content_lang', b.content_lang === 'en' ? 'en' : 'id');
   if (b.content_voice && /^[a-z]{2}-[A-Z]{2}-[A-Za-z]+Neural$/.test(b.content_voice)) await putSetting(env, 'content_voice', b.content_voice);
   return json({ ok: true });

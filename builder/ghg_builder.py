@@ -356,7 +356,7 @@ def sync_content(cfg):
     import garuda_video
     folder = cfg.get('content_dir') or os.path.join(os.path.expanduser('~'), 'Documents', 'GarudaAI Konten')
     os.makedirs(folder, exist_ok=True)
-    tag = (job.get('signal') or {}).get('symbol', 'rekap').lower()
+    tag = (job.get('signal') or {}).get('symbol', 'edukasi' if job['kind'] == 'edu' else 'rekap').lower()
     name = f"garuda-ai_{datetime.datetime.now():%Y%m%d_%H%M}_{job['kind']}_{tag}_{job['id']}.mp4"
     out = os.path.join(folder, name)
     for k in ('chart_open', 'chart_close'):
