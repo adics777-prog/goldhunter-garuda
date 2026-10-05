@@ -43,6 +43,15 @@
   .sig td{vertical-align:top}
   .sig .why{color:var(--muted);font-size:.78rem;margin-top:4px;max-width:420px;overflow-wrap:anywhere}
   .lock{color:var(--muted);font-size:.78rem}
+  /* phones: one compact card per signal instead of a tall narrow table row */
+  .sig-cards{display:none}
+  .sig-card{border:1px solid var(--line);border-radius:14px;background:var(--card);padding:12px 14px}
+  .sig-card .top{display:flex;justify-content:space-between;align-items:flex-start;gap:10px}
+  .sig-card .lv{display:flex;flex-wrap:wrap;gap:4px 12px;margin-top:8px;font-size:.82rem}
+  .sig-card .lv b{font-family:ui-monospace,Consolas,monospace;font-weight:600}
+  .sig-card .why{color:var(--muted);font-size:.8rem;margin-top:8px;display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden;overflow-wrap:anywhere}
+  @media (max-width:640px){ .sig-table{display:none} .sig-cards{display:grid;gap:10px} }
+  @media (max-width:640px){ #tiles{grid-template-columns:repeat(3,1fr)!important;gap:8px} #tiles .stat{padding:10px} #tiles .stat b{font-size:1.15rem} #tiles .stat span{font-size:.7rem;line-height:1.3} }
   .kv2{display:grid;grid-template-columns:auto 1fr;gap:6px 14px;font-size:.9rem;margin:0 0 14px}
   .kv2 dt{color:var(--muted)} .kv2 dd{margin:0;font-weight:600;overflow-wrap:anywhere}
   .mk{display:inline-block;font-size:.7rem;font-weight:700;letter-spacing:.4px;padding:2px 7px;border-radius:6px;background:var(--bg-2);border:1px solid var(--line);color:var(--text);margin-right:4px}
@@ -160,7 +169,17 @@
         <td class="right hide-sm">${m.closed}</td>
         <td class="right hide-sm ${m.pips < 0 ? 'neg' : 'pos'}">${pipsTxt(m.pips, m.symbol)}</td></tr>`).join('')}</tbody></table></div>
       <p class="tiny muted" style="margin-top:6px">${T('Win rate = sinyal kena TP dibanding kena SL. Break even dan sinyal yang ditutup manual tidak dihitung menang atau kalah.', 'Win rate = signals that hit TP versus SL. Break-even and manually closed signals count as neither a win nor a loss.')}</p>` : '';
-    $('#list').innerHTML = d.signals.length ? `<div class="table-wrap"><table class="sig"><thead><tr>
+    const resOf = (r) => { const st = STATUS[r.status] || STATUS.open;
+      return ['open', 'pending', 'cancel'].includes(r.status) ? `<span class="badge ${st[0]}">${st[1]}</span>`
+        : `<div class="${r.pips > 0 ? 'pos' : (r.pips < 0 ? 'neg' : '')} nowrap">${pipsTxt(r.pips, r.symbol)}</div><span class="badge ${st[0]}">${st[1]}</span>`; };
+    const cardsHtml = d.signals.map((r) => `<div class="sig-card">
+        <div class="top"><div><span class="mk">${esc(r.symbol)}</span>${side(r.decision)}${ordTag(r)} <span class="tiny muted">${r.confidence}%</span>
+          <div class="tiny muted" style="margin-top:4px">${esc(fmtDateTime(r.created_at))}</div></div><div class="right">${resOf(r)}</div></div>
+        ${r.locked ? `<div class="lock" style="margin-top:8px">🔒 ${T('Entry, SL, TP khusus member.', 'Entry, SL and TP are for members only.')} <a href="/masuk">${T('Masuk', 'Log in')}</a></div>`
+          : `<div class="lv"><span>${r.status === 'pending' ? T('Pending', 'Pending') : 'Entry'} <b>${num(r.price, r.symbol)}</b></span><span>SL <b class="neg">${num(r.sl, r.symbol)}</b></span><span>TP <b class="pos">${num(r.tp, r.symbol)}</b></span></div>
+            ${RS(r) ? `<div class="why">${esc(RS(r))}</div>` : ''}`}
+        <button type="button" class="btn btn-ghost btn-sm" style="margin-top:8px" data-detail="${r.id}">🔎 ${T('Detail', 'Details')}${r.has_chart || r.has_close_chart ? ' & chart' : ''}</button></div>`).join('');
+    $('#list').innerHTML = d.signals.length ? `<div class="sig-cards">${cardsHtml}</div><div class="table-wrap sig-table"><table class="sig"><thead><tr>
         <th>${T('Waktu', 'Time')}</th><th>${T('Sinyal', 'Signal')}</th><th class="right">Entry</th><th class="right hide-sm">SL</th><th class="right hide-sm">TP</th><th class="right">${T('Hasil', 'Result')}</th></tr></thead><tbody>
       ${d.signals.map((r) => {
         const st = STATUS[r.status] || STATUS.open;
