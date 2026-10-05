@@ -79,7 +79,7 @@
           <div class="stat"><b>${wr}</b><span>Win rate 30 hari</span></div>
           <div class="stat"><b>${Number(st.wins || 0)} / ${Number(st.losses || 0)}</b><span>TP / SL 30 hari</span></div>
           <div class="stat"><b>${running.length}</b><span>Sinyal berjalan</span></div></div>
-        ${(f.last_by_market || []).map((x) => `<div class="sig-mini"><div>${dec(x.decision)} <b>${esc(x.symbol)}</b> <span class="tiny muted">${ago(x.created_at)}</span>
+        ${(f.last_by_market || []).map((x) => `<div class="sig-mini"><div>${x.status === 'pending' ? `<span class="badge b-blue">⏳ PENDING ${esc(x.decision)} ${esc(x.order_type)}</span>${x.price ? ` <span class="small mono">@${Number(x.price).toFixed(dgt(x.symbol))}</span>` : ''}` : x.status === 'cancel' ? '<span class="badge b-gray">PENDING DIBATALKAN</span>' : dec(x.decision)} <b>${esc(x.symbol)}</b> <span class="tiny muted">${ago(x.created_at)}</span>
             <div class="small muted" style="margin-top:4px;max-width:720px">${esc(String(x.reason || '').slice(0, 170))}${String(x.reason || '').length > 170 ? '…' : ''}</div></div></div>`).join('')}
         ${running.map((x) => `<div class="sig-mini"><div>${dec(x.decision)} <b>${esc(x.symbol)}</b> ${x.status === 'pending' ? `<span class="badge b-blue">pending ${esc(x.order_type)}</span>` : '<span class="badge b-gold">berjalan</span>'}</div>
             <div class="small mono right">Entry ${Number(x.price).toFixed(dgt(x.symbol))}<div class="tiny"><span style="color:#ff8b95">SL ${Number(x.sl).toFixed(dgt(x.symbol))}</span> · <span style="color:#6ee7a2">TP ${Number(x.tp).toFixed(dgt(x.symbol))}</span></div></div></div>`).join('')}

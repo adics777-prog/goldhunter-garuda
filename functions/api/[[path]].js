@@ -1080,14 +1080,17 @@ route('GET', '/signal/feed', 'public', async ({ env, url, user }) => {
   const openHidden = (x) => x.decision !== 'WAIT' && !member && isLive(x.status);
   const lastView = last ? { ...last, reason: openHidden(last) ? '' : last.reason, reason_en: openHidden(last) ? '' : last.reason_en } : null;   // news is public context
   // latest analysis of every market + its newest WAIT picture (last 24 h) for the live cards on /sinyal
-  const { results: lastRows } = await env.DB.prepare(`SELECT id, symbol, decision, created_at, reason, news, reason_en, news_en, trend_h4, trend_h1, confidence, status FROM signals
+  const { results: lastRows } = await env.DB.prepare(`SELECT id, symbol, decision, created_at, valid_until, reason, news, reason_en, news_en, trend_h4, trend_h1, confidence, status,
+      order_type, price, sl, tp, (SELECT COUNT(*) FROM signal_charts c WHERE c.signal_id = signals.id AND c.kind = 'open') AS has_chart FROM signals
       WHERE id IN (SELECT MAX(id) FROM signals GROUP BY symbol)`).all();
   const { results: waitPics } = await env.DB.prepare(`SELECT s.symbol, MAX(s.id) AS id, MAX(s.created_at) AS at FROM signals s
       JOIN signal_charts c ON c.signal_id = s.id AND c.kind = 'open' WHERE s.decision = 'WAIT' AND s.created_at > ? GROUP BY s.symbol`).bind(t - DAY).all();
   const enabledSyms = new Set(markets.filter((m) => m.enabled).map((m) => m.symbol));
   const lastByMarket = lastRows.filter((x) => enabledSyms.has(x.symbol)).map((x) => {
     const pic = waitPics.find((p) => p.symbol === x.symbol);
-    return { ...x, reason: openHidden(x) ? '' : x.reason, reason_en: openHidden(x) ? '' : x.reason_en, wait_chart: pic ? pic.id : 0, wait_chart_at: pic ? pic.at : 0 };
+    const hide = openHidden(x);
+    return { ...x, reason: hide ? '' : x.reason, reason_en: hide ? '' : x.reason_en, price: hide ? null : x.price, sl: hide ? null : x.sl, tp: hide ? null : x.tp,
+      locked: hide, has_chart: !!x.has_chart, wait_chart: pic ? pic.id : 0, wait_chart_at: pic ? pic.at : 0 };
   });
   return json({ ok: true, server_time: t, member, signals, last: lastView, last_by_market: lastByMarket, stats30: stat, symbol: sym, market_stats: perMk,
     markets: markets.filter((m) => m.enabled).map((m) => { const v = symView(m); delete v.profile; return v; }) });

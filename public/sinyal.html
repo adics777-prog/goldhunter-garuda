@@ -18,7 +18,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@700;900&family=Poppins:wght@300;400;600;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="/assets/app.css?v=77e2e87b">
+<link rel="stylesheet" href="/assets/app.css?v=804d4ee9">
 <style>
   .pub-top{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:14px clamp(16px,4vw,40px);border-bottom:1px solid var(--line);background:var(--bg-2);position:sticky;top:0;z-index:20}
   .pub-top .brand{padding:0}
@@ -109,15 +109,26 @@
 
     const cards = (d.last_by_market || []).filter((x) => !cur || x.symbol === cur);
     if (cards.length) {
-      const dec = (x) => x.decision === 'WAIT' ? `<span class="badge b-gold">◆ ${T('TUNGGU', 'WAIT')}</span>` : side(x.decision);
+      const pend = (x) => x.status === 'pending' && (x.order_type === 'LIMIT' || x.order_type === 'STOP');
+      const dec = (x) => x.decision === 'WAIT' ? `<span class="badge b-gold">◆ ${T('TUNGGU', 'WAIT')}</span>`
+        : pend(x) ? `<span class="badge b-blue">⏳ PENDING ${x.decision} ${x.order_type}</span>`
+        : x.status === 'cancel' ? `<span class="badge b-gray">${T('PENDING DIBATALKAN', 'PENDING CANCELLED')}</span>`
+        : side(x.decision) + (STATUS[x.status] ? ` <span class="badge ${STATUS[x.status][0]}">${STATUS[x.status][1]}</span>` : '');
+      const lvl = (x) => x.decision === 'WAIT' || x.status === 'cancel' ? ''
+        : x.locked ? `<div class="small" style="margin-top:8px">🔒 ${pend(x) ? T('Harga pending order khusus member.', 'Pending order price is for members only.') : T('Entry, SL, TP khusus member.', 'Entry, SL, TP are for members only.')} <a href="/masuk">${T('Masuk', 'Log in')}</a></div>`
+        : `<div class="pend-box"><div>${pend(x) ? `${T('Order menunggu di', 'Order waiting at')} <b class="mono">${num(x.price, x.symbol)}</b>` : `Entry <b class="mono">${num(x.price, x.symbol)}</b>`}
+            · SL <b class="mono neg">${num(x.sl, x.symbol)}</b> · TP <b class="mono pos">${num(x.tp, x.symbol)}</b></div>
+            ${pend(x) ? `<div class="tiny muted">${T('Belum ada posisi. Order baru terisi jika harga mencapai level ini; batal otomatis jika tidak tercapai sampai', 'No position yet. Filled only if price reaches this level; cancelled automatically if not reached by')} ${esc(fmtDateTime(x.valid_until))}.</div>` : ''}</div>`;
       const tr = (t) => t === 'UP' ? T('▲ naik', '▲ up') : t === 'DOWN' ? T('▼ turun', '▼ down') : '◆ sideways';
       $('#now').innerHTML = `<div class="small muted" style="margin-bottom:10px">${T('Analisis terakhir tiap pasar', 'Latest analysis per market')}</div>
         <div class="now-grid">${cards.map((x) => `<div class="now-card">
           <div class="row" style="gap:8px;flex-wrap:wrap"><span class="mk">${esc(x.symbol)}</span>${dec(x)}<span class="small muted">${esc(ago(x.created_at))}</span></div>
           <div class="small muted" style="margin-top:6px">${T('Tren', 'Trend')} H4 ${tr(x.trend_h4)} · H1 ${tr(x.trend_h1)}</div>
+          ${lvl(x)}
           ${RS(x) ? `<div class="small" style="margin-top:8px;overflow-wrap:anywhere">${esc(RS(x))}</div>` : `<div class="small muted" style="margin-top:8px">🔒 ${T('Detail sinyal yang masih berjalan khusus member.', 'Details of a running signal are for members only.')}</div>`}
           ${NW(x) ? `<div class="small muted" style="margin-top:6px;overflow-wrap:anywhere">📰 ${esc(NW(x))}</div>` : ''}
-          ${x.wait_chart ? `<a class="now-pic" href="/api/signal/${x.wait_chart}/chart" target="_blank" rel="noopener"><img loading="lazy" src="/api/signal/${x.wait_chart}/chart" alt="Chart ${esc(x.symbol)}"><span>${T('Chart analisis AI', 'AI analysis chart')} · ${esc(ago(x.wait_chart_at))}</span></a>` : ''}
+          ${x.decision !== 'WAIT' && x.has_chart && !x.locked ? `<a class="now-pic" href="/api/signal/${x.id}/chart" target="_blank" rel="noopener"><img loading="lazy" src="/api/signal/${x.id}/chart" alt="Chart ${esc(x.symbol)}"><span>${pend(x) ? T('Chart pending order', 'Pending order chart') : T('Chart sinyal', 'Signal chart')} · ${esc(ago(x.created_at))}</span></a>`
+            : x.wait_chart ? `<a class="now-pic" href="/api/signal/${x.wait_chart}/chart" target="_blank" rel="noopener"><img loading="lazy" src="/api/signal/${x.wait_chart}/chart" alt="Chart ${esc(x.symbol)}"><span>${T('Chart analisis AI', 'AI analysis chart')} · ${esc(ago(x.wait_chart_at))}</span></a>` : ''}
         </div>`).join('')}</div>`;
     } else {
     const l = d.last;
