@@ -313,6 +313,10 @@ def render_video(job, out_path):
             p['draw'](im, t, p['dur'])
             cur = next((txt for a, b, txt in p['sents'] if a <= t < a + b + 0.25), '')
             subtitle(im, cur)
+            if job.get('watermark'):                 # test / sample videos are marked on every frame
+                wd = ImageDraw.Draw(im, 'RGBA')
+                wd.rectangle([0, 236, W, 290], fill=(200, 30, 40, 215))
+                wd.text((W / 2, 263), job['watermark'], font=F('black', 32), fill=(255, 255, 255), anchor='mm')
             if prev is not None and fi < fade:
                 im = Image.blend(prev, im, (fi + 1) / (fade + 1))
             proc.stdin.write(im.tobytes())
