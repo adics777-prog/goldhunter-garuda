@@ -177,16 +177,18 @@
       <div class="stat"><b class="${(s.pips || 0) < 0 ? 'neg' : ''}">${closed && cur ? pipsTxt(s.pips, cur) : '-'}</b><span>${cur ? T('Total hasil 30 hari', '30-day total') : T('Total hasil: pilih satu pasar', 'Total: pick one market')}</span></div>
       <div class="stat"><b>${closed}</b><span>${T('Sinyal selesai 30 hari', 'Closed signals, 30 days')}</span></div>`;
 
-    const ms = d.market_stats || [];
+    // every active market is listed, also before its first finished signal
+    const zero = { closed: 0, wins: 0, losses: 0, pips: 0, closed30: 0, wins30: 0, losses30: 0, pips30: 0 };
+    const ms = (d.markets || []).filter((m) => !cur || m.symbol === cur).map((m) => ({ ...zero, ...((d.market_stats || []).find((x) => x.symbol === m.symbol) || {}), symbol: m.symbol }));
     const pct = (w, l) => w + l ? Math.round(w / (w + l) * 100) + '%' : '-';
     $('#mstats').innerHTML = ms.length ? `<h3 style="margin:0 0 10px">${T('Win rate per pasar', 'Win rate per market')}</h3><div class="table-wrap"><table><thead><tr>
         <th>${T('Pasar', 'Market')}</th><th class="right">${T('Win rate 30 hari', '30-day win rate')}</th><th class="right hide-sm">${T('Hasil 30 hari', '30-day result')}</th><th class="right">${T('Win rate sejak awal', 'All-time win rate')}</th><th class="right hide-sm">${T('Sinyal selesai', 'Closed signals')}</th><th class="right hide-sm">${T('Hasil sejak awal', 'All-time result')}</th></tr></thead><tbody>
       ${ms.map((m) => `<tr><td><span class="mk">${esc(m.symbol)}</span> <span class="tiny muted">${esc(NAMES[m.symbol] || '')}</span></td>
-        <td class="right"><b>${pct(m.wins30, m.losses30)}</b> <span class="tiny muted">(${m.wins30} TP / ${m.losses30} SL)</span></td>
+        <td class="right">${m.closed ? `<b>${pct(m.wins30, m.losses30)}</b> <span class="tiny muted">(${m.wins30} TP / ${m.losses30} SL)</span>` : `<span class="tiny muted">${T('belum ada sinyal selesai', 'no finished signal yet')}</span>`}</td>
         <td class="right hide-sm ${m.pips30 < 0 ? 'neg' : 'pos'}">${m.closed30 ? pipsTxt(m.pips30, m.symbol) : '-'}</td>
         <td class="right"><b>${pct(m.wins, m.losses)}</b></td>
         <td class="right hide-sm">${m.closed}</td>
-        <td class="right hide-sm ${m.pips < 0 ? 'neg' : 'pos'}">${pipsTxt(m.pips, m.symbol)}</td></tr>`).join('')}</tbody></table></div>
+        <td class="right hide-sm ${m.pips < 0 ? 'neg' : 'pos'}">${m.closed ? pipsTxt(m.pips, m.symbol) : '-'}</td></tr>`).join('')}</tbody></table></div>
       <p class="tiny muted" style="margin-top:6px">${T('Win rate = sinyal kena TP dibanding kena SL. Break even dan sinyal yang ditutup manual tidak dihitung menang atau kalah.', 'Win rate = signals that hit TP versus SL. Break-even and manually closed signals count as neither a win nor a loss.')}</p>` : '';
     const resOf = (r) => { const st = STATUS[r.status] || STATUS.open;
       return ['open', 'pending', 'cancel'].includes(r.status) ? `<span class="badge ${st[0]}">${st[1]}</span>`
