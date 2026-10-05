@@ -2,7 +2,7 @@
 import {
   HttpError, fail, json, readJson, now, DAY, str, int, isEmail, hashPassword, verifyPassword,
   encrypt, decrypt, createSession, destroySession, sessionUser, isAdminEmail, randomToken, sha256,
-  siteUrl, esc, rupiah, fmtDate, unb64, b64,
+  siteUrl, esc, rupiah, fmtDate, unb64, b64, b64url,
 } from '../../server/util.js';
 import {
   getSettings, putSetting, quote, notify, emailUser, emailAdmin, newOrderCode, getUser, getProduct,
@@ -118,7 +118,7 @@ route('POST', '/auth/register', 'public', async ({ request, env, base }) => {
     .bind(email, name, phone, address, hash, salt, role, now()).run();
   const userId = r.meta.last_row_id;
   await recordConsent(env, request, userId, str(b.lang, 4));
-  await notify(env, userId, 'Selamat datang di GoldHunter Garuda!', 'Mulai dari menu Order, atau baca "Syarat EA Gratis" untuk EA gratis.', '#/order');
+  await notify(env, userId, 'Selamat datang di Garuda AI!', 'Pantau sinyal AI di Beranda, ikuti channel Telegram, dan lihat paket di menu Order.', '#/');
   const s = await getSettings(env);
   const pwRow = (pw) => `<tr><td style="padding:6px 0;color:#a3a3b2">Password</td><td style="padding:6px 0"><b style="font-family:monospace;font-size:16px">${pw}</b></td></tr>`;
   const welcome = (pw) => layout(env, 'Pendaftaran berhasil 🎉', `<p>Halo <b>${esc(name)}</b>,</p>
@@ -227,7 +227,7 @@ route('GET', '/catalog', 'public', async ({ env }) => {
     min_capital_usd: Number(s.min_capital_usd || 100),
     profit_est: s.profit_est_enabled === '1' && Number(s.profit_est_min_idr) > 0 && Number(s.profit_est_max_idr) >= Number(s.profit_est_min_idr) && s.profit_est_basis
       ? { min: Number(s.profit_est_min_idr), max: Number(s.profit_est_max_idr), basis: s.profit_est_basis } : null,
-    ib_brokers: s.ib_brokers.filter((b) => b.active && b.link), whatsapp: s.whatsapp || '',
+    ib_brokers: s.ib_brokers.filter((b) => b.active && b.link), whatsapp: s.whatsapp || '', telegram_link: s.telegram_public_link || '',
   });
 });
 
@@ -669,7 +669,7 @@ route('POST', '/builder/content/claim', 'builder', async ({ env }) => {
   await env.DB.prepare("UPDATE content_jobs SET status='rendering' WHERE id=?").bind(job.id).run();
   try {
     const out = { id: job.id, kind: job.kind, lang: job.lang, voice: job.lang === 'en' ? 'en-US-AndrewNeural' : (s.content_voice || 'id-ID-ArdiNeural'),
-      send_telegram: s.content_tg === '1' };
+      send_telegram: s.content_tg === '1', send_social: Object.entries(socialReady(s)).filter(([k, ok]) => ok && s['content_' + k] === '1').map(([k]) => k) };
     const st30 = await contentStats(env, 30);
     const data = { stats_30_days: st30 };
     if (job.kind === 'edu') {
@@ -743,10 +743,191 @@ route('POST', '/builder/content/:id/telegram', 'builder', async ({ request, env,
   if (fileId) await env.DB.prepare('UPDATE content_jobs SET tg_file_id=? WHERE id=?').bind(fileId, job.id).run();
   return json({ ok: !!fileId, errors: errs });
 });
+// ------------------------------------------------------------------ social networks: Facebook Page Reels, Instagram Reels, TikTok (draft)
+const META_GRAPH = (s) => `https://graph.facebook.com/${/^v\d+\.\d+$/.test(s.meta_ver || '') ? s.meta_ver : 'v23.0'}`;
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+async function metaCall(s, path, params = {}, method = 'POST') {
+  const u = new URL(META_GRAPH(s) + path);
+  const opt = { method };
+  if (method === 'GET') for (const [k, v] of Object.entries(params)) u.searchParams.set(k, v);
+  else opt.body = new URLSearchParams(params);
+  const j = await (await fetch(u, opt)).json().catch(() => ({}));
+  if (j.error) throw new Error(j.error.error_user_msg || j.error.message || 'Meta error');
+  return j;
+}
+async function metaUpload(uploadUrl, token, buf) {
+  const r = await fetch(uploadUrl, { method: 'POST', headers: { authorization: 'OAuth ' + token, offset: '0', file_size: String(buf.byteLength) }, body: buf });
+  const j = await r.json().catch(() => ({}));
+  if (!r.ok || j.error) throw new Error('upload: ' + ((j.error && (j.error.message || j.error)) || j.debug_info && j.debug_info.message || r.status));
+}
+async function postFacebook(env, s, buf, caption) {
+  const token = await decrypt(env, s.meta_page_token_enc);
+  const st = await metaCall(s, `/${s.meta_page_id}/video_reels`, { upload_phase: 'start', access_token: token });
+  await metaUpload(st.upload_url || `https://rupload.facebook.com/video-upload/${META_GRAPH(s).split('/').pop()}/${st.video_id}`, token, buf);
+  await metaCall(s, `/${s.meta_page_id}/video_reels`, { upload_phase: 'finish', video_id: st.video_id, video_state: 'PUBLISHED', description: caption.slice(0, 2000), access_token: token });
+  return st.video_id;
+}
+async function postInstagram(env, s, buf, caption) {
+  const token = await decrypt(env, s.meta_page_token_enc);
+  const c = await metaCall(s, `/${s.meta_ig_id}/media`, { media_type: 'REELS', upload_type: 'resumable', caption: caption.slice(0, 2200), share_to_feed: 'true', access_token: token });
+  await metaUpload(c.uri, token, buf);
+  for (let i = 0; i < 40; i++) {                       // Instagram processes the video before it can be published (usually 10-60 s)
+    await sleep(4000);
+    const st = await metaCall(s, `/${c.id}`, { fields: 'status_code,status', access_token: token }, 'GET');
+    if (st.status_code === 'FINISHED') break;
+    if (st.status_code === 'ERROR' || st.status_code === 'EXPIRED') throw new Error('Instagram menolak video: ' + (st.status || st.status_code));
+    if (i === 39) throw new Error('Instagram masih memproses video terlalu lama');
+  }
+  const p = await metaCall(s, `/${s.meta_ig_id}/media_publish`, { creation_id: c.id, access_token: token });
+  return p.id;
+}
+async function tiktokToken(env, s) {
+  if (!s.tiktok_refresh_enc) throw new Error('Akun TikTok belum dihubungkan');
+  if (s.tiktok_access_enc && Number(s.tiktok_expires) > now() + 300) return decrypt(env, s.tiktok_access_enc);
+  const r = await fetch('https://open.tiktokapis.com/v2/oauth/token/', { method: 'POST', headers: { 'content-type': 'application/x-www-form-urlencoded' },
+    body: new URLSearchParams({ client_key: s.tiktok_client_key, client_secret: await decrypt(env, s.tiktok_client_secret_enc), grant_type: 'refresh_token',
+      refresh_token: await decrypt(env, s.tiktok_refresh_enc) }) });
+  const j = await r.json().catch(() => ({}));
+  if (!j.access_token) throw new Error('TikTok: login kedaluwarsa, hubungkan ulang akun (' + (j.error_description || j.error || r.status) + ')');
+  await tiktokSave(env, j);
+  return j.access_token;
+}
+async function tiktokSave(env, j) {
+  await putSetting(env, 'tiktok_access_enc', await encrypt(env, j.access_token));
+  if (j.refresh_token) await putSetting(env, 'tiktok_refresh_enc', await encrypt(env, j.refresh_token));
+  await putSetting(env, 'tiktok_expires', String(now() + (Number(j.expires_in) || 86400)));
+  if (j.open_id) await putSetting(env, 'tiktok_open_id', j.open_id);
+}
+async function postTiktok(env, s, buf) {
+  const tok = await tiktokToken(env, s);
+  const n = buf.byteLength;
+  const r = await fetch('https://open.tiktokapis.com/v2/post/publish/inbox/video/init/', { method: 'POST',
+    headers: { authorization: 'Bearer ' + tok, 'content-type': 'application/json; charset=UTF-8' },
+    body: JSON.stringify({ source_info: { source: 'FILE_UPLOAD', video_size: n, chunk_size: n, total_chunk_count: 1 } }) });
+  const j = await r.json().catch(() => ({}));
+  if (!j.data || !j.data.upload_url) throw new Error('TikTok: ' + ((j.error && (j.error.message || j.error.code)) || r.status));
+  const u = await fetch(j.data.upload_url, { method: 'PUT', headers: { 'content-type': 'video/mp4', 'content-range': `bytes 0-${n - 1}/${n}` }, body: buf });
+  if (!u.ok) throw new Error('TikTok upload: ' + u.status);
+  return j.data.publish_id;
+}
+const SOCIAL_NAME = { fb: 'Facebook', ig: 'Instagram', tt: 'TikTok' };
+function socialReady(s) {
+  return { fb: !!(s.meta_page_id && s.meta_page_token_enc), ig: !!(s.meta_ig_id && s.meta_page_token_enc), tt: !!s.tiktok_refresh_enc };
+}
+// builder sends the rendered MP4 once per network; the result is kept per job
+route('POST', '/builder/content/:id/social/:net', 'builder', async ({ request, env, params }) => {
+  const net = params.net;
+  if (!SOCIAL_NAME[net]) fail(404, 'Jaringan tidak dikenal');
+  const job = await env.DB.prepare('SELECT * FROM content_jobs WHERE id=?').bind(int(params.id)).first();
+  if (!job) fail(404, 'Konten tidak ditemukan');
+  const s = await getSettings(env);
+  if (!socialReady(s)[net]) return json({ ok: false, error: SOCIAL_NAME[net] + ' belum dihubungkan' });
+  const buf = await request.arrayBuffer();
+  if (!buf.byteLength || buf.byteLength > 95 * 1024 * 1024) fail(400, 'Ukuran video tidak valid');
+  const social = JSON.parse(job.social || '{}');
+  try {
+    const id = net === 'fb' ? await postFacebook(env, s, buf, job.caption || '') : net === 'ig' ? await postInstagram(env, s, buf, job.caption || '') : await postTiktok(env, s, buf);
+    social[net] = { ok: true, id: String(id || ''), at: now() };
+  } catch (e) {
+    social[net] = { ok: false, error: str(e.message || e, 300), at: now() };
+  }
+  await env.DB.prepare('UPDATE content_jobs SET social=? WHERE id=?').bind(JSON.stringify(social), job.id).run();
+  return json({ ok: social[net].ok, error: social[net].error || '' });
+});
+
+route('GET', '/admin/social', 'admin', async ({ env, base }) => {
+  const s = await getSettings(env);
+  const r = socialReady(s);
+  return json({ ready: r, content_fb: s.content_fb === '1', content_ig: s.content_ig === '1', content_tt: s.content_tt === '1', content_tg: s.content_tg === '1',
+    meta_app_id: s.meta_app_id || '', meta_secret_set: !!s.meta_app_secret_enc, meta_page_id: s.meta_page_id || '', meta_page_name: s.meta_page_name || '',
+    meta_ig_id: s.meta_ig_id || '', meta_ig_username: s.meta_ig_username || '', meta_pages: s.meta_pages_list ? JSON.parse(s.meta_pages_list) : [],
+    tiktok_client_key: s.tiktok_client_key || '', tiktok_secret_set: !!s.tiktok_client_secret_enc, tiktok_name: s.tiktok_name || '',
+    tiktok_redirect: `${base}/api/tiktok/callback`, telegram_public_link: s.telegram_public_link || '' });
+});
+route('PUT', '/admin/social', 'admin', async ({ request, env }) => {
+  const b = await readJson(request);
+  for (const k of ['content_fb', 'content_ig', 'content_tt']) if (b[k] !== undefined) await putSetting(env, k, b[k] ? '1' : '0');
+  if (b.meta_app_id !== undefined) { if (b.meta_app_id && !/^\d{5,25}$/.test(String(b.meta_app_id).trim())) fail(400, 'App ID Meta berupa angka'); await putSetting(env, 'meta_app_id', String(b.meta_app_id).trim()); }
+  if (typeof b.meta_app_secret === 'string' && b.meta_app_secret.trim()) await putSetting(env, 'meta_app_secret_enc', await encrypt(env, b.meta_app_secret.trim()));
+  if (b.tiktok_client_key !== undefined) await putSetting(env, 'tiktok_client_key', str(b.tiktok_client_key, 80).trim());
+  if (typeof b.tiktok_client_secret === 'string' && b.tiktok_client_secret.trim()) await putSetting(env, 'tiktok_client_secret_enc', await encrypt(env, b.tiktok_client_secret.trim()));
+  if (b.telegram_public_link !== undefined) {
+    const l = str(b.telegram_public_link, 200).trim();
+    if (l && !/^https:\/\/t\.me\/[\w+/-]+$/.test(l)) fail(400, 'Link channel harus seperti https://t.me/namachannel');
+    await putSetting(env, 'telegram_public_link', l);
+  }
+  if (b.disconnect === 'meta') for (const k of ['meta_page_id', 'meta_page_name', 'meta_page_token_enc', 'meta_ig_id', 'meta_ig_username', 'meta_pages_list', 'meta_pages_enc']) await putSetting(env, k, '');
+  if (b.disconnect === 'tiktok') for (const k of ['tiktok_access_enc', 'tiktok_refresh_enc', 'tiktok_expires', 'tiktok_open_id', 'tiktok_name']) await putSetting(env, k, '');
+  return json({ ok: true });
+});
+// Meta: short user token from Graph API Explorer -> long-lived token -> the Pages (never-expiring page tokens) + their Instagram accounts
+route('POST', '/admin/social/meta-connect', 'admin', async ({ request, env }) => {
+  const b = await readJson(request);
+  const s = await getSettings(env);
+  if (!s.meta_app_id || !s.meta_app_secret_enc) fail(400, 'Isi dan simpan App ID & App Secret dulu');
+  const short = str(b.user_token, 600).trim();
+  if (!short) fail(400, 'Tempel User Access Token dari Graph API Explorer');
+  try {
+    const ll = await metaCall(s, '/oauth/access_token', { grant_type: 'fb_exchange_token', client_id: s.meta_app_id,
+      client_secret: await decrypt(env, s.meta_app_secret_enc), fb_exchange_token: short }, 'GET');
+    const pages = await metaCall(s, '/me/accounts', { fields: 'id,name,access_token,instagram_business_account{id,username}', limit: '50', access_token: ll.access_token }, 'GET');
+    const list = (pages.data || []).map((p) => ({ id: p.id, name: p.name, token: p.access_token, ig_id: p.instagram_business_account ? p.instagram_business_account.id : '',
+      ig_username: p.instagram_business_account ? p.instagram_business_account.username : '' }));
+    if (!list.length) fail(400, 'Token tidak punya akses ke Halaman Facebook mana pun. Saat Generate Access Token, centang Halaman Anda dan izin pages_*');
+    await putSetting(env, 'meta_pages_enc', await encrypt(env, JSON.stringify(list)));
+    await putSetting(env, 'meta_pages_list', JSON.stringify(list.map(({ token, ...x }) => x)));
+    if (list.length === 1) await metaSelect(env, list[0]);
+    return json({ ok: true, pages: list.map(({ token, ...x }) => x), selected: list.length === 1 ? list[0].id : '' });
+  } catch (e) { if (e instanceof HttpError) throw e; fail(400, 'Meta: ' + e.message); }
+});
+async function metaSelect(env, p) {
+  await putSetting(env, 'meta_page_id', p.id);
+  await putSetting(env, 'meta_page_name', p.name);
+  await putSetting(env, 'meta_page_token_enc', await encrypt(env, p.token));
+  await putSetting(env, 'meta_ig_id', p.ig_id || '');
+  await putSetting(env, 'meta_ig_username', p.ig_username || '');
+}
+route('POST', '/admin/social/meta-select', 'admin', async ({ request, env }) => {
+  const b = await readJson(request);
+  const s = await getSettings(env);
+  const list = s.meta_pages_enc ? JSON.parse(await decrypt(env, s.meta_pages_enc)) : [];
+  const p = list.find((x) => x.id === String(b.page_id));
+  if (!p) fail(404, 'Halaman tidak ditemukan, hubungkan ulang');
+  await metaSelect(env, p);
+  return json({ ok: true });
+});
+// TikTok Login Kit: admin opens the authorize URL, TikTok returns to /api/tiktok/callback
+route('POST', '/admin/social/tiktok-auth', 'admin', async ({ env, base }) => {
+  const s = await getSettings(env);
+  if (!s.tiktok_client_key || !s.tiktok_client_secret_enc) fail(400, 'Isi dan simpan Client Key & Client Secret TikTok dulu');
+  const state = b64url(crypto.getRandomValues(new Uint8Array(18)));
+  await putSetting(env, 'tiktok_state', `${state}:${now() + 900}`);
+  const u = new URL('https://www.tiktok.com/v2/auth/authorize/');
+  u.search = new URLSearchParams({ client_key: s.tiktok_client_key, scope: 'user.info.basic,video.upload', response_type: 'code', redirect_uri: `${base}/api/tiktok/callback`, state }).toString();
+  return json({ url: u.toString() });
+});
+route('GET', '/tiktok/callback', 'public', async ({ env, url, base }) => {
+  const s = await getSettings(env);
+  const back = (msg) => new Response(null, { status: 302, headers: { location: `${base}/admin#/sosmed/${encodeURIComponent(msg)}` } });
+  const [st, exp] = String(s.tiktok_state || '').split(':');
+  if (!st || url.searchParams.get('state') !== st || now() > Number(exp)) return back('Sesi login TikTok tidak valid, coba lagi');
+  await putSetting(env, 'tiktok_state', '');
+  if (url.searchParams.get('error')) return back('TikTok: ' + (url.searchParams.get('error_description') || url.searchParams.get('error')));
+  const r = await fetch('https://open.tiktokapis.com/v2/oauth/token/', { method: 'POST', headers: { 'content-type': 'application/x-www-form-urlencoded' },
+    body: new URLSearchParams({ client_key: s.tiktok_client_key, client_secret: await decrypt(env, s.tiktok_client_secret_enc), code: url.searchParams.get('code') || '',
+      grant_type: 'authorization_code', redirect_uri: `${base}/api/tiktok/callback` }) });
+  const j = await r.json().catch(() => ({}));
+  if (!j.access_token) return back('TikTok: ' + (j.error_description || j.error || 'gagal login'));
+  await tiktokSave(env, j);
+  const me = await (await fetch('https://open.tiktokapis.com/v2/user/info/?fields=display_name,username', { headers: { authorization: 'Bearer ' + j.access_token } })).json().catch(() => ({}));
+  const u = (me.data && me.data.user) || {};
+  await putSetting(env, 'tiktok_name', u.username ? '@' + u.username : (u.display_name || 'terhubung'));
+  return back('ok');
+});
 route('GET', '/admin/content', 'admin', async ({ env }) => {
   const s = await getSettings(env);
   const { results } = await env.DB.prepare(`SELECT c.id, c.created_at, c.kind, c.ref_id, c.lang, c.status, c.caption, c.error, c.file_name, c.duration, c.size, c.rendered_at, c.topic,
-      c.tg_file_id <> '' AS on_telegram, s.symbol, s.decision, s.pips, s.status AS result FROM content_jobs c LEFT JOIN signals s ON s.id = c.ref_id AND c.kind = 'signal'
+      c.tg_file_id <> '' AS on_telegram, c.social, s.symbol, s.decision, s.pips, s.status AS result FROM content_jobs c LEFT JOIN signals s ON s.id = c.ref_id AND c.kind = 'signal'
       ORDER BY c.id DESC LIMIT 60`).all();
   const { results: closed } = await env.DB.prepare(`SELECT id, symbol, decision, pips, status, closed_at FROM signals WHERE decision IN ('BUY','SELL') AND status <> 'open'
       ORDER BY id DESC LIMIT 20`).all();

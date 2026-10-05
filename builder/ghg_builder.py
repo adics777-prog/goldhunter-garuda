@@ -378,6 +378,16 @@ def sync_content(cfg):
                 log(f'Konten #{job["id"]}: Telegram {"terkirim" if t.get("ok") else "belum terkirim (" + (t.get("error") or "; ".join(t.get("errors") or [])) + ")"}')
             except Exception as e:
                 log(f'Konten #{job["id"]}: gagal kirim ke Telegram ({e})')
+        names = {'fb': 'Facebook', 'ig': 'Instagram', 'tt': 'TikTok (draft)'}
+        for net in job.get('send_social') or []:              # the website posts it with its own tokens
+            req = urllib.request.Request(cfg['api_base'].rstrip('/') + f"/api/builder/content/{job['id']}/social/{net}", data=open(out, 'rb').read(),
+                                         headers={'content-type': 'video/mp4', 'x-builder-token': cfg['token'], 'user-agent': 'GHG-Builder/1.0'}, method='POST')
+            try:
+                with urllib.request.urlopen(req, timeout=300) as r:
+                    t = json.loads(r.read().decode())
+                log(f'Konten #{job["id"]}: {names.get(net, net)} {"terkirim" if t.get("ok") else "gagal (" + (t.get("error") or "?") + ")"}')
+            except Exception as e:
+                log(f'Konten #{job["id"]}: gagal kirim ke {names.get(net, net)} ({e})')
     except Exception as e:
         log(f'Konten #{job["id"]}: GAGAL render - {e}')
         try:

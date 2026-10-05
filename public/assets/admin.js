@@ -13,6 +13,23 @@
   const waLink = (num) => num ? `https://wa.me/${String(num).replace(/\D/g, '').replace(/^0/, '62')}` : '';
   const dateInput = (t) => { if (!t) return ''; const d = new Date(t * 1000); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`; };
   const fromDateInput = (v) => v ? Math.floor(new Date(v + 'T23:59:00').getTime() / 1000) : null;
+  // Tabs: elements with data-tab="key" are shown only on their tab; [data-hide-on="a b"] hides on those tabs. The choice is kept per page.
+  const tabBar = (page, tabs) => `<div class="tabs" data-tabs="${page}">${tabs.map(([k, l]) => `<button type="button" data-t="${k}">${l}</button>`).join('')}</div>`;
+  function initTabs(page) {
+    const bar = $(`[data-tabs="${page}"]`);
+    if (!bar) return;
+    const keys = $$('[data-t]', bar).map((b) => b.dataset.t);
+    let cur = null;
+    try { cur = sessionStorage.getItem('tab_' + page); } catch {}
+    const show = (k) => {
+      $$('[data-t]', bar).forEach((b) => b.classList.toggle('active', b.dataset.t === k));
+      $$('[data-tab]', view).forEach((el) => el.classList.toggle('hidden', el.dataset.tab.split(' ').indexOf(k) < 0));
+      $$('[data-hide-on]', view).forEach((el) => el.classList.toggle('hidden', el.dataset.hideOn.split(' ').indexOf(k) >= 0));
+      try { sessionStorage.setItem('tab_' + page, k); } catch {}
+    };
+    bar.onclick = (e) => { const b = e.target.closest('[data-t]'); if (b) show(b.dataset.t); };
+    show(keys.indexOf(cur) >= 0 ? cur : keys[0]);
+  }
 
   async function boot() {
     const r = await api('/me');
@@ -30,15 +47,17 @@
     setCount('#c-ib', s.ib_open);
     setCount('#c-paid', s.awaiting_verification + s.processing);
     setCount('#c-chg', s.pending_changes);
+    setCount('#c-arch', (s.ib_open || 0) + (s.pending_changes || 0));
     return s;
   }
 
   const routes = { '': dashboard, ib: ibOrders, pesanan: paidOrders, 'ganti-akun': changesPage, lisensi: licensesPage, build: buildsPage,
-    member: usersPage, profit: profitPage, produk: productsPage, pengaturan: settingsPage, email: emailsPage, 'garuda-ai': garudaAiPage, konten: contentPage };
+    member: usersPage, profit: profitPage, produk: productsPage, pengaturan: settingsPage, email: emailsPage, 'garuda-ai': garudaAiPage, konten: contentPage, sosmed: socialPage };
   async function render() {
     clearInterval(timer);
     const [name, arg] = location.hash.replace(/^#\/?/, '').split('/');
     $$('[data-nav]').forEach((a) => a.classList.toggle('active', a.dataset.nav === (name || '')));
+    $$('.nav-group').forEach((g) => { if ($('a.active', g)) g.open = true; });
     $('#side').classList.remove('open');
     view.innerHTML = '<div class="loading"><span class="spinner"></span></div>';
     try { await (routes[name] || dashboard)(arg); } catch (e) { view.innerHTML = `<div class="alert err">${esc(e.message)}</div>`; }
@@ -48,21 +67,38 @@
 
   // ------------------------------------------------------------------ dashboard
   async function dashboard() {
-    const s = await counts();
+    const [s, ai, so] = await Promise.all([counts(), api('/admin/ai').catch(() => null), api('/admin/social').catch(() => null)]);
     const online = s.builder && s.now - s.builder.at < 90;
     const stat = (n, label, href, alert) => `<a class="stat ${alert && n ? 'alert' : ''}" href="${href}"><b>${n}</b><span>${label}</span></a>`;
+    const nowS = Date.now() / 1000;
+    const st30 = ai ? ai.stats30 || {} : {};
+    const wr = st30.wins + st30.losses ? Math.round(st30.wins / (st30.wins + st30.losses) * 100) + '%' : '-';
+    const lastSig = ai ? ai.recent.slice(0, 5) : [];
+    const digits = (sym) => ((ai && ai.markets.find((m) => m.symbol === sym)) || { digits: 2 }).digits;
     view.innerHTML = `${title('Dashboard')}
+      ${ai ? `<div class="card gold" style="margin-bottom:22px">
+        <div class="row between" style="margin-bottom:12px;flex-wrap:wrap;gap:8px"><h3 style="margin:0">🤖 Garuda AI ${ai.config.paused ? '<span class="badge b-orange">DIJEDA</span>' : ''}</h3><a class="small" href="#/garuda-ai">Atur sinyal &amp; analisis →</a></div>
+        <div style="margin-bottom:12px">${ai.markets.filter((m) => m.enabled).map((m) => `<span class="mk-pill"><span class="dot ${m.master_seen && nowS - m.master_seen < 900 ? 'on' : ''}"></span><b>${esc(m.symbol)}</b> <span class="muted">${m.master_seen && nowS - m.master_seen < 900 ? 'master aktif' : 'master offline'}</span></span>`).join('') || '<span class="small muted">Belum ada pasar aktif.</span>'}</div>
+        <div class="grid stats-grid" style="margin-bottom:6px">
+          <div class="stat"><b>${wr}</b><span>Win rate 30 hari (${Number(st30.wins || 0)} TP / ${Number(st30.losses || 0)} SL)</span></div>
+          <div class="stat"><b>$${Number(ai.today.cost || 0).toFixed(2)}</b><span>Biaya Claude hari ini · ${ai.today.n} analisis</span></div>
+          <div class="stat"><b>$${Number(st30.cost || 0).toFixed(2)}</b><span>Biaya 30 hari</span></div>
+          <a class="stat" href="#/sosmed"><b style="font-size:1.05rem">${so ? ['tg', 'fb', 'ig', 'tt'].filter((k) => k === 'tg' ? so.content_tg : so.ready[k] && so['content_' + k]).length : 0} / 4</b><span>Media sosial autopost aktif</span></a>
+        </div>
+        ${lastSig.length ? `<div style="margin-top:8px">${lastSig.map((r) => `<div class="sig-mini"><div><span class="badge ${r.decision === 'BUY' ? 'b-green' : r.decision === 'SELL' ? 'b-red' : 'b-gold'}">${r.decision === 'WAIT' ? 'TUNGGU' : r.decision}</span> <b>${esc(r.symbol)}</b>
+            ${r.decision === 'WAIT' ? '' : `<span class="small muted mono">${Number(r.price).toFixed(digits(r.symbol))}</span>`}</div>
+          <div class="small right">${r.status === 'open' ? '<span class="badge b-gold">berjalan</span>' : r.status === 'wait' ? '' : `<b style="color:${r.pips > 0 ? '#6ee7a2' : '#ff8b95'}">${r.pips > 0 ? '+' : ''}${Number(r.pips).toFixed(1)}</b> ${esc(r.status)}`} <span class="tiny muted">${ago(r.created_at)}</span></div></div>`).join('')}</div>` : ''}
+      </div>` : ''}
+      <h3 style="margin:0 0 12px">💳 Penjualan</h3>
       <div class="grid c4" style="margin-bottom:22px">
-        ${stat(s.ib_unchecked, 'IB belum dicek', '#/ib', true)}
-        ${stat(s.ib_open, 'Order IB berjalan', '#/ib')}
         ${stat(s.awaiting_verification, 'Pembayaran perlu dicek', '#/pesanan', true)}
         ${stat(s.processing, 'Sedang diproses', '#/pesanan')}
         ${stat(s.awaiting_payment, 'Menunggu transfer', '#/pesanan')}
-        ${stat(s.pending_changes, 'Ganti akun menunggu', '#/ganti-akun', true)}
+        ${stat(s.members, 'Member', '#/member')}
         ${stat(s.active_licenses, 'Lisensi aktif', '#/lisensi')}
         ${stat(s.expiring_7d, 'Habis ≤ 7 hari', '#/lisensi', true)}
-        ${stat(s.members, 'Member', '#/member')}
         <div class="stat"><b style="font-size:1.25rem">${rupiah(s.revenue_30d)}</b><span>Omzet 30 hari</span></div>
+        ${s.ib_unchecked || s.pending_changes ? stat(s.ib_unchecked + s.pending_changes, 'Arsip EA GoldHunter perlu dicek', '#/ib', true) : ''}
       </div>
       <div class="grid c2">
         <div class="card"><h3>Builder EA (compile otomatis)</h3>
@@ -394,7 +430,8 @@
 
   // ------------------------------------------------------------------ promo videos (TikTok / Reels / Shorts)
   async function contentPage() {
-    const d = await api('/admin/content');
+    const [d, so] = await Promise.all([api('/admin/content'), api('/admin/social')]);
+    d.nets = [['tg', 'Telegram', so.content_tg], ['fb', 'Facebook', so.ready.fb && so.content_fb], ['ig', 'Instagram', so.ready.ig && so.content_ig], ['tt', 'TikTok (draft)', so.ready.tt && so.content_tt]];
     const s = d.settings;
     const on = (k) => s[k] === '1' ? 'checked' : '';
     const AI_PROV = [['https://api.deepseek.com', 'DeepSeek'], ['https://dashscope-intl.aliyuncs.com/compatible-mode/v1', 'Qwen · Internasional (Singapura)'],
@@ -412,12 +449,12 @@
             <label class="row small" style="color:var(--text);margin-bottom:8px"><input type="checkbox" name="content_weekly" ${on('content_weekly')}> Rekap mingguan (Sabtu mulai 10:00 WIB)</label>
             <label class="row small" style="color:var(--text);margin-bottom:8px"><input type="checkbox" name="content_edu" ${on('content_edu')}> Video edukasi / perkenalan / kelebihan AI terjadwal (topik bergiliran)</label>
             <div class="field"><label>Jam posting edukasi (WIB, pisahkan koma)</label><input name="content_times" value="${esc(s.content_times)}" placeholder="12:00, 19:00"></div>
-            <label class="row small" style="color:var(--text);margin-bottom:12px"><input type="checkbox" name="content_tg" ${on('content_tg')}> Kirim video ke channel / grup Telegram</label>
+            <p class="small" style="margin:0 0 12px">📣 Video dikirim ke: ${d.nets.map(([k, l, ok]) => `<span class="badge ${ok ? 'b-green' : 'b-gray'}">${l}</span>`).join(' ')} <a href="#/sosmed">atur →</a></p>
             <div class="grid c2" style="gap:0 12px"><div class="field"><label>Bahasa video</label><select name="content_lang"><option value="id">Indonesia</option><option value="en" ${s.content_lang === 'en' ? 'selected' : ''}>English</option></select></div>
               <div class="field"><label>Suara narator</label><select name="content_voice">${[['id-ID-ArdiNeural', 'Ardi (pria)'], ['id-ID-GadisNeural', 'Gadis (wanita)']].map(([v, l]) => `<option value="${v}" ${s.content_voice === v ? 'selected' : ''}>${l}</option>`).join('')}</select></div></div>
             <button class="btn btn-gold btn-sm" type="submit">Simpan</button>
           </form>
-          <p class="help" style="margin-top:12px">Format vertikal 1080×1920 (9:16), 20–35 detik: siap untuk TikTok, Instagram Reels dan YouTube Shorts. Naskah, caption &amp; hashtag ditulis <b>${s.content_ai === 'claude' ? 'Claude' : aiN}</b>, suara Microsoft Edge (gratis), video dirender di PC builder dan disimpan di folder <b>Documents\GarudaAI Konten</b>.</p></div>
+          <p class="help" style="margin-top:12px">Format vertikal 1080×1920 (9:16), 20–35 detik: siap untuk TikTok, Instagram Reels dan YouTube Shorts. Naskah, caption &amp; hashtag ditulis <b>${s.content_ai === 'claude' ? 'Claude' : aiN}</b>, suara Microsoft Edge (gratis), video dirender di PC builder dan disimpan di folder <b>Documents\\GarudaAI Konten</b>.</p></div>
         <div class="card"><h3>Pilihan AI ${s.qwen_key_set ? `<span class="badge b-green">${aiN} siap</span>` : '<span class="badge b-red">API key belum diisi</span>'}</h3>
           <div class="small" style="margin:-4px 0 12px;padding:10px 12px;background:var(--bg-2);border-radius:8px">📈 <b>Analisis trading</b>: selalu Claude (diatur di menu Garuda AI)<br>🎬 <b>Naskah video</b>: pilih di bawah<br>💬 <b>CS otomatis</b>: menyusul, pilihan DeepSeek / Claude yang sama</div>
           <form id="cq">
@@ -444,7 +481,9 @@
       ${d.jobs.length ? `<div class="stack">${d.jobs.map((j) => `<div class="card" style="padding:14px 16px">
         <div class="row between" style="gap:10px;flex-wrap:wrap"><div><b>#${j.id} ${j.kind === 'edu' ? '🎓 ' + esc(j.topic || 'Edukasi') : j.kind === 'weekly' ? '📊 Rekap mingguan' : `🎬 Sinyal #S${j.ref_id} ${esc(j.symbol || '')} ${esc(j.decision || '')} ${j.result ? '· ' + esc(j.result) : ''}`}</b>
           <span class="tiny muted"> · ${fmtDateTime(j.created_at)} · ${j.lang.toUpperCase()}</span></div>
-          <span><span class="badge ${(st[j.status] || st.queued)[0]}">${(st[j.status] || st.queued)[1]}</span> ${j.on_telegram ? '<span class="badge b-green">terkirim Telegram</span>' : ''}</span></div>
+          <span class="net-badges"><span class="badge ${(st[j.status] || st.queued)[0]}">${(st[j.status] || st.queued)[1]}</span> ${j.on_telegram ? '<span class="badge b-green">Telegram ✔</span>' : ''}
+            ${Object.entries(JSON.parse(j.social || '{}')).map(([k, v]) => `<span class="badge ${v.ok ? 'b-green' : 'b-red'}" title="${esc(v.error || '')}">${{ fb: 'Facebook', ig: 'Instagram', tt: 'TikTok draft' }[k] || k} ${v.ok ? '✔' : '✖'}</span>`).join(' ')}</span></div>
+        ${Object.entries(JSON.parse(j.social || '{}')).filter(([, v]) => !v.ok).map(([k, v]) => `<div class="tiny" style="color:#ff8b95;margin-top:6px">${{ fb: 'Facebook', ig: 'Instagram', tt: 'TikTok' }[k]}: ${esc(v.error)}</div>`).join('')}
         ${j.error ? `<div class="alert err small" style="margin-top:8px">${esc(j.error)}</div>` : ''}
         ${j.caption ? `<pre class="small" style="white-space:pre-wrap;margin:10px 0 8px;background:var(--bg-2);padding:10px;border-radius:8px">${esc(j.caption)}</pre>` : ''}
         <div class="row" style="gap:8px;flex-wrap:wrap">
@@ -455,7 +494,7 @@
       e.preventDefault();
       const f = Object.fromEntries(new FormData(e.target));
       await api('/admin/content/settings', { method: 'PUT', body: { content_enabled: !!f.content_enabled, content_on_signal: !!f.content_on_signal, content_weekly: !!f.content_weekly,
-        content_tg: !!f.content_tg, content_lang: f.content_lang, content_voice: f.content_voice, content_edu: !!f.content_edu, content_times: f.content_times } });
+        content_lang: f.content_lang, content_voice: f.content_voice, content_edu: !!f.content_edu, content_times: f.content_times } });
       toast('Pengaturan konten disimpan');
     };
     $('#cq').onsubmit = async (e) => {
@@ -489,6 +528,162 @@
     $('#mk-week').onclick = () => queue({ kind: 'weekly', lang: s.content_lang });
     $$('[data-retry]').forEach((b) => b.onclick = () => queue({ retry: b.dataset.retry }));
     $$('[data-cap]').forEach((b) => b.onclick = () => { const j = d.jobs.find((x) => x.id == b.dataset.cap); copy(j.caption); });
+  }
+
+  // ------------------------------------------------------------------ social media: Telegram, Facebook, Instagram, TikTok
+  async function socialPage(msg) {
+    if (msg) { const m = decodeURIComponent(msg); toast(m === 'ok' ? 'Akun TikTok terhubung ✔' : m, m === 'ok' ? 'ok' : 'err'); history.replaceState(null, '', '#/sosmed'); }
+    const [s, so] = await Promise.all([api('/admin/settings'), api('/admin/social')]);
+    const tgOn = s.telegram_enabled === '1' && s.telegram_bot_token_set;
+    const badge = (ok, yes = 'Terhubung', no = 'Belum terhubung') => `<span class="badge ${ok ? 'b-green' : 'b-orange'}">${ok ? yes : no}</span>`;
+    const chkNet = (k, label, ready, hint) => `<label class="row small" style="color:var(--text);margin-bottom:10px;align-items:flex-start"><input type="checkbox" name="content_${k}" ${so['content_' + k] ? 'checked' : ''} ${ready ? '' : 'disabled'} style="margin-top:4px">
+      <span><b>${label}</b> ${ready ? '' : '<span class="tiny muted">(hubungkan dulu di tab-nya)</span>'}<div class="help" style="margin:2px 0 0">${hint}</div></span></label>`;
+    const tgRow = (t = { name: '', chat_id: '', active: true }) => `<div class="tgr" style="display:grid;grid-template-columns:1.2fr 1.4fr auto auto;gap:8px;align-items:center;margin-bottom:8px">
+      <input class="tg-name" value="${esc(t.name)}" placeholder="Nama (mis. Channel VIP)"><input class="tg-id mono" value="${esc(t.chat_id)}" placeholder="-1001234567890 atau @namachannel">
+      <label class="row nowrap" style="margin:0;color:var(--text)"><input type="checkbox" class="tg-act" ${t.active !== false ? 'checked' : ''}> aktif</label>
+      <button type="button" class="btn btn-red btn-sm tg-del" title="Hapus">✕</button></div>`;
+    view.innerHTML = `${title('📣 Media Sosial')}
+      ${tabBar('sosmed', [['ringkas', '📌 Autopost'], ['tg', '✈️ Telegram'], ['meta', '📘 Facebook &amp; Instagram'], ['tt', '🎵 TikTok']])}
+      <div class="grid" style="align-items:start;grid-template-columns:repeat(auto-fit,minmax(min(380px,100%),1fr))">
+        <form class="card" id="nets" data-tab="ringkas"><h3>Video konten dikirim otomatis ke</h3>
+          ${chkNet('tg', 'Telegram', tgOn, 'Video dikirim ke semua channel / grup Telegram yang aktif.')}
+          ${chkNet('fb', 'Facebook Page (Reels)', so.ready.fb, so.meta_page_name ? 'Halaman: ' + esc(so.meta_page_name) : 'Langsung tayang sebagai Reels di Halaman Facebook.')}
+          ${chkNet('ig', 'Instagram (Reels)', so.ready.ig, so.meta_ig_username ? 'Akun: @' + esc(so.meta_ig_username) : 'Langsung tayang sebagai Reels, ikut tampil di feed.')}
+          ${chkNet('tt', 'TikTok (draft)', so.ready.tt, 'Video masuk ke kotak masuk TikTok Anda; buka aplikasi TikTok, tempel caption (tombol Salin caption di Konten Video), lalu Posting.')}
+          <button class="btn btn-gold btn-sm" type="submit">Simpan</button>
+          <p class="help" style="margin-top:12px">Sinyal BUY / SELL dan analisis TUNGGU hanya dikirim ke Telegram. Jadwal &amp; jenis video diatur di <a href="#/konten">🎬 Konten Video</a>.</p></form>
+        <div class="card" data-tab="ringkas"><h3>Status</h3>
+          <div class="conn">✈️ <b>Telegram</b> ${badge(tgOn, 'Aktif', 'Belum aktif')} <span class="tiny muted">${(s.telegram_targets || []).filter((t) => t.active !== false).length} target</span></div>
+          <div class="conn">📘 <b>Facebook</b> ${badge(so.ready.fb)} <span class="tiny muted">${esc(so.meta_page_name)}</span></div>
+          <div class="conn">📸 <b>Instagram</b> ${badge(so.ready.ig)} <span class="tiny muted">${so.meta_ig_username ? '@' + esc(so.meta_ig_username) : ''}</span></div>
+          <div class="conn">🎵 <b>TikTok</b> ${badge(so.ready.tt)} <span class="tiny muted">${esc(so.tiktok_name)}</span></div></div>
+
+        <form class="card" id="tgf" style="grid-column:1/-1" data-tab="tg"><div class="row between"><h3 style="margin:0">✈️ Telegram (sinyal, analisis &amp; video)</h3>${badge(tgOn, 'Aktif', 'Belum aktif')}</div>
+          <div class="grid c2" style="margin-top:14px;align-items:start">
+            <div>
+              <label class="row small" style="color:var(--text);margin-bottom:12px"><input type="checkbox" name="telegram_enabled" ${s.telegram_enabled === '1' ? 'checked' : ''}> Kirim setiap sinyal BUY / SELL (dengan gambar chart) dan hasilnya ke Telegram</label>
+              <label class="row small" style="color:var(--text);margin-bottom:6px"><input type="checkbox" name="telegram_wait" ${s.telegram_wait === '1' ? 'checked' : ''}> Kirim juga analisis <b>TUNGGU</b> sebagai edukasi (alasan belum entry + level yang ditunggu + chart)</label>
+              <div class="field" style="max-width:260px"><label>Analisis TUNGGU paling sering tiap (jam, per pasar)</label><input name="telegram_wait_hours" type="number" min="1" max="24" value="${esc(s.telegram_wait_hours || '3')}"></div>
+              <div class="field"><label>Token bot ${s.telegram_bot_token_set ? '<span class="badge b-green">tersimpan</span>' : ''}</label><input name="telegram_bot_token" type="password" autocomplete="off" placeholder="${s.telegram_bot_token_set ? 'kosongkan = tidak diubah' : '123456789:AAH... (dari @BotFather)'}"></div>
+              <label>Target channel / grup (boleh lebih dari satu)</label>
+              <div id="tgl">${(s.telegram_targets || []).map(tgRow).join('')}</div>
+              <div class="row" style="margin:4px 0 14px"><button type="button" class="btn btn-ghost btn-sm" id="addtg">+ Tambah target</button>
+                <button type="button" class="btn btn-outline btn-sm" id="tg-find">🔎 Cari chat ID</button>
+                <button type="button" class="btn btn-outline btn-sm" id="tg-test">Kirim pesan tes</button></div>
+              <div class="field"><label>Link channel publik (ditampilkan ke member &amp; website)</label><input name="telegram_public_link" value="${esc(so.telegram_public_link)}" placeholder="https://t.me/namachannel"></div>
+              <button class="btn btn-gold btn-sm" type="submit">Simpan Telegram</button>
+            </div>
+            <div class="alert info small"><b>Cara menyiapkan bot:</b>
+              <ol class="steps-list"><li>Di Telegram buka <b>@BotFather</b> → <span class="mono">/newbot</span>. Salin <b>token</b>-nya.</li>
+              <li>Tempel token di sini, centang kirim ke Telegram, lalu <b>Simpan</b>.</li>
+              <li>Jadikan bot <b>admin</b> di channel / grup tujuan (izin kirim pesan).</li>
+              <li>Kirim satu pesan di channel / grup itu, klik <b>Cari chat ID</b> lalu <b>+ Tambah</b>. Channel publik boleh diisi <span class="mono">@namachannel</span>.</li>
+              <li><b>Simpan</b> lagi, lalu <b>Kirim pesan tes</b>.</li></ol></div>
+          </div></form>
+
+        <form class="card" id="metaf" data-tab="meta"><div class="row between"><h3 style="margin:0">📘 Facebook &amp; 📸 Instagram</h3>${badge(so.ready.fb)}</div>
+          ${so.meta_page_id ? `<div class="conn" style="margin-top:14px">✔ Halaman <b>${esc(so.meta_page_name)}</b> ${so.meta_ig_id ? `· Instagram <b>@${esc(so.meta_ig_username)}</b>` : '<span class="badge b-orange">Instagram belum tertaut ke Halaman ini</span>'}
+            <button type="button" class="btn btn-ghost btn-sm" id="meta-off" style="margin-left:auto">Putuskan</button></div>` : ''}
+          ${so.meta_pages.length > 1 ? `<div class="field"><label>Halaman yang dipakai</label><select id="meta-page">${so.meta_pages.map((p) => `<option value="${esc(p.id)}" ${p.id === so.meta_page_id ? 'selected' : ''}>${esc(p.name)}${p.ig_username ? ' · @' + esc(p.ig_username) : ''}</option>`).join('')}</select></div>` : ''}
+          <div class="grid c2" style="gap:0 12px;margin-top:14px"><div class="field"><label>App ID</label><input name="meta_app_id" value="${esc(so.meta_app_id)}" inputmode="numeric" placeholder="1234567890"></div>
+            <div class="field"><label>App Secret ${so.meta_secret_set ? '<span class="badge b-green">tersimpan</span>' : ''}</label><input name="meta_app_secret" type="password" autocomplete="off" placeholder="${so.meta_secret_set ? 'kosongkan = tidak diubah' : 'dari App settings › Basic'}"></div></div>
+          <button class="btn btn-outline btn-sm" type="submit">Simpan App ID &amp; Secret</button>
+          <div class="field" style="margin-top:16px"><label>User Access Token (dari Graph API Explorer)</label><textarea id="meta-token" rows="3" class="mono" placeholder="EAAG..."></textarea></div>
+          <button class="btn btn-gold btn-sm" type="button" id="meta-connect" ${so.meta_app_id && so.meta_secret_set ? '' : 'disabled'}>🔗 Hubungkan Facebook &amp; Instagram</button>
+          <p class="help" style="margin-top:10px">Token diubah otomatis menjadi token Halaman yang tidak kedaluwarsa dan disimpan terenkripsi. Token yang Anda tempel tidak disimpan.</p></form>
+        <div class="card" data-tab="meta"><h3>Cara menghubungkan (sekali saja, ± 10 menit)</h3>
+          <ol class="steps-list small">
+            <li>Siapkan <b>Halaman Facebook</b> dan akun <b>Instagram Profesional</b> (Bisnis / Kreator). Di Instagram: Pengaturan › Akun › <b>tautkan ke Halaman Facebook</b> itu.</li>
+            <li>Buka <a href="https://developers.facebook.com/apps" target="_blank" rel="noopener">developers.facebook.com/apps</a> › <b>Create App</b> › beri nama <i>Garuda Autopost</i>. Pilih use case <b>Manage everything on your Page</b> dan tambahkan <b>Manage messaging &amp; content on Instagram</b> (tipe Business).</li>
+            <li>App settings › <b>Basic</b>: salin <b>App ID</b> dan <b>App Secret</b>, tempel di kiri, klik <b>Simpan</b>.</li>
+            <li>Buka <a href="https://developers.facebook.com/tools/explorer" target="_blank" rel="noopener">Graph API Explorer</a>: pilih app tadi, <b>User Token</b>, tambahkan izin <span class="mono">pages_show_list, pages_read_engagement, pages_manage_posts, instagram_basic, instagram_content_publish, business_management</span>.</li>
+            <li>Klik <b>Generate Access Token</b>, pilih Halaman &amp; akun Instagram Anda, izinkan. Salin token, tempel di kiri, klik <b>Hubungkan</b>.</li></ol>
+          <p class="help">App boleh tetap mode <b>Development</b>: Anda admin app-nya, dan app hanya memposting ke Halaman &amp; Instagram Anda sendiri. Video tayang sebagai Reels dengan caption otomatis.</p></div>
+
+        <form class="card" id="ttf" data-tab="tt"><div class="row between"><h3 style="margin:0">🎵 TikTok</h3>${badge(so.ready.tt, 'Terhubung ' + esc(so.tiktok_name))}</div>
+          <div class="grid c2" style="gap:0 12px;margin-top:14px"><div class="field"><label>Client Key</label><input name="tiktok_client_key" value="${esc(so.tiktok_client_key)}" autocomplete="off"></div>
+            <div class="field"><label>Client Secret ${so.tiktok_secret_set ? '<span class="badge b-green">tersimpan</span>' : ''}</label><input name="tiktok_client_secret" type="password" autocomplete="off" placeholder="${so.tiktok_secret_set ? 'kosongkan = tidak diubah' : ''}"></div></div>
+          <div class="field"><label>Redirect URI (salin ke pengaturan Login Kit)</label><div class="row" style="flex-wrap:nowrap"><input class="mono" value="${esc(so.tiktok_redirect)}" readonly style="flex:1;min-width:0"><button type="button" class="btn btn-outline btn-sm" data-copy="${esc(so.tiktok_redirect)}">Salin</button></div></div>
+          <div class="row" style="gap:8px;flex-wrap:wrap"><button class="btn btn-outline btn-sm" type="submit">Simpan</button>
+            <button class="btn btn-gold btn-sm" type="button" id="tt-login" ${so.tiktok_client_key && so.tiktok_secret_set ? '' : 'disabled'}>🔗 ${so.ready.tt ? 'Login ulang' : 'Login dengan TikTok'}</button>
+            ${so.ready.tt ? '<button class="btn btn-ghost btn-sm" type="button" id="tt-off">Putuskan</button>' : ''}</div></form>
+        <div class="card" data-tab="tt"><h3>Cara menghubungkan</h3>
+          <ol class="steps-list small">
+            <li>Buka <a href="https://developers.tiktok.com" target="_blank" rel="noopener">developers.tiktok.com</a>, login dengan akun TikTok Anda, menu <b>Manage apps › Connect an app</b>.</li>
+            <li>Isi nama app (mis. <i>Garuda Autopost</i>), ikon, kategori; Platform <b>Web</b>, Website / Terms / Privacy: <span class="mono">https://www.goldhuntergaruda.com</span>.</li>
+            <li><b>Add products</b>: <b>Login Kit</b> (Redirect URI = alamat di kiri) dan <b>Content Posting API</b>. Scope: <span class="mono">user.info.basic</span>, <span class="mono">video.upload</span>.</li>
+            <li>Selama belum di-review: aktifkan <b>Sandbox</b> dan tambahkan akun TikTok Anda sebagai <b>Target user</b>. Atau langsung <b>Submit for review</b>.</li>
+            <li>Salin <b>Client Key</b> &amp; <b>Client Secret</b> ke kiri, <b>Simpan</b>, lalu <b>Login dengan TikTok</b>.</li></ol>
+          <p class="help">Mode draft: video masuk ke kotak masuk / notifikasi TikTok. Buka aplikasi TikTok, tempel caption, pilih musik bila mau, lalu Posting. Ini aman untuk akun dan tidak perlu review penuh.</p></div>
+      </div>`;
+    initTabs('sosmed');
+    $$('[data-copy]').forEach((b) => b.onclick = () => { copy(b.dataset.copy); toast('Disalin'); });
+    $('#nets').onsubmit = async (e) => {
+      e.preventDefault();
+      const f = new FormData(e.target);
+      await api('/admin/content/settings', { method: 'PUT', body: { content_tg: !!f.get('content_tg') } });
+      await api('/admin/social', { method: 'PUT', body: { content_fb: !!f.get('content_fb'), content_ig: !!f.get('content_ig'), content_tt: !!f.get('content_tt') } });
+      toast('Autopost disimpan'); render();
+    };
+    $('#addtg').onclick = () => $('#tgl').insertAdjacentHTML('beforeend', tgRow());
+    $('#tgl').onclick = (e) => { if (e.target.classList.contains('tg-del')) e.target.closest('.tgr').remove(); };
+    if (!(s.telegram_targets || []).length) $('#tgl').insertAdjacentHTML('beforeend', tgRow());
+    $('#tg-find').onclick = async (e) => {
+      const r = await busy(e.target, () => post('/admin/telegram/chats', {}));
+      if (r.error) return toast(r.error, 'err');
+      const have = new Set($$('.tg-id').map((i) => i.value.trim()));
+      const m = modal('Chat yang dilihat bot ' + (r.bot || ''), r.chats.length
+        ? `<p class="small muted">Klik <b>+ Tambah</b>, lalu Simpan pengaturan.</p>${r.chats.map((c) => `<div class="row between" style="padding:8px 0;border-bottom:1px solid var(--line)">
+            <div><b>${esc(c.title)}</b><div class="tiny muted mono">${esc(c.chat_id)} · ${esc(c.type)}</div></div>
+            ${have.has(c.chat_id) ? '<span class="badge b-green">sudah ada</span>' : `<button type="button" class="btn btn-gold btn-sm" data-add="${esc(c.chat_id)}" data-name="${esc(c.title)}">+ Tambah</button>`}</div>`).join('')}`
+        : '<p class="small">Belum ada channel / grup yang terlihat. Pastikan bot sudah jadi admin, kirim satu pesan di channel / grup itu, lalu coba lagi. Channel publik bisa langsung diisi <span class="mono">@namachannel</span>.</p>');
+      m.el.onclick = (ev) => {
+        const b = ev.target.closest('[data-add]');
+        if (!b) return;
+        const empty = $$('.tgr').find((row) => !$('.tg-id', row).value.trim());
+        if (empty) { $('.tg-id', empty).value = b.dataset.add; $('.tg-name', empty).value = b.dataset.name; }
+        else $('#tgl').insertAdjacentHTML('beforeend', tgRow({ name: b.dataset.name, chat_id: b.dataset.add, active: true }));
+        b.outerHTML = '<span class="badge b-green">ditambahkan</span>';
+      };
+    };
+    $('#tg-test').onclick = async (e) => {
+      const r = await busy(e.target, () => post('/admin/telegram/test', {}));
+      if (r.error) return toast(r.error, 'err');
+      const bad = r.results.filter((x) => !x.ok);
+      if (!bad.length) toast(`Pesan tes terkirim ke ${r.results.length} target ✔${r.enabled ? '' : ' (pengiriman sinyal masih mati: centang lalu Simpan)'}`);
+      else toast('Gagal ke: ' + bad.map((x) => `${x.name || x.chat_id} (${x.error})`).join(', '), 'err');
+    };
+    $('#tgf').onsubmit = async (e) => {
+      e.preventDefault();
+      const d = Object.fromEntries(new FormData(e.target));
+      await busy($('#tgf button[type=submit]'), async () => {
+        await api('/admin/settings', { method: 'PUT', body: { telegram_enabled: d.telegram_enabled ? '1' : '0', telegram_bot_token: d.telegram_bot_token,
+          telegram_wait: d.telegram_wait ? '1' : '0', telegram_wait_hours: d.telegram_wait_hours,
+          telegram_targets: $$('.tgr').map((r) => ({ name: $('.tg-name', r).value.trim(), chat_id: $('.tg-id', r).value.trim(), active: $('.tg-act', r).checked })).filter((x) => x.chat_id) } });
+        await api('/admin/social', { method: 'PUT', body: { telegram_public_link: d.telegram_public_link } });
+      });
+      toast('Telegram disimpan'); render();
+    };
+    $('#metaf').onsubmit = async (e) => {
+      e.preventDefault();
+      const d = Object.fromEntries(new FormData(e.target));
+      await api('/admin/social', { method: 'PUT', body: { meta_app_id: d.meta_app_id, meta_app_secret: d.meta_app_secret } });
+      toast('App ID & Secret disimpan'); render();
+    };
+    $('#meta-connect').onclick = async (e) => {
+      const r = await busy(e.target, () => post('/admin/social/meta-connect', { user_token: $('#meta-token').value }));
+      toast(r.selected ? 'Facebook & Instagram terhubung ✔' : `Ditemukan ${r.pages.length} Halaman, pilih yang dipakai`); render();
+    };
+    if ($('#meta-page')) $('#meta-page').onchange = async (e) => { await post('/admin/social/meta-select', { page_id: e.target.value }); toast('Halaman dipilih'); render(); };
+    if ($('#meta-off')) $('#meta-off').onclick = async () => { if (!await confirmBox('Putuskan Facebook & Instagram?')) return; await api('/admin/social', { method: 'PUT', body: { disconnect: 'meta' } }); render(); };
+    $('#ttf').onsubmit = async (e) => {
+      e.preventDefault();
+      const d = Object.fromEntries(new FormData(e.target));
+      await api('/admin/social', { method: 'PUT', body: { tiktok_client_key: d.tiktok_client_key, tiktok_client_secret: d.tiktok_client_secret } });
+      toast('TikTok disimpan'); render();
+    };
+    $('#tt-login').onclick = async (e) => { const r = await busy(e.target, () => post('/admin/social/tiktok-auth', {})); location.href = r.url; };
+    if ($('#tt-off')) $('#tt-off').onclick = async () => { if (!await confirmBox('Putuskan akun TikTok?')) return; await api('/admin/social', { method: 'PUT', body: { disconnect: 'tiktok' } }); render(); };
   }
 
   // ------------------------------------------------------------------ signed risk statement (PDF, made in the browser)
@@ -733,16 +928,14 @@
       <input class="bk-bank" value="${esc(b.bank)}" placeholder="Bank / e-wallet (BCA, DANA…)"><input class="bk-num" value="${esc(b.number)}" placeholder="Nomor rekening" inputmode="numeric">
       <input class="bk-name" value="${esc(b.name)}" placeholder="Atas nama"><label class="row nowrap" style="margin:0;color:var(--text)"><input type="checkbox" class="bk-act" ${b.active !== false ? 'checked' : ''}> aktif</label>
       <button type="button" class="btn btn-red btn-sm bk-del" title="Hapus">✕</button></div>`;
-    const tgRow = (t = { name: '', chat_id: '', active: true }) => `<div class="tgr" style="display:grid;grid-template-columns:1.2fr 1.4fr auto auto;gap:8px;align-items:center;margin-bottom:8px">
-      <input class="tg-name" value="${esc(t.name)}" placeholder="Nama (mis. Channel VIP)"><input class="tg-id mono" value="${esc(t.chat_id)}" placeholder="-1001234567890 atau @namachannel">
-      <label class="row nowrap" style="margin:0;color:var(--text)"><input type="checkbox" class="tg-act" ${t.active !== false ? 'checked' : ''}> aktif</label>
-      <button type="button" class="btn btn-red btn-sm tg-del" title="Hapus">✕</button></div>`;
     const brokerRow = (b = { name: '', link: '', active: true }) => `<div class="row ibr" style="margin-bottom:8px;flex-wrap:nowrap">
       <input class="ib-name" value="${esc(b.name)}" placeholder="Broker" style="max-width:120px"><input class="ib-link" style="flex:1" value="${esc(b.link)}" placeholder="https://link-ib-anda">
       <label class="row nowrap" style="margin:0;color:var(--text)"><input type="checkbox" class="ib-act" ${b.active ? 'checked' : ''}> aktif</label></div>`;
     view.innerHTML = `${title('🛠️ Pengaturan')}
+      <p class="small muted" style="margin:-6px 0 14px">Telegram, Facebook, Instagram &amp; TikTok ada di menu <a href="#/sosmed">📣 Media Sosial</a>. Pengaturan analisis AI ada di <a href="#/garuda-ai">🤖 Sinyal &amp; Analisis AI</a>.</p>
+      ${tabBar('settings', [['bayar', '💳 Pembayaran'], ['order', '⚙️ Order &amp; Member'], ['email', '✉️ Email'], ['promo', '📈 Promo'], ['arsip', '🗄️ EA GoldHunter']])}
       <form id="sf" class="grid" style="align-items:start;grid-template-columns:repeat(auto-fit,minmax(min(380px,100%),1fr))">
-        <div class="card" style="grid-column:1/-1"><h3>Pembayaran</h3>
+        <div class="card" style="grid-column:1/-1" data-tab="bayar"><h3>Pembayaran</h3>
           <label>Rekening / e-wallet tujuan transfer (tampil ke member saat bayar)</label>
           <div id="bkl">${(s.bank_list || []).map(bankRow).join('')}</div>
           <button type="button" class="btn btn-ghost btn-sm" id="addbk" style="margin:4px 0 16px">+ Tambah rekening</button>
@@ -761,7 +954,7 @@
           <div class="field"><label>Pilihan durasi (bulan, pisahkan koma)</label><input name="durations" value="${s.durations.join(', ')}"></div>
           <div class="field"><label>Diskon per durasi (format bulan=persen, pisahkan koma)</label><input name="discounts" value="${Object.entries(s.discounts).map(([m, d]) => `${m}=${d}`).join(', ')}">
             <div class="help">Contoh: <span class="mono">12=25</span> berarti sewa 12 bulan diskon 25%.</div></div></div>
-        <div class="card"><h3>Otomatisasi</h3>
+        <div class="card" data-tab="order"><h3>Otomatisasi</h3>
           <label class="row small" style="color:var(--text);margin-bottom:10px;align-items:flex-start"><input type="checkbox" name="auto_complete_ea" ${s.auto_complete_ea === '1' ? 'checked' : ''} style="margin-top:4px">
             <span><b>Selesai otomatis</b> untuk order EA tanpa VPS begitu file EA selesai di-compile (member &amp; admin dapat email).</span></label>
           <label class="row small" style="color:var(--text);margin-bottom:6px;align-items:flex-start"><input type="checkbox" name="auto_process_paid" ${s.auto_process_paid === '1' ? 'checked' : ''} style="margin-top:4px">
@@ -778,7 +971,7 @@
           <div class="field"><label>Pengingat sebelum masa sewa habis (hari, pisahkan koma)</label><input name="reminder_days" value="${s.reminder_days.join(', ')}"></div>
           <label class="row small" style="color:var(--text);margin-bottom:8px"><input type="checkbox" name="auto_rebuild_on_version" ${s.auto_rebuild_on_version !== '0' ? 'checked' : ''}> Compile ulang semua lisensi aktif otomatis saat versi EA (#property version) naik</label>
           <label class="row small" style="color:var(--text)"><input type="checkbox" name="mt4_enabled" ${s.mt4_enabled === '1' ? 'checked' : ''}> MT4 bisa dipesan (aktifkan setelah EA versi MQL4 ada)</label></div>
-        <div class="card" style="grid-column:1/-1" id="email-card"><div class="row between"><h3 style="margin:0">✉️ Email (notifikasi ke member)</h3>
+        <div class="card" style="grid-column:1/-1" id="email-card" data-tab="email"><div class="row between"><h3 style="margin:0">✉️ Email (notifikasi ke member)</h3>
             <span>${prov === 'log' ? '<span class="badge b-orange">Belum aktif: email hanya dicatat di log</span>' : `<span class="badge b-green">Aktif via ${esc(prov)}</span>`}</span></div>
           <div class="grid c2" style="margin-top:14px;align-items:start">
             <div>
@@ -801,32 +994,7 @@
               <li>Menu <b>API Keys → Create API Key</b> (permission: Sending access), salin key-nya.</li>
               <li>Di sini: pilih <b>Resend</b>, email pengirim <span class="mono">no-reply@goldhuntergaruda.com</span>, tempel API key, <b>Simpan</b>, lalu <b>Kirim email tes</b>.</li></ol></div>
           </div></div>
-        <div class="card" style="grid-column:1/-1" id="tg-card"><div class="row between"><h3 style="margin:0">📣 Telegram (sinyal Garuda AI)</h3>
-            <span>${s.telegram_enabled === '1' && s.telegram_bot_token_set ? '<span class="badge b-green">Aktif</span>' : '<span class="badge b-orange">Belum aktif</span>'}</span></div>
-          <div class="grid c2" style="margin-top:14px;align-items:start">
-            <div>
-              <label class="row small" style="color:var(--text);margin-bottom:12px"><input type="checkbox" name="telegram_enabled" ${s.telegram_enabled === '1' ? 'checked' : ''}> Kirim setiap sinyal BUY / SELL (dengan gambar chart) dan hasilnya ke Telegram</label>
-              <label class="row small" style="color:var(--text);margin-bottom:6px"><input type="checkbox" name="telegram_wait" ${s.telegram_wait === '1' ? 'checked' : ''}> Kirim juga analisis <b>TUNGGU</b> sebagai edukasi (alasan belum entry + level yang ditunggu + chart)</label>
-              <div class="field" style="max-width:260px"><label>Analisis TUNGGU paling sering tiap (jam, per pasar)</label><input name="telegram_wait_hours" type="number" min="1" max="24" value="${esc(s.telegram_wait_hours || '3')}">
-                <div class="help">Supaya grup tidak kebanjiran pesan. Sinyal BUY / SELL selalu dikirim.</div></div>
-              <div class="field"><label>Token bot ${s.telegram_bot_token_set ? '<span class="badge b-green">tersimpan</span>' : ''}</label><input name="telegram_bot_token" type="password" autocomplete="off" placeholder="${s.telegram_bot_token_set ? 'kosongkan = tidak diubah' : '123456789:AAH... (dari @BotFather)'}">
-                <div class="help">Disimpan terenkripsi di database.</div></div>
-              <label>Target channel / grup (boleh lebih dari satu)</label>
-              <div id="tgl">${(s.telegram_targets || []).map(tgRow).join('')}</div>
-              <div class="row" style="margin:4px 0 14px"><button type="button" class="btn btn-ghost btn-sm" id="addtg">+ Tambah target</button>
-                <button type="button" class="btn btn-outline btn-sm" id="tg-find">🔎 Cari chat ID</button>
-                <button type="button" class="btn btn-outline btn-sm" id="tg-test">Kirim pesan tes</button></div>
-              <div class="help">Simpan pengaturan dulu, baru <b>Cari chat ID</b> atau <b>Kirim pesan tes</b>.</div>
-            </div>
-            <div class="alert info small"><b>Cara menyiapkan bot:</b>
-              <ol style="margin:8px 0 0 18px"><li>Di Telegram buka <b>@BotFather</b> → <span class="mono">/newbot</span> → beri nama, misalnya <i>Garuda AI Signal</i>. Salin <b>token</b> yang diberikan.</li>
-              <li>Tempel token di sini, centang kirim ke Telegram, lalu <b>Simpan</b>.</li>
-              <li>Tambahkan bot ke setiap channel / grup tujuan sebagai <b>admin</b> (izin kirim pesan).</li>
-              <li>Kirim satu pesan apa saja di channel / grup itu, lalu klik <b>Cari chat ID</b> dan pilih <b>+ Tambah</b>. Channel publik juga bisa diisi langsung <span class="mono">@namachannel</span>.</li>
-              <li><b>Simpan</b> lagi, lalu <b>Kirim pesan tes</b>.</li></ol>
-              <p style="margin-top:8px">Setiap sinyal dikirim dengan gambar chart analisis. Saat sinyal selesai (TP / SL / BE), hasil pips dan point dikirim sebagai balasan ke pesan sinyalnya.</p></div>
-          </div></div>
-        <div class="card" style="grid-column:1/-1"><h3>📈 Potensi profit di promo (landing page)</h3>
+        <div class="card" style="grid-column:1/-1" data-tab="promo"><h3>📈 Potensi profit di promo (landing page)</h3>
           <div class="grid" style="grid-template-columns:repeat(auto-fit,minmax(min(220px,100%),1fr));gap:0 14px">
             <div class="field"><label>Potensi profit minimum / bulan (Rp)</label><input name="profit_est_min_idr" type="number" min="0" step="1000" value="${esc(s.profit_est_min_idr)}" placeholder="contoh 150000"></div>
             <div class="field"><label>Potensi profit maksimum / bulan (Rp)</label><input name="profit_est_max_idr" type="number" min="0" step="1000" value="${esc(s.profit_est_max_idr)}" placeholder="contoh 500000"></div>
@@ -834,45 +1002,18 @@
           <div class="field"><label>Dasar perhitungan (wajib, tampil di bawah angka)</label><input name="profit_est_basis" value="${esc(s.profit_est_basis)}" placeholder="contoh: backtest Jan–Sep 2026, setup Cent 10rb, modal $100"></div>
           <label class="row small" style="color:var(--text)"><input type="checkbox" name="profit_est_enabled" ${s.profit_est_enabled === '1' ? 'checked' : ''}> Tampilkan di landing page</label>
           <p class="help">Tampil sebagai "Potensi profit Rp … – Rp … / bulan (±…% dari modal minimal)" disertai keterangan dasar perhitungan dan "bukan jaminan, trading bisa rugi". Hanya tampil jika ketiga kolom terisi. Ubah kapan saja sesuai setup &amp; kondisi market.</p></div>
-        <div class="card" style="grid-column:1/-1"><h3>Link IB broker (EA gratis)</h3><div id="ibl">${s.ib_brokers.map(brokerRow).join('')}</div>
+        <div class="card" style="grid-column:1/-1" data-tab="arsip"><h3>Link IB broker (EA gratis)</h3><div id="ibl">${s.ib_brokers.map(brokerRow).join('')}</div>
           <button type="button" class="btn btn-ghost btn-sm" id="addib">+ Broker</button>
           <p class="help">QR code di halaman member "Syarat EA Gratis" dibuat otomatis dari link ini.</p></div>
-        <div class="card"><h3>Status server</h3><dl class="kv small">
+        <div class="card" data-tab="order"><h3>Status server</h3><dl class="kv small">
           <dt>Alamat web</dt><dd>${esc(env.site_url)}</dd>
           <dt>Kunci enkripsi</dt><dd>${env.data_key_set ? '✔' : '<span class="badge b-red">belum diatur</span>'}</dd>
           <dt>Token builder</dt><dd>${env.builder_token_set ? '✔' : '<span class="badge b-red">belum diatur</span>'}</dd>
           <dt>Secret cron</dt><dd>${env.cron_secret_set ? '✔' : '<span class="badge b-red">belum diatur</span>'}</dd></dl></div>
-        <div style="grid-column:1/-1"><button class="btn btn-gold" type="submit">Simpan Pengaturan</button></div>
+        <div class="save-bar" style="grid-column:1/-1"><button class="btn btn-gold" type="submit">Simpan Pengaturan</button><span class="tiny muted">Menyimpan semua tab sekaligus</span></div>
       </form>`;
+    initTabs('settings');
     $('#addib').onclick = () => $('#ibl').insertAdjacentHTML('beforeend', brokerRow());
-    $('#addtg').onclick = () => $('#tgl').insertAdjacentHTML('beforeend', tgRow());
-    $('#tgl').onclick = (e) => { if (e.target.classList.contains('tg-del')) e.target.closest('.tgr').remove(); };
-    if (!(s.telegram_targets || []).length) $('#tgl').insertAdjacentHTML('beforeend', tgRow());
-    $('#tg-find').onclick = async (e) => {
-      const r = await busy(e.target, () => post('/admin/telegram/chats', {}));
-      if (r.error) return toast(r.error, 'err');
-      const have = new Set($$('.tg-id').map((i) => i.value.trim()));
-      const m = modal('Chat yang dilihat bot ' + (r.bot || ''), r.chats.length
-        ? `<p class="small muted">Klik <b>+ Tambah</b>, lalu Simpan pengaturan.</p>${r.chats.map((c) => `<div class="row between" style="padding:8px 0;border-bottom:1px solid var(--line)">
-            <div><b>${esc(c.title)}</b><div class="tiny muted mono">${esc(c.chat_id)} · ${esc(c.type)}</div></div>
-            ${have.has(c.chat_id) ? '<span class="badge b-green">sudah ada</span>' : `<button type="button" class="btn btn-gold btn-sm" data-add="${esc(c.chat_id)}" data-name="${esc(c.title)}">+ Tambah</button>`}</div>`).join('')}`
-        : '<p class="small">Belum ada channel / grup yang terlihat. Pastikan bot sudah jadi admin, kirim satu pesan di channel / grup itu, lalu coba lagi. Channel publik bisa langsung diisi <span class="mono">@namachannel</span>.</p>');
-      m.el.onclick = (ev) => {
-        const b = ev.target.closest('[data-add]');
-        if (!b) return;
-        const empty = $$('.tgr').find((row) => !$('.tg-id', row).value.trim());
-        if (empty) { $('.tg-id', empty).value = b.dataset.add; $('.tg-name', empty).value = b.dataset.name; }
-        else $('#tgl').insertAdjacentHTML('beforeend', tgRow({ name: b.dataset.name, chat_id: b.dataset.add, active: true }));
-        b.outerHTML = '<span class="badge b-green">ditambahkan</span>';
-      };
-    };
-    $('#tg-test').onclick = async (e) => {
-      const r = await busy(e.target, () => post('/admin/telegram/test', {}));
-      if (r.error) return toast(r.error, 'err');
-      const bad = r.results.filter((x) => !x.ok);
-      if (!bad.length) toast(`Pesan tes terkirim ke ${r.results.length} target ✔${r.enabled ? '' : ' (pengiriman sinyal masih mati: centang lalu Simpan)'}`);
-      else toast('Gagal ke: ' + bad.map((x) => `${x.name || x.chat_id} (${x.error})`).join(', '), 'err');
-    };
     $('#addbk').onclick = () => $('#bkl').insertAdjacentHTML('beforeend', bankRow());
     $('#usdt-qr-file').onchange = async (e) => {
       const f = e.target.files[0];
@@ -908,10 +1049,6 @@
         ib_brokers: $$('.ibr').map((r) => ({ name: $('.ib-name', r).value, link: $('.ib-link', r).value, active: $('.ib-act', r).checked })),
         email_provider: d.email_provider, email_from: d.email_from, email_from_name: d.email_from_name, email_api_key: d.email_api_key,
         welcome_email_password: d.welcome_email_password ? '1' : '0',
-        telegram_enabled: d.telegram_enabled ? '1' : '0', telegram_bot_token: d.telegram_bot_token,
-        telegram_wait: d.telegram_wait ? '1' : '0', telegram_wait_hours: d.telegram_wait_hours,
-        telegram_targets: $$('.tgr').map((r) => ({ name: $('.tg-name', r).value.trim(), chat_id: $('.tg-id', r).value.trim(), active: $('.tg-act', r).checked }))
-          .filter((x) => x.chat_id),
       };
       await busy($('#sf button[type=submit]'), () => api('/admin/settings', { method: 'PUT', body }));
       toast('Pengaturan disimpan'); render();
@@ -936,8 +1073,8 @@
     const num = (name, v, label, help = '', step = '1') => `<div class="field"><label>${label}</label><input name="${name}" type="number" step="${step}" value="${esc(v)}">${help ? `<div class="help">${help}</div>` : ''}</div>`;
     const keyBox = (label, v, help) => `<div class="field"><label>${label}</label><div class="row" style="flex-wrap:nowrap">
       <input class="mono" value="${esc(v || 'belum diatur')}" readonly style="flex:1;min-width:0"><button type="button" class="btn btn-outline btn-sm" data-copy="${esc(v)}">Salin</button></div><div class="help">${help}</div></div>`;
-    view.innerHTML = `${title('🤖 Garuda AI')}
-      <div class="grid" style="grid-template-columns:repeat(auto-fit,minmax(min(200px,100%),1fr));margin-bottom:16px">
+    view.innerHTML = `${title('🤖 Sinyal &amp; Analisis AI')}
+      <div class="grid stats-grid" style="margin-bottom:16px">
         <div class="stat ${alive ? '' : 'alert'}"><b style="font-size:1.15rem">${alive ? '● Aktif' : (d.master.seen ? '○ Tidak terhubung' : '○ Belum pernah')}</b><span>EA master ${d.master.seen ? '· ' + esc(ago(d.master.seen)) : ''}</span>
           ${d.master.info ? `<div class="tiny muted" style="margin-top:4px;overflow-wrap:anywhere">${esc(d.master.info)}</div>` : ''}</div>
         <div class="stat"><b>${c.paused ? '⏸' : (d.key_set ? '✔' : '✖')}</b><span>${c.paused ? 'Analisis DIJEDA' : (d.key_set ? 'API key Claude tersimpan' : 'API key Claude belum diisi')}</span></div>
@@ -945,8 +1082,9 @@
         <div class="stat"><b>$${Number(st.cost || 0).toFixed(2)}</b><span>Biaya 30 hari (${st.analyses || 0} analisis)</span></div>
         <div class="stat"><b>${wr === null ? '-' : wr + '%'}</b><span>Win rate 30 hari · semua pasar (${Number(st.wins || 0)} TP / ${Number(st.losses || 0)} SL)</span></div>
       </div>
+      ${tabBar('garuda', [['claude', '🔌 Claude &amp; Bahan'], ['jadwal', '🕐 Jadwal &amp; Saringan'], ['pasar', '📊 Pasar'], ['ea', '⬇️ EA &amp; Kunci'], ['riwayat', '📜 Riwayat Sinyal']])}
       <form id="aif" class="grid" style="align-items:start;grid-template-columns:repeat(auto-fit,minmax(min(380px,100%),1fr))">
-        <div class="card"><h3>🔌 Koneksi Claude</h3>
+        <div class="card" data-tab="claude"><h3>🔌 Koneksi Claude</h3>
           <div class="field"><label>API key Claude ${d.key_set ? '<span class="badge b-green">tersimpan</span>' : ''}</label>
             <input name="claude_key" type="password" autocomplete="off" placeholder="${d.key_set ? 'kosongkan = tidak diubah' : 'sk-ant-... (dari console.anthropic.com)'}">
             <div class="help">Disimpan terenkripsi. Hanya dikirim ke EA master yang memakai kunci master.</div></div>
@@ -954,7 +1092,7 @@
           <div class="field"><label>Ketelitian analisis</label><select name="effort">${d.efforts.map((e) => opt(e, c.effort, effLabel[e])).join('')}</select></div>
           <div class="row"><button type="button" class="btn btn-outline btn-sm" id="ai-test">Tes koneksi Claude</button><span class="small muted" id="ai-test-r"></span></div>
           <div class="help">Simpan dulu, baru tes. Ambil API key di <a href="https://console.anthropic.com" target="_blank" rel="noopener">console.anthropic.com</a> → API Keys (isi saldo di Billing).</div></div>
-        <div class="card"><h3>🧠 Bahan analisis</h3>
+        <div class="card" data-tab="claude"><h3>🧠 Bahan analisis</h3>
           ${chk('news', c.news, '<b>Riset berita & fundamental</b> lewat pencarian web sebelum analisis', 'Dolar, yield, bank sentral, data ekonomi, geopolitik, berita kripto. Biaya per riset: Sonnet sekitar $0,05–0,1, Fable sekitar $0,2–0,4.')}
           <div class="grid c2" style="gap:0 12px"><div class="field"><label>Ketelitian riset</label><select name="news_effort">${d.efforts.map((e) => opt(e, c.news_effort, e)).join('')}</select></div>
             ${num('news_max', c.news_max, 'Maks. pencarian / riset', '$0,01 per pencarian')}</div>
@@ -962,7 +1100,7 @@
           ${chk('intermarket', c.intermarket, '<b>Data antar-pasar</b> (indeks USD sintetis, perak, USDJPY, indeks saham jika ada di broker)')}
           ${chk('vision', c.vision, '<b>Claude melihat gambar chart</b> selain data angka')}
           ${chk('chart', c.chart, '<b>Kirim gambar analisis</b> bersama sinyal (Telegram & website)')}</div>
-        <div class="card"><h3>🕐 Jadwal (jam server broker)</h3>
+        <div class="card" data-tab="jadwal"><h3>🕐 Jadwal (jam server broker)</h3>
           <div class="grid c2" style="gap:0 12px">${num('session_start', c.session_start, 'Mulai analisis (jam)', 'Awal sesi London')}${num('session_end', c.session_end, 'Berhenti analisis (jam)', 'Akhir sesi New York')}</div>
           ${num('friday_last', c.friday_last, 'Jumat: tidak analisis lagi mulai jam', 'Menghindari posisi menginap akhir pekan (tidak berlaku untuk pasar Sabtu–Minggu)')}
           <div class="field"><label>Interval analisis per pasar</label><select name="interval_min">
@@ -974,12 +1112,12 @@
           <p class="help">Jam mulai / berhenti per pasar diatur di kartu Pasar di bawah; nilai di sini adalah cadangan.</p>
           ${chk('paused', c.paused, '<b>JEDA analisis</b> (Claude tidak dipanggil, tidak ada sinyal baru)', 'Sinyal yang sedang berjalan tetap dipantau sampai selesai.')}
           ${chk('master_trade', c.master_trade, 'EA master ikut membuka order di akunnya sendiri')}</div>
-        <div class="card"><h3>🎯 Saringan sinyal (berlaku untuk semua EA client)</h3>
+        <div class="card" data-tab="jadwal"><h3>🎯 Saringan sinyal (berlaku untuk semua EA client)</h3>
           <div class="grid c2" style="gap:0 12px">${num('min_conf', c.min_conf, 'Keyakinan minimal (%)')}${num('min_rr', c.min_rr, 'Reward : risk minimal', '', '0.1')}
 </div>
           ${num('valid_min', c.valid_min, 'Sinyal berlaku (menit)', 'Client tidak masuk lagi sesudah waktu ini')}
           ${num('cost_cap', c.cost_cap, 'Batas biaya Claude per hari ($)', 'Lewat batas: analisis berhenti sampai besok', '0.5')}</div>
-        <div class="card" style="grid-column:1/-1"><div class="row between"><h3 style="margin:0">📊 Pasar yang dianalisis</h3>
+        <div class="card" style="grid-column:1/-1" data-tab="pasar"><div class="row between"><h3 style="margin:0">📊 Pasar yang dianalisis</h3>
             <label class="small row" style="margin:0;color:var(--text)">Riset berita dibuat oleh master
               <select name="research_symbol" style="width:auto">${d.markets.map((m) => opt(m.symbol, d.research_symbol, m.symbol)).join('')}</select></label></div>
           <p class="help" style="margin:8px 0 14px">Satu EA MASTER per pasar (satu chart per pasar di MT5 master). Batas SL memakai satuan pasar itu (emas 1 pip = 0.10, EURUSD 0.0001, USDJPY 0.01, BTC dalam poin = $1). Profil karakter dibaca Claude di setiap analisis pasar itu, ditambah statistik otomatis dari data broker (range harian, range per sesi, volatilitas, kecenderungan tren). Riset berita dibuat satu master lalu dipakai bersama semua pasar; pilih BTCUSD supaya riset tetap jalan di malam hari dan akhir pekan.</p>
@@ -998,12 +1136,12 @@
                 <label class="row small" style="margin:24px 0 0;color:var(--text)"><input type="checkbox" class="mk-we" ${m.weekend ? 'checked' : ''}> Sabtu–Minggu</label></div>
               <div class="field" style="margin-bottom:0"><label>Profil karakter (dibaca Claude)</label><textarea class="mk-pr" rows="4">${esc(m.profile)}</textarea></div></div>`;
           }).join('')}</div>
-        <div class="card" style="grid-column:1/-1"><h3>🔑 Kunci untuk EA</h3>
+        <div class="card" style="grid-column:1/-1" data-tab="ea"><h3>🔑 Kunci untuk EA</h3>
           <div class="grid c2" style="align-items:start">
             ${keyBox('Kunci MASTER (input 0.4, hanya di MT5 master)', d.keys.master, 'Rahasia. EA master memakai kunci ini untuk mengambil semua pengaturan di halaman ini (termasuk API key) dan mengirim sinyal.')}
             ${keyBox('Kunci CLIENT (input 0.3, untuk EA member)', d.keys.client, 'Dipakai EA client untuk mengambil sinyal.')}</div>
-          <p class="help">EA master cukup diisi: 0.1 = MASTER, 0.2 = alamat web, 0.4 = kunci master. Pengaturan Telegram ada di <a href="#/pengaturan">Pengaturan</a>.</p></div>
-        <div class="card" style="grid-column:1/-1"><h3>⬇️ Unduh EA Garuda AI</h3>
+          <p class="help">EA master cukup diisi: 0.1 = MASTER, 0.2 = alamat web, 0.4 = kunci master. Pengaturan Telegram ada di <a href="#/sosmed">Media Sosial</a>.</p></div>
+        <div class="card" style="grid-column:1/-1" data-tab="ea"><h3>⬇️ Unduh EA Garuda AI</h3>
           ${d.ea || d.ea_master ? `<div class="grid c2" style="align-items:start">
             <div><h4 style="margin-bottom:6px">MT5 MASTER (analisis Claude)</h4>
               ${d.ea_master ? `<p class="small muted" style="margin-bottom:10px">GarudaAI_MASTER v${esc(d.ea_master.version)} · ${(d.ea_master.size / 1024).toFixed(0)} KB · ${fmtDateTime(d.ea_master.at)}</p>` : ''}
@@ -1022,16 +1160,16 @@
                 <a class="btn btn-outline btn-sm" href="/api/admin/ai/preset?mode=client">Preset CLIENT (.set)</a></div>
               <p class="help" style="margin-top:10px">Salin .ex5 ke MQL5\\Experts dan .set ke MQL5\\Presets. Saat EA ditaruh di chart: tab Inputs › <b>Load</b> › GarudaAI_CLIENT.set, atau isi 0.3 = kunci CLIENT.</p></div></div>`
             : '<p class="small muted">File EA belum ada. Builder di PC admin meng-upload EA terbaru secara otomatis begitu menyala.</p>'}</div>
-        <div style="grid-column:1/-1"><button class="btn btn-gold" type="submit">Simpan Pengaturan Garuda AI</button></div>
+        <div class="save-bar" style="grid-column:1/-1" data-hide-on="riwayat"><button class="btn btn-gold" type="submit">Simpan Pengaturan Garuda AI</button><span class="tiny muted">Menyimpan semua tab · EA master memakainya ≤ 5 menit</span></div>
       </form>
-      <h3 style="margin:24px 0 10px">Sinyal terakhir</h3>
-      <div class="table-wrap"><table><thead><tr><th>Waktu</th><th>Pasar</th><th>Keputusan</th><th class="right">Entry</th><th class="right">SL / TP</th><th>Hasil</th><th class="right">Biaya</th></tr></thead><tbody>
+      <div data-tab="riwayat"><div class="table-wrap"><table><thead><tr><th>Waktu</th><th>Pasar</th><th>Keputusan</th><th class="right">Entry</th><th class="right">SL / TP</th><th>Hasil</th><th class="right">Biaya</th></tr></thead><tbody>
       ${d.recent.map((r) => `<tr><td class="small nowrap">${fmtDateTime(r.created_at)}</td><td class="small"><b>${esc(r.symbol)}</b></td>
         <td><span class="badge ${r.decision === 'BUY' ? 'b-green' : r.decision === 'SELL' ? 'b-red' : 'b-gold'}">${r.decision}</span> <span class="tiny muted">${r.confidence}%</span></td>
         <td class="right mono small">${r.decision === 'WAIT' ? '-' : Number(r.price).toFixed(dg(r.symbol))}</td>
         <td class="right mono small nowrap">${r.decision === 'WAIT' ? '-' : Number(r.sl).toFixed(dg(r.symbol)) + ' / ' + Number(r.tp).toFixed(dg(r.symbol))}</td>
         <td class="small">${r.status === 'wait' ? '-' : r.status === 'open' ? '<span class="badge b-gold">berjalan</span>' : `<b style="color:${r.pips > 0 ? '#6ee7a2' : '#ff8b95'}">${r.pips > 0 ? '+' : ''}${Number(r.pips).toFixed(1)} ${esc(lb(r.symbol))}</b> ${esc(r.status)}`}</td>
-        <td class="right small">$${Number(r.cost_usd || 0).toFixed(3)}</td></tr>`).join('') || '<tr><td colspan="7" class="empty">Belum ada analisis</td></tr>'}</tbody></table></div>`;
+        <td class="right small">$${Number(r.cost_usd || 0).toFixed(3)}</td></tr>`).join('') || '<tr><td colspan="7" class="empty">Belum ada analisis</td></tr>'}</tbody></table></div></div>`;
+    initTabs('garuda');
     $$('[data-copy]').forEach((b) => b.onclick = () => { if (b.dataset.copy) { copy(b.dataset.copy); toast('Disalin'); } });
     $('#ai-test').onclick = async (e) => {
       $('#ai-test-r').textContent = 'menghubungi Claude...';
