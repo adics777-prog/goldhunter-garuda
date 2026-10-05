@@ -397,6 +397,10 @@
     const d = await api('/admin/content');
     const s = d.settings;
     const on = (k) => s[k] === '1' ? 'checked' : '';
+    const AI_PROV = [['https://api.deepseek.com', 'DeepSeek'], ['https://dashscope-intl.aliyuncs.com/compatible-mode/v1', 'Qwen · Internasional (Singapura)'],
+      ['https://dashscope-us.aliyuncs.com/compatible-mode/v1', 'Qwen · Amerika (Virginia)'], ['https://dashscope.aliyuncs.com/compatible-mode/v1', 'Qwen · China (Beijing)']];
+    const AI_MODELS = { deepseek: ['deepseek-flash', 'deepseek-v4-pro'], qwen: ['qwen-plus', 'qwen-flash', 'qwen-turbo', 'qwen-max'] };
+    const aiN = /deepseek/.test(s.qwen_base) ? 'DeepSeek' : 'Qwen';
     const st = { queued: ['b-gold', 'antre'], rendering: ['b-blue', 'dirender'], done: ['b-green', 'selesai'], failed: ['b-red', 'gagal'] };
     const builderOk = d.builder_seen && Date.now() / 1000 - d.builder_seen < 300;
     view.innerHTML = `${title('🎬 Konten Video', `<span class="badge ${builderOk ? 'b-green' : 'b-red'}">${builderOk ? 'PC builder aktif' : 'PC builder tidak aktif'}</span>`)}
@@ -413,16 +417,16 @@
               <div class="field"><label>Suara narator</label><select name="content_voice">${[['id-ID-ArdiNeural', 'Ardi (pria)'], ['id-ID-GadisNeural', 'Gadis (wanita)']].map(([v, l]) => `<option value="${v}" ${s.content_voice === v ? 'selected' : ''}>${l}</option>`).join('')}</select></div></div>
             <button class="btn btn-gold btn-sm" type="submit">Simpan</button>
           </form>
-          <p class="help" style="margin-top:12px">Format vertikal 1080×1920 (9:16), 20–35 detik: siap untuk TikTok, Instagram Reels dan YouTube Shorts. Naskah, caption &amp; hashtag ditulis <b>${s.content_ai === 'claude' ? 'Claude' : 'Qwen'}</b>, suara Microsoft Edge (gratis), video dirender di PC builder dan disimpan di folder <b>Documents\GarudaAI Konten</b>.</p></div>
-        <div class="card"><h3>AI penulis naskah ${s.qwen_key_set ? '<span class="badge b-green">Qwen siap</span>' : '<span class="badge b-red">API key Qwen belum diisi</span>'}</h3>
+          <p class="help" style="margin-top:12px">Format vertikal 1080×1920 (9:16), 20–35 detik: siap untuk TikTok, Instagram Reels dan YouTube Shorts. Naskah, caption &amp; hashtag ditulis <b>${s.content_ai === 'claude' ? 'Claude' : aiN}</b>, suara Microsoft Edge (gratis), video dirender di PC builder dan disimpan di folder <b>Documents\GarudaAI Konten</b>.</p></div>
+        <div class="card"><h3>AI penulis naskah ${s.qwen_key_set ? `<span class="badge b-green">${aiN} siap</span>` : '<span class="badge b-red">API key belum diisi</span>'}</h3>
           <form id="cq">
-            <div class="field"><label>Mesin naskah</label><select name="content_ai"><option value="qwen">Qwen (murah, kredit Claude khusus analisis trading)</option><option value="claude" ${s.content_ai === 'claude' ? 'selected' : ''}>Claude</option></select></div>
-            <div class="field"><label>API key Qwen (Alibaba Cloud Model Studio)</label><input name="qwen_key" type="password" autocomplete="off" placeholder="${s.qwen_key_set ? '•••••• tersimpan (isi untuk mengganti)' : 'sk-...'}"></div>
-            <div class="grid c2" style="gap:0 12px"><div class="field"><label>Model</label><select name="qwen_model">${['qwen-plus', 'qwen-turbo', 'qwen-flash', 'qwen-max'].concat([s.qwen_model]).filter((v, i, a) => v && a.indexOf(v) === i).map((v) => `<option ${s.qwen_model === v ? 'selected' : ''}>${esc(v)}</option>`).join('')}</select></div>
-              <div class="field"><label>Region</label><select name="qwen_base">${[['https://dashscope-intl.aliyuncs.com/compatible-mode/v1', 'Internasional (Singapura)'], ['https://dashscope.aliyuncs.com/compatible-mode/v1', 'China (Beijing)'], ['https://dashscope-us.aliyuncs.com/compatible-mode/v1', 'Amerika (Virginia)']].map(([v, l]) => `<option value="${v}" ${s.qwen_base === v ? 'selected' : ''}>${l}</option>`).join('')}</select></div></div>
+            <div class="field"><label>Mesin naskah</label><select name="content_ai"><option value="qwen">AI murah: DeepSeek / Qwen (kredit Claude khusus analisis trading)</option><option value="claude" ${s.content_ai === 'claude' ? 'selected' : ''}>Claude</option></select></div>
+            <div class="field"><label>Penyedia</label><select name="qwen_base" id="qbase">${AI_PROV.map(([v, l]) => `<option value="${v}" ${s.qwen_base === v ? 'selected' : ''}>${l}</option>`).join('')}</select></div>
+            <div class="field"><label>API key</label><input name="qwen_key" type="password" autocomplete="off" placeholder="${s.qwen_key_set ? '•••••• tersimpan (isi untuk mengganti)' : 'sk-...'}"></div>
+            <div class="field"><label>Model</label><input name="qwen_model" id="qmodel" list="qmodels" value="${esc(s.qwen_model)}"><datalist id="qmodels"></datalist></div>
             <div class="row" style="gap:8px;flex-wrap:wrap"><button class="btn btn-gold btn-sm" type="submit">Simpan</button><button class="btn btn-outline btn-sm" type="button" id="qtest" ${s.qwen_key_set ? '' : 'disabled'}>Tes koneksi</button></div>
           </form>
-          <p class="help" style="margin-top:12px">Buat key di <b>modelstudio.console.alibabacloud.com</b> › API Key. Region harus sama dengan tempat key dibuat. qwen-plus ± Rp 10–20 per video. Key disimpan terenkripsi.</p></div>
+          <p class="help" style="margin-top:12px"><b>DeepSeek:</b> buat key di <b>platform.deepseek.com</b> › API keys, isi saldo di Top up (PayPal / kartu, mulai $2). Model <b>deepseek-flash</b> ± Rp 5 per video.<br><b>Qwen:</b> key dari <b>modelstudio.console.alibabacloud.com</b>, region harus sama dengan tempat key dibuat.<br>Ganti penyedia = isi juga key penyedia itu. Key disimpan terenkripsi.</p></div>
         <div class="card"><h3>Buat video sekarang</h3>
           <div class="field"><label>Dari sinyal yang sudah selesai</label><select id="csig">${d.closed.map((x) => `<option value="${x.id}">#S${x.id} ${esc(x.symbol)} ${x.decision} · ${x.status} ${x.pips > 0 ? '+' : ''}${Number(x.pips).toFixed(1)}</option>`).join('') || '<option value="">Belum ada sinyal selesai</option>'}</select></div>
           <div class="row" style="gap:8px;flex-wrap:wrap"><button class="btn btn-outline btn-sm" id="mk-sig" ${d.closed.length ? '' : 'disabled'}>🎬 Video sinyal ini</button><button class="btn btn-outline btn-sm" id="mk-week">📊 Video rekap minggu ini</button></div>
@@ -462,9 +466,16 @@
     };
     $('#qtest').onclick = async (e) => {
       e.target.disabled = true;
-      try { const r = await api('/admin/content/qwen-test', { method: 'POST', body: {} }); toast(`Qwen OK (${r.model}, ${(r.ms / 1000).toFixed(1)} dtk): ${r.text}`); }
+      try { const r = await api('/admin/content/qwen-test', { method: 'POST', body: {} }); toast(`${r.provider} OK (${r.model}, ${(r.ms / 1000).toFixed(1)} dtk): ${r.text}`); }
       finally { e.target.disabled = false; }
     };
+    const models = (first) => {
+      const list = AI_MODELS[/deepseek/.test($('#qbase').value) ? 'deepseek' : 'qwen'];
+      $('#qmodels').innerHTML = list.map((m) => `<option value="${m}">`).join('');
+      if (first !== true && !list.includes($('#qmodel').value)) $('#qmodel').value = list[0];
+    };
+    models(true);
+    $('#qbase').onchange = models;
     $('#ct').onsubmit = async (e) => {
       e.preventDefault();
       await api('/admin/content/settings', { method: 'PUT', body: { content_topics: new FormData(e.target).get('content_topics') } });

@@ -573,7 +573,8 @@ function contentTopics(s) {
   return [...CONTENT_TOPICS, ...extra];
 }
 
-// Script writer for videos: Qwen (Alibaba Cloud Model Studio, OpenAI-compatible) so Claude credit is kept for trading
+// Script writer for videos: a cheap OpenAI-compatible model (Qwen on Alibaba Cloud Model Studio, or DeepSeek) so Claude credit is kept for trading
+const aiName = (s) => /deepseek/i.test(s.qwen_base || '') ? 'DeepSeek' : 'Qwen';
 async function qwenJson(env, s, system, user) {
   const key = await decrypt(env, s.qwen_key_enc);
   const base = String(s.qwen_base || 'https://dashscope-intl.aliyuncs.com/compatible-mode/v1').replace(/\/+$/, '');
@@ -581,7 +582,7 @@ async function qwenJson(env, s, system, user) {
     body: JSON.stringify({ model: s.qwen_model || 'qwen-plus', temperature: 0.8, response_format: { type: 'json_object' },
       messages: [{ role: 'system', content: system }, { role: 'user', content: user }] }) });
   const j = await r.json().catch(() => ({}));
-  if (!r.ok) fail(502, 'Qwen: ' + ((j.error && (j.error.message || j.error.code)) || r.status));
+  if (!r.ok) fail(502, aiName(s) + ': ' + ((j.error && (j.error.message || j.error.code)) || r.status));
   const txt = (((j.choices || [])[0] || {}).message || {}).content || '';
   return JSON.parse(txt.replace(/^```(?:json)?\s*|\s*```$/g, ''));
 }
@@ -632,7 +633,7 @@ Rules: use only the facts in the data, never invent numbers. Never promise or im
 }
 // Educational / introduction video: Qwen writes 3 points about one topic, Garuda AI facts given so nothing is invented
 async function eduScript(env, s, lang, data) {
-  if (s.content_ai === 'claude') fail(400, 'Konten edukasi memakai Qwen: isi API key Qwen di Admin > Konten Video');
+  if (s.content_ai === 'claude') fail(400, 'Konten edukasi memakai Qwen / DeepSeek: isi API key-nya di Admin > Konten Video');
   const L = lang === 'en' ? 'English' : 'Bahasa Indonesia (santai, jelas, gaya TikTok edukatif)';
   return qwenJson(env, s, `You write short educational vertical videos (25-35 seconds, TikTok / Reels / Shorts) for Garuda AI (goldhuntergaruda.com), an AI trading-signal service for gold, Bitcoin and forex. Write in ${L}.
 Teach one topic clearly and correctly for beginners. Use only the Garuda AI facts given; never invent results or numbers. Never promise profit, never say "pasti untung" or "passive income". Mention Garuda AI naturally (mostly in the last point and the cta).
@@ -649,7 +650,7 @@ route('POST', '/builder/content/claim', 'builder', async ({ env }) => {
   const s = await getSettings(env);
   if (s.content_enabled !== '1') return json({ job: null });
   // the script writer must be configured (Qwen by default): jobs simply wait until then, no Claude credit is used
-  if (s.content_ai !== 'claude' && !s.qwen_key_enc) return json({ job: null, waiting: 'API key Qwen belum diatur' });
+  if (s.content_ai !== 'claude' && !s.qwen_key_enc) return json({ job: null, waiting: 'API key AI konten belum diatur' });
   // scheduled educational videos: at each time of day (WIB) in content_times, the next topic in the rotation
   if (s.content_edu === '1') {
     const dayStart = now() - ((now() + 7 * 3600) % DAY);
@@ -767,10 +768,10 @@ route('GET', '/admin/content', 'admin', async ({ env }) => {
 // Test the Qwen connection with the saved key / model
 route('POST', '/admin/content/qwen-test', 'admin', async ({ env }) => {
   const s = await getSettings(env);
-  if (!s.qwen_key_enc) fail(400, 'API key Qwen belum disimpan');
+  if (!s.qwen_key_enc) fail(400, 'API key ' + aiName(s) + ' belum disimpan');
   const t0 = Date.now();
   const j = await qwenJson(env, s, 'Return JSON only.', 'Return {"ok": true, "text": "Garuda AI siap"}');
-  return json({ ok: true, ms: Date.now() - t0, text: j.text || JSON.stringify(j), model: s.qwen_model || 'qwen-plus' });
+  return json({ ok: true, ms: Date.now() - t0, text: j.text || JSON.stringify(j), model: s.qwen_model || 'qwen-plus', provider: aiName(s) });
 });
 route('POST', '/admin/content', 'admin', async ({ request, env }) => {
   const b = await readJson(request);
@@ -799,7 +800,7 @@ route('PUT', '/admin/content/settings', 'admin', async ({ request, env }) => {
   if (b.content_topics !== undefined) await putSetting(env, 'content_topics', str(b.content_topics, 6000));
   if (b.content_ai) await putSetting(env, 'content_ai', b.content_ai === 'claude' ? 'claude' : 'qwen');
   if (b.qwen_model) await putSetting(env, 'qwen_model', str(b.qwen_model, 60));
-  if (b.qwen_base) { if (!/^https:\/\/[a-z0-9.-]+\/[\w/.-]*$/i.test(b.qwen_base)) fail(400, 'Alamat API Qwen tidak valid'); await putSetting(env, 'qwen_base', str(b.qwen_base, 200)); }
+  if (b.qwen_base) { if (!/^https:\/\/[a-z0-9.-]+(\/[\w/.-]*)?$/i.test(b.qwen_base)) fail(400, 'Alamat API tidak valid'); await putSetting(env, 'qwen_base', str(b.qwen_base, 200)); }
   if (typeof b.qwen_key === 'string' && b.qwen_key.trim()) await putSetting(env, 'qwen_key_enc', await encrypt(env, b.qwen_key.trim()));
   if (b.content_lang) await putSetting(env, 'content_lang', b.content_lang === 'en' ? 'en' : 'id');
   if (b.content_voice && /^[a-z]{2}-[A-Z]{2}-[A-Za-z]+Neural$/.test(b.content_voice)) await putSetting(env, 'content_voice', b.content_voice);
