@@ -303,7 +303,7 @@ const signalView = (r) => r && ({
   trend_h4: r.trend_h4, trend_h1: r.trend_h1, reason: r.reason, news: r.news || '', reason_en: r.reason_en || '', news_en: r.news_en || '', model: r.model,
   status: r.status, close_price: r.close_price, closed_at: r.closed_at, pips: r.pips,
   order_type: r.order_type || 'MARKET', filled_at: r.filled_at || 0, cancel_reason: r.cancel_reason || '',
-  risk_pct: r.risk_pct || 1, tag: r.tag || '', sl_now: r.sl_now || 0, be_at: r.be_at || 0,
+  risk_pct: r.risk_pct || 1, tag: r.tag || '', sl_now: r.sl_now || 0, be_at: r.be_at || 0, mgmt_note: r.mgmt_note || '',
 });
 // signals that finished with a result (pending, cancelled and running ones are not part of any statistic)
 const DONE_SQL = "status IN ('TP','SL','BE','CLOSE')";
@@ -449,7 +449,7 @@ function tgOpenText(r, base, m) {
 }
 
 function tgCloseText(r, result, close, pips, m) {
-  const head = { TP: '✅ <b>TARGET TERCAPAI (TP)</b>', SL: '❌ <b>STOP LOSS (SL)</b>', BE: '⚖️ <b>BREAK EVEN</b>', CLOSE: '🔒 <b>DITUTUP</b>' }[result];
+  const head = { TP: '✅ <b>TARGET TERCAPAI (TP)</b>', SL: '❌ <b>STOP LOSS (SL)</b>', BE: '⚖️ <b>BREAK EVEN</b>', CLOSE: r.mgmt_note ? '🔒 <b>DITUTUP OLEH AI</b>' : '🔒 <b>DITUTUP</b>' }[result];
   const note = { TP: '🎉 Rencana berjalan sesuai analisis.', SL: '🛡️ Rugi terukur sesuai rencana (risiko ±1%). Disiplin SL menjaga modal untuk peluang berikutnya.',
     BE: '🛡️ SL sudah digeser ke harga masuk, posisi keluar tanpa rugi.', CLOSE: 'Posisi ditutup sebelum akhir pekan.' }[result];
   return [
@@ -460,7 +460,7 @@ function tgCloseText(r, result, close, pips, m) {
     `💰 Hasil: <b>${pipTxt(pips, m)}</b>`,
     ...(r.created_at ? [`⏱ Lama posisi: ${durTxt(now() - r.created_at)}`] : []),
     '',
-    note,
+    result === 'CLOSE' && r.mgmt_note ? `🧠 ${esc(r.mgmt_note)}` : note,
   ].join('\n');
 }
 
@@ -534,14 +534,22 @@ route('POST', '/signal/update', 'signal_pub', async ({ request, env, waitUntil }
   if (row.status !== 'open') fail(409, 'Sinyal tidak berjalan');
   const sl = Number(b.sl);
   if (!(sl > 0)) fail(400, 'sl tidak valid');
-  if (row.be_at) return json({ ok: true, already: true });
-  await env.DB.prepare('UPDATE signals SET sl_now=?, be_at=? WHERE id=?').bind(sl, now(), row.id).run();
+  const ai = str(b.event, 8).toUpperCase() === 'SL';
+  if (!ai && row.be_at) return json({ ok: true, already: true });
+  const note = str(b.note, 300);
+  if (ai) await env.DB.prepare('UPDATE signals SET sl_now=?, mgmt_note=? WHERE id=?').bind(sl, note, row.id).run();
+  else await env.DB.prepare('UPDATE signals SET sl_now=?, be_at=? WHERE id=?').bind(sl, now(), row.id).run();
   const mk = await getSymbol(env, row.symbol);
   let replyTo = null;
   try { replyTo = row.tg_msgs ? JSON.parse(row.tg_msgs) : null; } catch { replyTo = null; }
-  waitUntil(tgBroadcast(env, [`🛡️ <b>BREAK EVEN</b> · ${SIDE_TXT[row.decision]} ${mkTitle(row.symbol)} · #S${row.id}`, '',
-    `Harga sudah bergerak +1R sesuai arah. SL dipindah dari ${fx(row.sl, mk.digits)} ke harga masuk <b>${fx(sl, mk.digits)}</b>.`,
-    'Posisi sekarang aman: paling buruk keluar tanpa rugi, target TP tetap ' + fx(row.tp, mk.digits) + '.'].join('\n'), { replyTo }));
+  const lockPips = Math.round(((row.decision === 'BUY' ? sl - row.price : row.price - sl) / mk.pip) * 10) / 10;
+  waitUntil(tgBroadcast(env, ai
+    ? [`🔧 <b>AI MENGGESER SL</b> · ${SIDE_TXT[row.decision]} ${mkTitle(row.symbol)} · #S${row.id}`, '',
+      `SL sekarang <b>${fx(sl, mk.digits)}</b>${lockPips > 0 ? ` (profit terkunci ${pipTxt(lockPips, mk)})` : ''}, TP tetap ${fx(row.tp, mk.digits)}.`,
+      ...(note ? [`🧠 ${esc(note)}`] : [])].join('\n')
+    : [`🛡️ <b>BREAK EVEN</b> · ${SIDE_TXT[row.decision]} ${mkTitle(row.symbol)} · #S${row.id}`, '',
+      `Harga sudah bergerak +1R sesuai arah. SL dipindah dari ${fx(row.sl, mk.digits)} ke harga masuk <b>${fx(sl, mk.digits)}</b>.`,
+      'Posisi sekarang aman: paling buruk keluar tanpa rugi, target TP tetap ' + fx(row.tp, mk.digits) + '.'].join('\n'), { replyTo }));
   return json({ ok: true });
 });
 
@@ -588,7 +596,10 @@ route('POST', '/signal/close', 'signal_pub', async ({ request, env, waitUntil })
   const mk = await getSymbol(env, row.symbol);
   const pips = Math.round(((row.decision === 'BUY' ? close - row.price : row.price - close) / mk.pip) * 10) / 10;
   const t = now();
-  await env.DB.prepare('UPDATE signals SET status=?, close_price=?, closed_at=?, pips=? WHERE id=?').bind(result, close, t, pips, row.id).run();
+  const note = str(b.note, 300);
+  await env.DB.prepare('UPDATE signals SET status=?, close_price=?, closed_at=?, pips=?, mgmt_note=CASE WHEN ?<>\'\' THEN ? ELSE mgmt_note END WHERE id=?')
+    .bind(result, close, t, pips, note, note, row.id).run();
+  row.mgmt_note = note;
   const chart = chartB64(b.chart_png);
   await saveChart(env, row.id, 'close', chart);
   let replyTo = null;
