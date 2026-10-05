@@ -407,61 +407,139 @@
   async function consentPdf(id) {
     const d = await api('/admin/users/' + id + '/consent');
     const JsPDF = await loadJsPdf();
+    const logo = await fetch('/assets/brand/goldhunter-garuda-logo-256.png').then((r) => r.blob())
+      .then((b) => new Promise((ok) => { const fr = new FileReader(); fr.onload = () => ok(fr.result); fr.readAsDataURL(b); })).catch(() => null);
     const doc = new JsPDF({ unit: 'mm', format: 'a4' });
-    const W = 210, M = 18, TW = W - 2 * M;
-    let y = 20;
-    const wib = (t) => new Date((t + 7 * 3600) * 1000).toISOString().replace('T', ' ').slice(0, 19) + ' WIB';
-    const para = (txt, size = 10, style = 'normal', gap = 1.5) => {
-      doc.setFont('helvetica', style);
-      doc.setFontSize(size);
-      const lines = doc.splitTextToSize(String(txt), TW);
-      for (const ln of lines) {
-        if (y > 280) { doc.addPage(); y = 20; }
-        doc.text(ln, M, y);
-        y += size * 0.45;
-      }
+    const W = 210, M = 20, TW = W - 2 * M, BOTTOM = 276;
+    const BULAN = ['Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni', 'Juli', 'Agustus', 'September', 'Oktober', 'November', 'Desember'];
+    const ROMAWI = ['I', 'II', 'III', 'IV', 'V', 'VI', 'VII', 'VIII', 'IX', 'X', 'XI', 'XII'];
+    const wibDate = (t) => new Date((t + 7 * 3600) * 1000);
+    const tgl = (t) => { const x = wibDate(t); return `${x.getUTCDate()} ${BULAN[x.getUTCMonth()]} ${x.getUTCFullYear()}`; };
+    const jam = (t) => { const x = wibDate(t); return `${String(x.getUTCHours()).padStart(2, '0')}:${String(x.getUTCMinutes()).padStart(2, '0')}:${String(x.getUTCSeconds()).padStart(2, '0')} WIB`; };
+    const c = d.consents[d.consents.length - 1] || null;                   // latest acceptance
+    const tRef = c ? c.accepted_at : d.user.created_at;
+    const nomor = `${String(c ? c.id : d.user.id).padStart(5, '0')}/GHG-PRR/${ROMAWI[wibDate(tRef).getUTCMonth()]}/${wibDate(tRef).getUTCFullYear()}`;
+    const contact = ['www.' + d.site, d.contact.email, d.contact.whatsapp ? 'WhatsApp ' + d.contact.whatsapp : ''].filter(Boolean).join('   ·   ');
+    let y = 0;
+    const font = (style, size, rgb = [25, 25, 30]) => { doc.setFont('helvetica', style); doc.setFontSize(size); doc.setTextColor(...rgb); };
+    const kop = () => {
+      if (logo) doc.addImage(logo, 'PNG', M, 11, 22, 22);
+      font('bold', 19, [150, 110, 10]); doc.text('GOLDHUNTER GARUDA', M + 27, 19);
+      font('bold', 9.5, [40, 40, 48]); doc.text('Garuda AI  ·  Layanan Sinyal & EA Trading Berbasis Kecerdasan Buatan', M + 27, 25);
+      font('normal', 8.5, [90, 90, 100]); doc.text(contact, M + 27, 30.5);
+      doc.setDrawColor(150, 110, 10); doc.setLineWidth(0.9); doc.line(M, 36, W - M, 36);
+      doc.setLineWidth(0.25); doc.line(M, 37.4, W - M, 37.4);
+      y = 47;
+    };
+    const ensure = (h) => { if (y + h > BOTTOM) { doc.addPage(); kop(); } };
+    const para = (txt, size = 10, style = 'normal', gap = 1.6, indent = 0, rgb) => {
+      font(style, size, rgb);
+      const lines = doc.splitTextToSize(String(txt), TW - indent);
+      for (const ln of lines) { ensure(size * 0.5); doc.text(ln, M + indent, y); y += size * 0.47; }
       y += gap;
     };
-    const row = (k, v) => {
-      doc.setFont('helvetica', 'bold'); doc.setFontSize(9.5); doc.text(k, M, y);
-      doc.setFont('helvetica', 'normal');
-      const lines = doc.splitTextToSize(String(v || '-'), TW - 42);
-      doc.text(lines, M + 42, y);
-      y += Math.max(1, lines.length) * 4.4 + 0.6;
+    const center = (txt, size, style, gap = 2) => { font(style, size); doc.text(txt, W / 2, y, { align: 'center' }); y += size * 0.45 + gap; };
+    const row = (k, v, kw = 44) => {
+      font('normal', 10); const lines = doc.splitTextToSize(String(v || '-'), TW - kw - 6);
+      ensure(lines.length * 4.7);
+      doc.text(k, M + 6, y); doc.text(':', M + kw, y); doc.text(lines, M + kw + 3, y);
+      y += lines.length * 4.7 + 0.5;
     };
-    doc.setFillColor(20, 20, 28); doc.rect(0, 0, W, 14, 'F');
-    doc.setTextColor(245, 197, 66); doc.setFont('helvetica', 'bold'); doc.setFontSize(12); doc.text('GOLDHUNTER GARUDA · ' + d.site, M, 9);
-    doc.setTextColor(20, 20, 20);
-    y = 26;
-    para('SURAT PERNYATAAN PERSETUJUAN RISIKO TRADING', 14, 'bold', 1);
-    para('Risk Acknowledgement Statement', 10, 'italic', 4);
-    para('Data member', 11, 'bold', 1);
-    row('Nama', d.user.name);
+    const numbered = (items, size = 10) => items.forEach((t, i) => {
+      font('normal', size);
+      const lines = doc.splitTextToSize(String(t), TW - 12);
+      ensure(lines.length * size * 0.47 + 2);
+      doc.text(`${i + 1}.`, M + 4, y); doc.text(lines, M + 11, y);
+      y += lines.length * size * 0.46 + 1.4;
+    });
+
+    kop();
+    center('SURAT PERNYATAAN PERSETUJUAN RISIKO TRADING', 13, 'bold', 0);
+    const tw = doc.getTextWidth('SURAT PERNYATAAN PERSETUJUAN RISIKO TRADING');
+    doc.setDrawColor(25, 25, 30); doc.setLineWidth(0.3); doc.line(W / 2 - tw / 2, y - 5.1, W / 2 + tw / 2, y - 5.1);
+    center('Nomor: ' + nomor, 10, 'normal', 4);
+
+    para('Yang bertanda tangan di bawah ini:', 10, 'normal', 1.5);
+    row('Nama lengkap', d.user.name);
     row('Email', d.user.email);
-    row('WhatsApp', d.user.phone);
+    row('Nomor WhatsApp', d.user.phone);
     row('Alamat', d.user.address);
     row('ID member', '#' + d.user.id);
-    row('Terdaftar', wib(d.user.created_at));
-    y += 3;
-    if (!d.consents.length) {
-      para('Tidak ada catatan persetujuan elektronik untuk member ini. Akun dibuat sebelum pencatatan persetujuan diaktifkan (5 Oktober 2026) atau dibuat oleh admin.', 10, 'italic');
+    row('Tanggal pendaftaran', `${tgl(d.user.created_at)}, ${jam(d.user.created_at)}`);
+    y += 2;
+
+    if (!c) {
+      para('Catatan: tidak ada rekaman persetujuan elektronik untuk akun ini. Akun dibuat sebelum pencatatan persetujuan diaktifkan (5 Oktober 2026) atau dibuat oleh admin, sehingga surat ini tidak dapat diterbitkan sebagai bukti persetujuan.', 10.5, 'bolditalic', 3, 0, [170, 30, 30]);
+    } else {
+      const idText = c.version === d.risk_version ? d.risk_text.id : String(c.text || '').split('\n').map((x) => x.replace(/^\d+\.\s*/, ''));
+      para(`dengan ini menyatakan dengan sesungguhnya bahwa sebelum memakai layanan GoldHunter Garuda / Garuda AI, saya telah membaca, memahami dan menyetujui pernyataan risiko (versi ${c.version}) sebagai berikut:`, 10, 'normal', 2);
+      numbered(idText);
+      if (c.lang === 'en') para('Pernyataan ini disetujui dalam Bahasa Inggris; teks asli yang disetujui tercantum pada Lampiran.', 9, 'italic', 1.5, 0, [80, 80, 90]);
+      y += 1;
+      para('Demikian surat pernyataan ini saya setujui dengan sadar, tanpa paksaan dari pihak mana pun, dan dapat dipergunakan sebagaimana mestinya, termasuk sebagai alat bukti apabila di kemudian hari timbul perselisihan.', 10, 'normal', 4);
+
+      // signature block
+      ensure(50);
+      const colR = W / 2 + 8, colL = M;
+      font('normal', 10.5);
+      doc.text('Diterbitkan oleh,', colL, y);
+      doc.text(`Disetujui pada ${tgl(c.accepted_at)}`, colR, y);
+      y += 5;
+      doc.text('GoldHunter Garuda', colL, y);
+      doc.text('Yang menyatakan,', colR, y);
+      y += 4;
+      // electronic signature stamp
+      doc.setDrawColor(150, 110, 10); doc.setLineWidth(0.6); doc.roundedRect(colR, y, W - M - colR, 26, 2, 2);
+      font('bold', 9.5, [150, 110, 10]); doc.text('DITANDATANGANI SECARA ELEKTRONIK', colR + 4, y + 6);
+      font('normal', 8.5, [40, 40, 48]);
+      doc.text(`Waktu  : ${tgl(c.accepted_at)}, ${jam(c.accepted_at)}`, colR + 4, y + 11.5);
+      doc.text(`IP / negara : ${c.ip} / ${c.country || '-'}`, colR + 4, y + 16);
+      doc.text(`Kode  : ${String(c.text_hash).slice(0, 24)}…`, colR + 4, y + 20.5);
+      font('italic', 8.5, [90, 90, 100]);
+      doc.text(doc.splitTextToSize('Sistem pencatatan persetujuan otomatis www.' + d.site, W / 2 - M - 6), colL, y + 11);
+      y += 31;
+      font('bold', 10.5);
+      doc.text(d.user.name, colR, y);
+      doc.setLineWidth(0.3); doc.setDrawColor(25, 25, 30); doc.line(colR, y + 1.2, colR + Math.min(doc.getTextWidth(d.user.name), W - M - colR), y + 1.2);
+      font('normal', 9.5); doc.text('Pemilik akun / member', colR, y + 6);
+      y += 14;
+
+      // appendix: electronic trail
+      doc.addPage(); kop();
+      center('LAMPIRAN: REKAM JEJAK PERSETUJUAN ELEKTRONIK', 12, 'bold', 1);
+      center('Nomor: ' + nomor, 9.5, 'normal', 6);
+      d.consents.forEach((x, i) => {
+        para(`Persetujuan ${d.consents.length > 1 ? '#' + (i + 1) + ' ' : ''}(versi teks ${x.version}, bahasa ${x.lang === 'en' ? 'Inggris' : 'Indonesia'})`, 10.5, 'bold', 1.5);
+        row('Waktu persetujuan', `${tgl(x.accepted_at)}, ${jam(x.accepted_at)}`, 48);
+        row('Alamat IP', x.ip, 48);
+        row('Negara (dari IP)', x.country || '-', 48);
+        row('Perangkat / browser', x.user_agent, 48);
+        row('Bahasa tampilan', x.lang === 'en' ? 'Inggris' : 'Indonesia', 48);
+        row('Kode verifikasi', 'SHA-256 ' + x.text_hash, 48);
+        y += 2;
+        para('Cara persetujuan: pemilik akun mencentang kotak "Saya telah membaca, memahami dan menyetujui pernyataan risiko di atas..." yang tampil bersama seluruh teks pernyataan di halaman pendaftaran www.' + d.site + ', lalu menekan tombol Daftar. Pendaftaran tidak dapat diselesaikan tanpa persetujuan ini.', 10, 'normal', 2);
+        if (x.lang === 'en') {
+          para('Teks asli yang disetujui (Bahasa Inggris):', 10, 'bold', 1);
+          numbered(String(x.text || '').split('\n').map((l) => l.replace(/^\d+\.\s*/, '')), 9.5);
+        }
+        y += 3;
+      });
+      para('Dasar hukum: Informasi Elektronik dan/atau Dokumen Elektronik beserta hasil cetaknya merupakan alat bukti hukum yang sah (Pasal 5 Undang-Undang No. 11 Tahun 2008 tentang Informasi dan Transaksi Elektronik beserta perubahannya). Kode verifikasi adalah sidik digital SHA-256 dari teks persis yang ditampilkan kepada member; perubahan satu huruf pada teks menghasilkan kode yang berbeda, sehingga isi pernyataan dapat dicocokkan dengan arsip sistem.', 9.5, 'normal', 2, 0, [60, 60, 70]);
     }
-    d.consents.forEach((c, i) => {
-      para(`Persetujuan ${d.consents.length > 1 ? '#' + (i + 1) + ' ' : ''}(versi teks ${c.version}, bahasa ${c.lang === 'en' ? 'English' : 'Indonesia'})`, 11, 'bold', 1);
-      row('Waktu disetujui', wib(c.accepted_at));
-      row('Alamat IP', c.ip);
-      row('Negara', c.country || '-');
-      row('Perangkat / browser', c.user_agent);
-      row('Kode verifikasi', 'SHA-256 ' + c.text_hash);
-      y += 2;
-      para('Dengan mencentang kotak persetujuan dan menekan tombol Daftar di ' + d.site + ', member menyatakan:', 10, 'normal', 1);
-      String(c.text || '').split('\n').forEach((ln) => para(ln, 10, 'normal', 1));
-      y += 3;
-    });
-    para('Persetujuan di atas diberikan secara elektronik oleh pemilik akun saat pendaftaran dan tercatat otomatis oleh sistem. Kode verifikasi adalah sidik digital (SHA-256) dari teks persis yang ditampilkan kepada member; perubahan satu huruf pada teks menghasilkan kode yang berbeda.', 9, 'normal', 2);
-    para('Dokumen dibuat dari catatan sistem pada ' + wib(Math.floor(Date.now() / 1000)) + '.', 8.5, 'italic', 0);
+
+    // footer on every page
+    const pages = doc.getNumberOfPages();
+    const made = Math.floor(Date.now() / 1000);
+    for (let i = 1; i <= pages; i++) {
+      doc.setPage(i);
+      doc.setDrawColor(200, 200, 205); doc.setLineWidth(0.2); doc.line(M, 281, W - M, 281);
+      font('normal', 7.5, [120, 120, 130]);
+      doc.text(`Dokumen elektronik ini dibuat otomatis dari arsip sistem www.${d.site} pada ${tgl(made)}, ${jam(made)}.`, M, 285);
+      doc.text(`No. ${nomor}`, M, 289);
+      doc.text(`Halaman ${i} dari ${pages}`, W - M, 289, { align: 'right' });
+    }
     const safe = String(d.user.name || 'member').replace(/[^A-Za-z0-9]+/g, '_').slice(0, 40);
-    doc.save(`Pernyataan_Risiko_${safe}_${d.user.id}.pdf`);
+    doc.save(`Surat_Pernyataan_Risiko_${safe}_${d.user.id}.pdf`);
   }
 
   // ------------------------------------------------------------------ profit board

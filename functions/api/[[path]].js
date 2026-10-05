@@ -1420,7 +1420,9 @@ route('GET', '/admin/users/:id/consent', 'admin', async ({ env, params }) => {
   if (!u) fail(404, 'Member tidak ditemukan');
   const { results } = await env.DB.prepare(`SELECT c.*, t.text FROM consents c LEFT JOIN legal_texts t ON t.version = c.version AND t.lang = c.lang
       WHERE c.user_id=? ORDER BY c.id`).bind(u.id).all();
-  return json({ user: u, consents: results, site: 'goldhuntergaruda.com' });
+  const st = await getSettings(env);
+  return json({ user: u, consents: results, site: 'goldhuntergaruda.com', risk_version: RISK_VERSION, risk_text: RISK_TEXT,
+    contact: { whatsapp: st.whatsapp || '', email: st.email_from || '' } });
 });
 
 route('PUT', '/admin/users/:id', 'admin', async ({ request, env, params, user }) => {
