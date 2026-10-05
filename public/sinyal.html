@@ -106,7 +106,8 @@
   const pipDesc = (m) => m.pip_label === 'pips' ? `${NAMES[m.symbol] || m.symbol}: 1 pip = ${m.pip}` : `${NAMES[m.symbol] || m.symbol}: 1 ${UL(m.pip_label)} = ${m.pip}`;
   const STATUS_ = () => ({ open: ['b-gold', T('BERJALAN', 'RUNNING')], pending: ['b-blue', T('PENDING', 'PENDING')], cancel: ['b-gray', T('DIBATALKAN', 'CANCELLED')],
     TP: ['b-green', 'TP'], SL: ['b-red', 'SL'], BE: ['b-gold', 'BREAK EVEN'], CLOSE: ['b-gold', T('DITUTUP', 'CLOSED')] });
-  const ordTag = (r) => r.order_type === 'LIMIT' || r.order_type === 'STOP' ? ` <span class="tiny muted">${r.order_type}</span>` : '';
+  const ordTag = (r) => (r.order_type === 'LIMIT' || r.order_type === 'STOP' ? ` <span class="tiny muted">${r.order_type}</span>` : '')
+    + (r.tag === 'NEWS' ? ' <span class="badge b-orange" style="font-size:.62rem;padding:1px 6px">NEWS</span>' : '');
   const side = (d) => `<span class="badge ${d === 'BUY' ? 'b-green' : 'b-red'}">${d === 'BUY' ? '▲ BUY' : '▼ SELL'}</span>`;
 
   async function load() {

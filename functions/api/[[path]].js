@@ -303,6 +303,7 @@ const signalView = (r) => r && ({
   trend_h4: r.trend_h4, trend_h1: r.trend_h1, reason: r.reason, news: r.news || '', reason_en: r.reason_en || '', news_en: r.news_en || '', model: r.model,
   status: r.status, close_price: r.close_price, closed_at: r.closed_at, pips: r.pips,
   order_type: r.order_type || 'MARKET', filled_at: r.filled_at || 0, cancel_reason: r.cancel_reason || '',
+  risk_pct: r.risk_pct || 1, tag: r.tag || '',
 });
 // signals that finished with a result (pending, cancelled and running ones are not part of any statistic)
 const DONE_SQL = "status IN ('TP','SL','BE','CLOSE')";
@@ -427,12 +428,13 @@ function tgOpenText(r, base, m) {
   const until = new Date((r.valid_until + 7 * 3600) * 1000);
   const untilTxt = `${String(until.getUTCHours()).padStart(2, '0')}:${String(until.getUTCMinutes()).padStart(2, '0')} WIB`;
   return [
-    pend ? `⏳ <b>GARUDA AI · PENDING ${SIDE_TXT[r.decision]} ${r.order_type} ${mkTitle(r.symbol)}</b>` : `🦅 <b>GARUDA AI · SINYAL ${SIDE_TXT[r.decision]} ${mkTitle(r.symbol)}</b>`,
+    (r.tag === 'NEWS' ? '📰 <b>NEWS</b> · ' : '') + (pend ? `⏳ <b>GARUDA AI · PENDING ${SIDE_TXT[r.decision]} ${r.order_type} ${mkTitle(r.symbol)}</b>` : `🦅 <b>GARUDA AI · SINYAL ${SIDE_TXT[r.decision]} ${mkTitle(r.symbol)}</b>`),
     '',
     pend ? `📌 Harga pending: <b>${fx(r.price, m.digits)}</b> (${r.order_type === 'LIMIT' ? 'menunggu harga kembali ke area ini' : 'masuk saat harga menembus level ini'})` : `▶️ Entry: <b>${fx(r.price, m.digits)}</b>`,
     `🛑 Stop loss: <b>${fx(r.sl, m.digits)}</b>  (−${slP.toFixed(0)} ${m.pip_label})`,
     `🎯 Take profit: <b>${fx(r.tp, m.digits)}</b>  (+${tpP.toFixed(0)} ${m.pip_label})`,
     `⚖️ Risk : reward 1 : ${rr.toFixed(2)} · keyakinan AI ${r.confidence}%`,
+    `🎚 Risiko pilihan AI: ${Number(r.risk_pct || 1).toFixed(2).replace(/\.?0+$/, '')}% saldo (lot dihitung otomatis dari modal tiap akun)`,
     `📊 Tren H4 ${trendTxt(r.trend_h4)} · H1 ${trendTxt(r.trend_h1)}`,
     '',
     '🧠 <b>Alasan AI</b>',
@@ -488,12 +490,14 @@ route('POST', '/signal/publish', 'signal_pub', async ({ request, env, base, wait
   const orderType = decision !== 'WAIT' && ['LIMIT', 'STOP'].includes(str(b.order_type, 8).toUpperCase()) ? str(b.order_type, 8).toUpperCase() : 'MARKET';
   const pending = orderType !== 'MARKET';
   const validMin = Math.max(1, Math.min(int(b.valid_min) || 10, pending ? 480 : 60));
-  const r = await env.DB.prepare(`INSERT INTO signals (symbol, bar_time, created_at, valid_until, decision, confidence, price, sl, tp, trend_h4, trend_h1, reason, model, cost_usd, tokens_in, tokens_out, status, news, reason_en, news_en, order_type)
-      VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`)
+  const riskPct = Math.max(0.25, Math.min(Number(b.risk_pct) || 1, 1));
+  const tag = str(b.tag, 8).toUpperCase() === 'NEWS' ? 'NEWS' : '';
+  const r = await env.DB.prepare(`INSERT INTO signals (symbol, bar_time, created_at, valid_until, decision, confidence, price, sl, tp, trend_h4, trend_h1, reason, model, cost_usd, tokens_in, tokens_out, status, news, reason_en, news_en, order_type, risk_pct, tag)
+      VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`)
     .bind(symbol, int(b.bar_time) || 0, t, t + validMin * 60, decision, Math.max(0, Math.min(int(b.confidence) || 0, 100)),
       num(b.price), num(b.sl), num(b.tp), str(b.trend_h4, 8), str(b.trend_h1, 8), str(b.reason, 600), str(b.model, 40),
       num(b.cost_usd), int(b.tokens_in) || 0, int(b.tokens_out) || 0, decision === 'WAIT' ? 'wait' : (pending ? 'pending' : 'open'), str(b.news, 400), str(b.reason_en, 600), str(b.news_en, 400),
-      orderType)
+      orderType, riskPct, tag)
     .run();
   const id = r.meta.last_row_id;
   const chart = chartB64(b.chart_png);
@@ -1121,7 +1125,7 @@ const AI_KEYS = {               // key: [type, min, max]
   ai_interval_min: ['int', 15, 240], ai_level_trigger: ['bool'], ai_momentum: ['bool'], ai_momentum_24h: ['bool'],
   ai_min_conf: ['int', 0, 100], ai_min_rr: ['num', 0.5, 10], ai_min_sl: ['num', 0.5, 200], ai_max_sl: ['num', 1, 500], ai_valid_min: ['int', 1, 60],
   ai_cost_cap: ['num', 0, 1000], ai_master_trade: ['bool'], ai_min_conf_pending: ['int', 0, 100], ai_min_ev: ['num', 0, 3],
-  ai_max_trades_day: ['int', 1, 50], ai_max_daily_loss: ['num', 0, 20],
+  ai_max_trades_day: ['int', 1, 50], ai_max_daily_loss: ['num', 0, 20], ai_news_mode: ['bool'],
 };
 function aiConfig(s) {
   const out = {};
