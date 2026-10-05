@@ -1121,6 +1121,7 @@ const AI_KEYS = {               // key: [type, min, max]
   ai_interval_min: ['int', 15, 240], ai_level_trigger: ['bool'], ai_momentum: ['bool'], ai_momentum_24h: ['bool'],
   ai_min_conf: ['int', 0, 100], ai_min_rr: ['num', 0.5, 10], ai_min_sl: ['num', 0.5, 200], ai_max_sl: ['num', 1, 500], ai_valid_min: ['int', 1, 60],
   ai_cost_cap: ['num', 0, 1000], ai_master_trade: ['bool'], ai_min_conf_pending: ['int', 0, 100], ai_min_ev: ['num', 0, 3],
+  ai_max_trades_day: ['int', 1, 50], ai_max_daily_loss: ['num', 0, 20],
 };
 function aiConfig(s) {
   const out = {};
@@ -1133,7 +1134,8 @@ function aiConfig(s) {
   return out;
 }
 const signalFilters = (s) => ({ min_conf: Number(s.ai_min_conf || 65), min_rr: Number(s.ai_min_rr || 1.5), min_sl: Number(s.ai_min_sl || 3), max_sl: Number(s.ai_max_sl || 20),
-  min_conf_pending: Number(s.ai_min_conf_pending || 55), min_ev: Number(s.ai_min_ev ?? 0.5) });
+  min_conf_pending: Number(s.ai_min_conf_pending || 55), min_ev: Number(s.ai_min_ev ?? 0.5),
+  max_trades_day: Number(s.ai_max_trades_day || 10), max_daily_loss: Number(s.ai_max_daily_loss ?? 3) });
 
 // MASTER EA: all settings incl. the Claude API key (only with the master secret). Also records that the master is alive.
 route('GET', '/master/config', 'signal_pub', async ({ env, url }) => {
