@@ -111,9 +111,14 @@
   const side = (d) => `<span class="badge ${d === 'BUY' ? 'b-green' : 'b-red'}">${d === 'BUY' ? '▲ BUY' : '▼ SELL'}</span>`;
   // signal heading: one badge with the order type, then a plain-language line (pending / AI confidence / AI risk)
   const isPend = (r) => r.order_type === 'LIMIT' || r.order_type === 'STOP';
-  const sigBadge = (r) => `<span class="badge ${r.decision === 'BUY' ? 'b-green' : 'b-red'}">${r.decision === 'BUY' ? '▲ BUY' : '▼ SELL'}${isPend(r) ? ' ' + r.order_type : ''}</span>`
+  const pendWaiting = (r) => isPend(r) && (r.status === 'pending' || r.status === 'cancel');   // filled pendings are real positions
+  const sigBadge = (r) => `<span class="badge ${r.decision === 'BUY' ? 'b-green' : 'b-red'}">${r.decision === 'BUY' ? '▲ BUY' : '▼ SELL'}${pendWaiting(r) ? ' ' + r.order_type : ''}</span>`
     + (r.tag === 'NEWS' ? ' <span class="badge b-orange" style="font-size:.62rem;padding:1px 6px">NEWS</span>' : '');
-  const sigMeta = (r) => `<div class="tiny muted" style="margin-top:4px">${isPend(r) ? T('Pending order', 'Pending order') + ' · ' : ''}${T('Keyakinan AI', 'AI confidence')} ${r.confidence}%`
+  const pendTxt = (r) => !isPend(r) ? ''
+    : r.status === 'pending' ? T('Pending order, belum terisi', 'Pending order, not filled yet') + ' · '
+    : r.status === 'cancel' ? T('Pending order tidak terisi', 'Pending order not filled') + ' · '
+    : (r.status === 'open' ? T('Posisi berjalan', 'Position running') : T('Posisi', 'Position')) + ' · ' + T('terisi dari', 'filled from') + ` ${r.decision} ${r.order_type}${r.filled_at ? ' ' + T('pukul', 'at') + ' ' + esc(fmtDateTime(r.filled_at)) : ''} · `;
+  const sigMeta = (r) => `<div class="tiny muted" style="margin-top:4px">${pendTxt(r)}${T('Keyakinan AI', 'AI confidence')} ${r.confidence}%`
     + `${r.risk_pct ? ' · ' + T('Risiko', 'Risk') + ' ' + String(Number(r.risk_pct)).replace('.', T(',', '.')) + '% ' + T('saldo', 'of balance') : ''}</div>`;
 
   async function load() {
@@ -139,6 +144,7 @@
         : x.locked ? `<div class="small" style="margin-top:8px">🔒 ${pend(x) ? T('Harga pending order khusus member.', 'Pending order price is for members only.') : T('Entry, SL, TP khusus member.', 'Entry, SL, TP are for members only.')} <a href="/masuk">${T('Masuk', 'Log in')}</a></div>`
         : `<div class="pend-box"><div>${pend(x) ? `${T('Order menunggu di', 'Order waiting at')} <b class="mono">${num(x.price, x.symbol)}</b>` : `Entry <b class="mono">${num(x.price, x.symbol)}</b>`}
             · SL <b class="mono neg">${num(x.sl, x.symbol)}</b>${x.sl_now ? ` <b class="mono pos">→ ${x.be_at && !x.mgmt_note ? 'BE' : 'AI'} ${num(x.sl_now, x.symbol)}</b>` : ''} · TP <b class="mono pos">${num(x.tp, x.symbol)}</b></div>
+            ${!pend(x) && x.status === 'open' && (x.order_type === 'LIMIT' || x.order_type === 'STOP') ? `<div class="tiny muted">${T('Posisi berjalan, terisi dari', 'Position running, filled from')} ${esc(x.decision)} ${esc(x.order_type)}.</div>` : ''}
             ${x.be_at ? `<div class="tiny" style="color:#6ee7a2">🛡️ ${T('Break even: SL sudah di harga masuk, posisi tidak bisa rugi lagi.', 'Break even: stop moved to the entry, the position can no longer lose.')}</div>` : ''}
             ${pend(x) ? `<div class="tiny muted">${T('Belum ada posisi. Order baru terisi jika harga mencapai level ini; batal otomatis jika tidak tercapai sampai', 'No position yet. Filled only if price reaches this level; cancelled automatically if not reached by')} ${esc(fmtDateTime(x.valid_until))}.</div>` : ''}</div>`;
       const tr = (t) => t === 'UP' ? T('▲ naik', '▲ up') : t === 'DOWN' ? T('▼ turun', '▼ down') : '◆ sideways';
