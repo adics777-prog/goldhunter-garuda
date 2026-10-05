@@ -303,7 +303,7 @@ const signalView = (r) => r && ({
   trend_h4: r.trend_h4, trend_h1: r.trend_h1, reason: r.reason, news: r.news || '', reason_en: r.reason_en || '', news_en: r.news_en || '', model: r.model,
   status: r.status, close_price: r.close_price, closed_at: r.closed_at, pips: r.pips,
   order_type: r.order_type || 'MARKET', filled_at: r.filled_at || 0, cancel_reason: r.cancel_reason || '',
-  risk_pct: r.risk_pct || 1, tag: r.tag || '',
+  risk_pct: r.risk_pct || 1, tag: r.tag || '', sl_now: r.sl_now || 0, be_at: r.be_at || 0,
 });
 // signals that finished with a result (pending, cancelled and running ones are not part of any statistic)
 const DONE_SQL = "status IN ('TP','SL','BE','CLOSE')";
@@ -524,6 +524,25 @@ route('POST', '/signal/publish', 'signal_pub', async ({ request, env, base, wait
     })());
   }
   return json({ ok: true, id, valid_until: t + validMin * 60 });
+});
+
+// The master moved the stop to the entry (break even at +1R): the position can no longer lose
+route('POST', '/signal/update', 'signal_pub', async ({ request, env, waitUntil }) => {
+  const b = await readJson(request);
+  const row = await env.DB.prepare('SELECT * FROM signals WHERE id=?').bind(int(b.id) || 0).first();
+  if (!row) fail(404, 'Sinyal tidak ditemukan');
+  if (row.status !== 'open') fail(409, 'Sinyal tidak berjalan');
+  const sl = Number(b.sl);
+  if (!(sl > 0)) fail(400, 'sl tidak valid');
+  if (row.be_at) return json({ ok: true, already: true });
+  await env.DB.prepare('UPDATE signals SET sl_now=?, be_at=? WHERE id=?').bind(sl, now(), row.id).run();
+  const mk = await getSymbol(env, row.symbol);
+  let replyTo = null;
+  try { replyTo = row.tg_msgs ? JSON.parse(row.tg_msgs) : null; } catch { replyTo = null; }
+  waitUntil(tgBroadcast(env, [`🛡️ <b>BREAK EVEN</b> · ${SIDE_TXT[row.decision]} ${mkTitle(row.symbol)} · #S${row.id}`, '',
+    `Harga sudah bergerak +1R sesuai arah. SL dipindah dari ${fx(row.sl, mk.digits)} ke harga masuk <b>${fx(sl, mk.digits)}</b>.`,
+    'Posisi sekarang aman: paling buruk keluar tanpa rugi, target TP tetap ' + fx(row.tp, mk.digits) + '.'].join('\n'), { replyTo }));
+  return json({ ok: true });
 });
 
 // A pending signal was filled (price reached the pending level) or cancelled (not reached in time / setup failed)
@@ -1085,7 +1104,7 @@ route('GET', '/signal/feed', 'public', async ({ env, url, user }) => {
   const lastView = last ? { ...last, reason: openHidden(last) ? '' : last.reason, reason_en: openHidden(last) ? '' : last.reason_en } : null;   // news is public context
   // latest analysis of every market + its newest WAIT picture (last 24 h) for the live cards on /sinyal
   const { results: lastRows } = await env.DB.prepare(`SELECT id, symbol, decision, created_at, valid_until, reason, news, reason_en, news_en, trend_h4, trend_h1, confidence, status,
-      order_type, price, sl, tp, (SELECT COUNT(*) FROM signal_charts c WHERE c.signal_id = signals.id AND c.kind = 'open') AS has_chart FROM signals
+      order_type, price, sl, tp, sl_now, be_at, (SELECT COUNT(*) FROM signal_charts c WHERE c.signal_id = signals.id AND c.kind = 'open') AS has_chart FROM signals
       WHERE id IN (SELECT MAX(id) FROM signals GROUP BY symbol)`).all();
   const { results: waitPics } = await env.DB.prepare(`SELECT s.symbol, MAX(s.id) AS id, MAX(s.created_at) AS at FROM signals s
       JOIN signal_charts c ON c.signal_id = s.id AND c.kind = 'open' WHERE s.decision = 'WAIT' AND s.created_at > ? GROUP BY s.symbol`).bind(t - DAY).all();

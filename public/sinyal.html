@@ -132,7 +132,8 @@
       const lvl = (x) => x.decision === 'WAIT' || x.status === 'cancel' ? ''
         : x.locked ? `<div class="small" style="margin-top:8px">🔒 ${pend(x) ? T('Harga pending order khusus member.', 'Pending order price is for members only.') : T('Entry, SL, TP khusus member.', 'Entry, SL, TP are for members only.')} <a href="/masuk">${T('Masuk', 'Log in')}</a></div>`
         : `<div class="pend-box"><div>${pend(x) ? `${T('Order menunggu di', 'Order waiting at')} <b class="mono">${num(x.price, x.symbol)}</b>` : `Entry <b class="mono">${num(x.price, x.symbol)}</b>`}
-            · SL <b class="mono neg">${num(x.sl, x.symbol)}</b> · TP <b class="mono pos">${num(x.tp, x.symbol)}</b></div>
+            · SL <b class="mono neg">${num(x.sl, x.symbol)}</b>${x.be_at ? ` <b class="mono pos">→ BE ${num(x.sl_now, x.symbol)}</b>` : ''} · TP <b class="mono pos">${num(x.tp, x.symbol)}</b></div>
+            ${x.be_at ? `<div class="tiny" style="color:#6ee7a2">🛡️ ${T('Break even: SL sudah di harga masuk, posisi tidak bisa rugi lagi.', 'Break even: stop moved to the entry, the position can no longer lose.')}</div>` : ''}
             ${pend(x) ? `<div class="tiny muted">${T('Belum ada posisi. Order baru terisi jika harga mencapai level ini; batal otomatis jika tidak tercapai sampai', 'No position yet. Filled only if price reaches this level; cancelled automatically if not reached by')} ${esc(fmtDateTime(x.valid_until))}.</div>` : ''}</div>`;
       const tr = (t) => t === 'UP' ? T('▲ naik', '▲ up') : t === 'DOWN' ? T('▼ turun', '▼ down') : '◆ sideways';
       $('#now').innerHTML = `<div class="small muted" style="margin-bottom:10px">${T('Analisis terakhir tiap pasar', 'Latest analysis per market')}</div>
@@ -182,7 +183,7 @@
         <div class="top"><div><span class="mk">${esc(r.symbol)}</span>${side(r.decision)}${ordTag(r)} <span class="tiny muted">${r.confidence}%</span>
           <div class="tiny muted" style="margin-top:4px">${esc(fmtDateTime(r.created_at))}</div></div><div class="right">${resOf(r)}</div></div>
         ${r.locked ? `<div class="lock" style="margin-top:8px">🔒 ${T('Entry, SL, TP khusus member.', 'Entry, SL and TP are for members only.')} <a href="/masuk">${T('Masuk', 'Log in')}</a></div>`
-          : `<div class="lv"><span>${r.status === 'pending' ? T('Pending', 'Pending') : 'Entry'} <b>${num(r.price, r.symbol)}</b></span><span>SL <b class="neg">${num(r.sl, r.symbol)}</b></span><span>TP <b class="pos">${num(r.tp, r.symbol)}</b></span></div>
+          : `<div class="lv"><span>${r.status === 'pending' ? T('Pending', 'Pending') : 'Entry'} <b>${num(r.price, r.symbol)}</b></span><span>SL <b class="neg">${num(r.sl, r.symbol)}</b>${r.be_at ? ` <b class="pos">→ BE ${num(r.sl_now, r.symbol)}</b>` : ''}</span><span>TP <b class="pos">${num(r.tp, r.symbol)}</b></span></div>
             ${RS(r) ? `<div class="why">${esc(RS(r))}</div>` : ''}`}
         <button type="button" class="btn btn-ghost btn-sm" style="margin-top:8px" data-detail="${r.id}">🔎 ${T('Detail', 'Details')}${r.has_chart || r.has_close_chart ? ' & chart' : ''}</button></div>`).join('');
     $('#list').innerHTML = d.signals.length ? `<div class="sig-cards">${cardsHtml}</div><div class="table-wrap sig-table"><table class="sig"><thead><tr>
@@ -196,7 +197,7 @@
             ${r.locked ? `<div class="lock">🔒 ${T('Entry, SL, TP sinyal yang masih berjalan khusus member.', 'Entry, SL and TP of a running signal are for members only.')} <a href="/masuk">${T('Masuk', 'Log in')}</a></div>` : (RS(r) ? `<div class="why">${esc(RS(r))}</div>` : '') + (NW(r) ? `<div class="why">📰 ${esc(NW(r))}</div>` : '')}
             <button type="button" class="btn btn-ghost btn-sm" style="margin-top:6px" data-detail="${r.id}">🔎 ${T('Detail', 'Details')}${r.has_chart || r.has_close_chart ? ' & chart' : ''}</button></td>
           <td class="right mono small nowrap">${num(r.price, r.symbol)}</td>
-          <td class="right mono small hide-sm nowrap">${num(r.sl, r.symbol)}</td>
+          <td class="right mono small hide-sm nowrap">${num(r.sl, r.symbol)}${r.be_at && !r.locked ? `<div class="tiny" style="color:#6ee7a2">BE → ${num(r.sl_now, r.symbol)}</div>` : ''}</td>
           <td class="right mono small hide-sm nowrap">${num(r.tp, r.symbol)}</td>
           <td class="right">${res}</td></tr>`;
       }).join('')}</tbody></table></div>`
