@@ -12,6 +12,9 @@
     : o.ib_status === 'no' ? '<span class="badge b-red">Bukan IB</span>' : '<span class="badge b-orange">Cek IB</span>';
   const waLink = (num) => num ? `https://wa.me/${String(num).replace(/\D/g, '').replace(/^0/, '62')}` : '';
   const dateInput = (t) => { if (!t) return ''; const d = new Date(t * 1000); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`; };
+  // Secret fields: browsers like to autofill the admin login password into them. Only what the admin actually typed is sent.
+  document.addEventListener('input', (e) => { if (e.target.matches && e.target.matches('input[type=password]')) e.target.dataset.typed = '1'; }, true);
+  const secretVal = (name) => { const el = document.querySelector(`input[name="${name}"]`); return el && el.dataset.typed ? el.value.trim() : ''; };
   const fromDateInput = (v) => v ? Math.floor(new Date(v + 'T23:59:00').getTime() / 1000) : null;
   // Tabs: elements with data-tab="key" are shown only on their tab; [data-hide-on="a b"] hides on those tabs. The choice is kept per page.
   const tabBar = (page, tabs) => `<div class="tabs" data-tabs="${page}">${tabs.map(([k, l]) => `<button type="button" data-t="${k}">${l}</button>`).join('')}</div>`;
@@ -460,7 +463,7 @@
           <form id="cq">
             <div class="field"><label>Naskah video ditulis oleh</label><select name="content_ai"><option value="qwen">${aiN} · hemat (± Rp 5 per video)</option><option value="claude" ${s.content_ai === 'claude' ? 'selected' : ''}>Claude · lebih mahal (± Rp 200 per video, pakai kredit analisis)</option></select></div>
             <div class="field"><label>Penyedia</label><select name="qwen_base" id="qbase">${AI_PROV.map(([v, l]) => `<option value="${v}" ${s.qwen_base === v ? 'selected' : ''}>${l}</option>`).join('')}</select></div>
-            <div class="field"><label>API key</label><input name="qwen_key" type="password" autocomplete="off" placeholder="${s.qwen_key_set ? '•••••• tersimpan (isi untuk mengganti)' : 'sk-...'}"></div>
+            <div class="field"><label>API key</label><input name="qwen_key" type="password" autocomplete="new-password" data-lpignore="true" data-1p-ignore placeholder="${s.qwen_key_set ? '•••••• tersimpan (isi untuk mengganti)' : 'sk-...'}"></div>
             <div class="field"><label>Model</label><input name="qwen_model" id="qmodel" list="qmodels" value="${esc(s.qwen_model)}"><datalist id="qmodels"></datalist></div>
             <div class="row" style="gap:8px;flex-wrap:wrap"><button class="btn btn-gold btn-sm" type="submit">Simpan</button><button class="btn btn-outline btn-sm" type="button" id="qtest" ${s.qwen_key_set ? '' : 'disabled'}>Tes koneksi</button></div>
           </form>
@@ -500,7 +503,7 @@
     $('#cq').onsubmit = async (e) => {
       e.preventDefault();
       const f = Object.fromEntries(new FormData(e.target));
-      await api('/admin/content/settings', { method: 'PUT', body: { content_ai: f.content_ai, qwen_key: f.qwen_key, qwen_model: f.qwen_model, qwen_base: f.qwen_base } });
+      await api('/admin/content/settings', { method: 'PUT', body: { content_ai: f.content_ai, qwen_key: secretVal('qwen_key'), qwen_model: f.qwen_model, qwen_base: f.qwen_base } });
       toast('Pengaturan AI disimpan');
       render();
     };
@@ -564,7 +567,7 @@
               <label class="row small" style="color:var(--text);margin-bottom:12px"><input type="checkbox" name="telegram_enabled" ${s.telegram_enabled === '1' ? 'checked' : ''}> Kirim setiap sinyal BUY / SELL (dengan gambar chart) dan hasilnya ke Telegram</label>
               <label class="row small" style="color:var(--text);margin-bottom:6px"><input type="checkbox" name="telegram_wait" ${s.telegram_wait === '1' ? 'checked' : ''}> Kirim juga analisis <b>TUNGGU</b> sebagai edukasi (alasan belum entry + level yang ditunggu + chart)</label>
               <div class="field" style="max-width:260px"><label>Analisis TUNGGU paling sering tiap (jam, per pasar)</label><input name="telegram_wait_hours" type="number" min="1" max="24" value="${esc(s.telegram_wait_hours || '3')}"></div>
-              <div class="field"><label>Token bot ${s.telegram_bot_token_set ? '<span class="badge b-green">tersimpan</span>' : ''}</label><input name="telegram_bot_token" type="password" autocomplete="off" placeholder="${s.telegram_bot_token_set ? 'kosongkan = tidak diubah' : '123456789:AAH... (dari @BotFather)'}"></div>
+              <div class="field"><label>Token bot ${s.telegram_bot_token_set ? '<span class="badge b-green">tersimpan</span>' : ''}</label><input name="telegram_bot_token" type="password" autocomplete="new-password" data-lpignore="true" data-1p-ignore placeholder="${s.telegram_bot_token_set ? 'kosongkan = tidak diubah' : '123456789:AAH... (dari @BotFather)'}"></div>
               <label>Target channel / grup (boleh lebih dari satu)</label>
               <div id="tgl">${(s.telegram_targets || []).map(tgRow).join('')}</div>
               <div class="row" style="margin:4px 0 14px"><button type="button" class="btn btn-ghost btn-sm" id="addtg">+ Tambah target</button>
@@ -585,8 +588,8 @@
           ${so.meta_page_id ? `<div class="conn" style="margin-top:14px">✔ Halaman <b>${esc(so.meta_page_name)}</b> ${so.meta_ig_id ? `· Instagram <b>@${esc(so.meta_ig_username)}</b>` : '<span class="badge b-orange">Instagram belum tertaut ke Halaman ini</span>'}
             <button type="button" class="btn btn-ghost btn-sm" id="meta-off" style="margin-left:auto">Putuskan</button></div>` : ''}
           ${so.meta_pages.length > 1 ? `<div class="field"><label>Halaman yang dipakai</label><select id="meta-page">${so.meta_pages.map((p) => `<option value="${esc(p.id)}" ${p.id === so.meta_page_id ? 'selected' : ''}>${esc(p.name)}${p.ig_username ? ' · @' + esc(p.ig_username) : ''}</option>`).join('')}</select></div>` : ''}
-          <div class="grid c2" style="gap:0 12px;margin-top:14px"><div class="field"><label>App ID</label><input name="meta_app_id" value="${esc(so.meta_app_id)}" inputmode="numeric" placeholder="1234567890"></div>
-            <div class="field"><label>App Secret ${so.meta_secret_set ? '<span class="badge b-green">tersimpan</span>' : ''}</label><input name="meta_app_secret" type="password" autocomplete="off" placeholder="${so.meta_secret_set ? 'kosongkan = tidak diubah' : 'dari App settings › Basic'}"></div></div>
+          <div class="grid c2" style="gap:0 12px;margin-top:14px"><div class="field"><label>App ID</label><input name="meta_app_id" autocomplete="off" value="${esc(so.meta_app_id)}" inputmode="numeric" placeholder="1234567890"></div>
+            <div class="field"><label>App Secret ${so.meta_secret_set ? '<span class="badge b-green">tersimpan</span>' : ''}</label><input name="meta_app_secret" type="password" autocomplete="new-password" data-lpignore="true" data-1p-ignore placeholder="${so.meta_secret_set ? 'kosongkan = tidak diubah' : 'dari App settings › Basic'}"></div></div>
           <button class="btn btn-outline btn-sm" type="submit">Simpan App ID &amp; Secret</button>
           <div class="field" style="margin-top:16px"><label>User Access Token (dari Graph API Explorer)</label><textarea id="meta-token" rows="3" class="mono" placeholder="EAAG..."></textarea></div>
           <button class="btn btn-gold btn-sm" type="button" id="meta-connect" ${so.meta_app_id && so.meta_secret_set ? '' : 'disabled'}>🔗 Hubungkan Facebook &amp; Instagram</button>
@@ -602,7 +605,7 @@
 
         <form class="card" id="ttf" data-tab="tt"><div class="row between"><h3 style="margin:0">🎵 TikTok</h3>${badge(so.ready.tt, 'Terhubung ' + esc(so.tiktok_name))}</div>
           <div class="grid c2" style="gap:0 12px;margin-top:14px"><div class="field"><label>Client Key</label><input name="tiktok_client_key" value="${esc(so.tiktok_client_key)}" autocomplete="off"></div>
-            <div class="field"><label>Client Secret ${so.tiktok_secret_set ? '<span class="badge b-green">tersimpan</span>' : ''}</label><input name="tiktok_client_secret" type="password" autocomplete="off" placeholder="${so.tiktok_secret_set ? 'kosongkan = tidak diubah' : ''}"></div></div>
+            <div class="field"><label>Client Secret ${so.tiktok_secret_set ? '<span class="badge b-green">tersimpan</span>' : ''}</label><input name="tiktok_client_secret" type="password" autocomplete="new-password" data-lpignore="true" data-1p-ignore placeholder="${so.tiktok_secret_set ? 'kosongkan = tidak diubah' : ''}"></div></div>
           <div class="field"><label>Redirect URI (salin ke pengaturan Login Kit)</label><div class="row" style="flex-wrap:nowrap"><input class="mono" value="${esc(so.tiktok_redirect)}" readonly style="flex:1;min-width:0"><button type="button" class="btn btn-outline btn-sm" data-copy="${esc(so.tiktok_redirect)}">Salin</button></div></div>
           <div class="row" style="gap:8px;flex-wrap:wrap"><button class="btn btn-outline btn-sm" type="submit">Simpan</button>
             <button class="btn btn-gold btn-sm" type="button" id="tt-login" ${so.tiktok_client_key && so.tiktok_secret_set ? '' : 'disabled'}>🔗 ${so.ready.tt ? 'Login ulang' : 'Login dengan TikTok'}</button>
@@ -657,7 +660,7 @@
       e.preventDefault();
       const d = Object.fromEntries(new FormData(e.target));
       await busy($('#tgf button[type=submit]'), async () => {
-        await api('/admin/settings', { method: 'PUT', body: { telegram_enabled: d.telegram_enabled ? '1' : '0', telegram_bot_token: d.telegram_bot_token,
+        await api('/admin/settings', { method: 'PUT', body: { telegram_enabled: d.telegram_enabled ? '1' : '0', telegram_bot_token: secretVal('telegram_bot_token'),
           telegram_wait: d.telegram_wait ? '1' : '0', telegram_wait_hours: d.telegram_wait_hours,
           telegram_targets: $$('.tgr').map((r) => ({ name: $('.tg-name', r).value.trim(), chat_id: $('.tg-id', r).value.trim(), active: $('.tg-act', r).checked })).filter((x) => x.chat_id) } });
         await api('/admin/social', { method: 'PUT', body: { telegram_public_link: d.telegram_public_link } });
@@ -667,7 +670,7 @@
     $('#metaf').onsubmit = async (e) => {
       e.preventDefault();
       const d = Object.fromEntries(new FormData(e.target));
-      await api('/admin/social', { method: 'PUT', body: { meta_app_id: d.meta_app_id, meta_app_secret: d.meta_app_secret } });
+      await api('/admin/social', { method: 'PUT', body: { meta_app_id: d.meta_app_id, meta_app_secret: secretVal('meta_app_secret') } });
       toast('App ID & Secret disimpan'); render();
     };
     $('#meta-connect').onclick = async (e) => {
@@ -679,7 +682,7 @@
     $('#ttf').onsubmit = async (e) => {
       e.preventDefault();
       const d = Object.fromEntries(new FormData(e.target));
-      await api('/admin/social', { method: 'PUT', body: { tiktok_client_key: d.tiktok_client_key, tiktok_client_secret: d.tiktok_client_secret } });
+      await api('/admin/social', { method: 'PUT', body: { tiktok_client_key: d.tiktok_client_key, tiktok_client_secret: secretVal('tiktok_client_secret') } });
       toast('TikTok disimpan'); render();
     };
     $('#tt-login').onclick = async (e) => { const r = await busy(e.target, () => post('/admin/social/tiktok-auth', {})); location.href = r.url; };
@@ -981,7 +984,7 @@
                 <option value="brevo" ${prov === 'brevo' ? 'selected' : ''}>Brevo</option></select></div>
               <div class="grid c2" style="gap:0 12px"><div class="field"><label>Email pengirim</label><input name="email_from" value="${esc(s.email_from || env.email_from)}" placeholder="no-reply@goldhuntergaruda.com"></div>
               <div class="field"><label>Nama pengirim</label><input name="email_from_name" value="${esc(s.email_from_name || 'GoldHunter Garuda')}"></div></div>
-              <div class="field"><label>API key ${s.email_api_key_set ? '<span class="badge b-green">tersimpan</span>' : ''}</label><input name="email_api_key" type="password" autocomplete="off" placeholder="${s.email_api_key_set ? 'kosongkan = tidak diubah' : 're_xxxxxxxx (Resend) / xkeysib-... (Brevo)'}">
+              <div class="field"><label>API key ${s.email_api_key_set ? '<span class="badge b-green">tersimpan</span>' : ''}</label><input name="email_api_key" type="password" autocomplete="new-password" data-lpignore="true" data-1p-ignore placeholder="${s.email_api_key_set ? 'kosongkan = tidak diubah' : 're_xxxxxxxx (Resend) / xkeysib-... (Brevo)'}">
                 <div class="help">Disimpan terenkripsi di database.</div></div>
               <label class="row small" style="color:var(--text);margin-bottom:14px"><input type="checkbox" name="welcome_email_password" ${s.welcome_email_password !== '0' ? 'checked' : ''}> Sertakan password di email pendaftaran (tidak ikut tersimpan di log email)</label>
               <div class="row"><input id="test-to" value="${esc(me.email)}" style="max-width:260px"><button type="button" class="btn btn-outline btn-sm" id="test-email">Kirim email tes</button></div>
@@ -1047,7 +1050,7 @@
         profit_est_enabled: d.profit_est_enabled ? '1' : '0', profit_est_min_idr: d.profit_est_min_idr, profit_est_max_idr: d.profit_est_max_idr, profit_est_basis: d.profit_est_basis, mt4_enabled: d.mt4_enabled ? '1' : '0',
         auto_complete_ea: d.auto_complete_ea ? '1' : '0', auto_rebuild_on_version: d.auto_rebuild_on_version ? '1' : '0', auto_process_paid: d.auto_process_paid ? '1' : '0',
         ib_brokers: $$('.ibr').map((r) => ({ name: $('.ib-name', r).value, link: $('.ib-link', r).value, active: $('.ib-act', r).checked })),
-        email_provider: d.email_provider, email_from: d.email_from, email_from_name: d.email_from_name, email_api_key: d.email_api_key,
+        email_provider: d.email_provider, email_from: d.email_from, email_from_name: d.email_from_name, email_api_key: secretVal('email_api_key'),
         welcome_email_password: d.welcome_email_password ? '1' : '0',
       };
       await busy($('#sf button[type=submit]'), () => api('/admin/settings', { method: 'PUT', body }));
@@ -1086,7 +1089,7 @@
       <form id="aif" class="grid" style="align-items:start;grid-template-columns:repeat(auto-fit,minmax(min(380px,100%),1fr))">
         <div class="card" data-tab="claude"><h3>🔌 Koneksi Claude</h3>
           <div class="field"><label>API key Claude ${d.key_set ? '<span class="badge b-green">tersimpan</span>' : ''}</label>
-            <input name="claude_key" type="password" autocomplete="off" placeholder="${d.key_set ? 'kosongkan = tidak diubah' : 'sk-ant-... (dari console.anthropic.com)'}">
+            <input name="claude_key" type="password" autocomplete="new-password" data-lpignore="true" data-1p-ignore placeholder="${d.key_set ? 'kosongkan = tidak diubah' : 'sk-ant-... (dari console.anthropic.com)'}">
             <div class="help">Disimpan terenkripsi. Hanya dikirim ke EA master yang memakai kunci master.</div></div>
           <div class="field"><label>Model</label><select name="model">${Object.entries(d.models).map(([k, m]) => opt(k, c.model, `${m.label} · $${m.in}/$${m.out} per 1 jt token`)).join('')}</select></div>
           <div class="field"><label>Ketelitian analisis</label><select name="effort">${d.efforts.map((e) => opt(e, c.effort, effLabel[e])).join('')}</select></div>
@@ -1183,7 +1186,7 @@
       e.preventDefault();
       const f = Object.fromEntries(new FormData(e.target));
       const body = {
-        model: f.model, effort: f.effort, news_effort: f.news_effort, claude_key: f.claude_key,
+        model: f.model, effort: f.effort, news_effort: f.news_effort, claude_key: secretVal('claude_key'),
         news: !!f.news, intermarket: !!f.intermarket, vision: !!f.vision, chart: !!f.chart, paused: !!f.paused, master_trade: !!f.master_trade, level_trigger: !!f.level_trigger, momentum: !!f.momentum, momentum_24h: !!f.momentum_24h, interval_min: f.interval_min,
         news_max: f.news_max, research_every: f.research_every, session_start: f.session_start, session_end: f.session_end, friday_last: f.friday_last,
         min_conf: f.min_conf, min_rr: f.min_rr, min_conf_pending: f.min_conf_pending, min_ev: f.min_ev, valid_min: f.valid_min, cost_cap: f.cost_cap, research_symbol: f.research_symbol,
