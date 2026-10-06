@@ -320,7 +320,7 @@ async function allSymbols(env) {
   return results;
 }
 const symView = (m) => ({ symbol: m.symbol, enabled: !!m.enabled, pip: m.pip, digits: m.digits, pip_label: m.pip_label,
-  session_start: m.session_start, session_end: m.session_end, weekend: !!m.weekend, min_sl: m.min_sl, max_sl: m.max_sl, profile: m.profile || '' });
+  session_start: m.session_start, session_end: m.session_end, weekend: !!m.weekend, min_sl: m.min_sl, max_sl: m.max_sl, profile: m.profile || '', scalp: !!m.scalp });
 
 // ---- Telegram: the server posts every BUY/SELL signal (with the chart picture) and its result as a reply ----
 // Configured in Admin > Pengaturan: bot token (stored encrypted) and any number of target channels / groups.
@@ -428,7 +428,7 @@ function tgOpenText(r, base, m) {
   const until = new Date((r.valid_until + 7 * 3600) * 1000);
   const untilTxt = `${String(until.getUTCHours()).padStart(2, '0')}:${String(until.getUTCMinutes()).padStart(2, '0')} WIB`;
   return [
-    (r.tag === 'NEWS' ? '📰 <b>NEWS</b> · ' : '') + (pend ? `⏳ <b>GARUDA AI · PENDING ${SIDE_TXT[r.decision]} ${r.order_type} ${mkTitle(r.symbol)}</b>` : `🦅 <b>GARUDA AI · SINYAL ${SIDE_TXT[r.decision]} ${mkTitle(r.symbol)}</b>`),
+    (r.tag === 'NEWS' ? '📰 <b>NEWS</b> · ' : r.tag === 'SCALP' ? '⚡ <b>SCALP</b> · ' : '') + (pend ? `⏳ <b>GARUDA AI · PENDING ${SIDE_TXT[r.decision]} ${r.order_type} ${mkTitle(r.symbol)}</b>` : `🦅 <b>GARUDA AI · SINYAL ${SIDE_TXT[r.decision]} ${mkTitle(r.symbol)}</b>`),
     '',
     pend ? `📌 Harga pending: <b>${fx(r.price, m.digits)}</b> (${r.order_type === 'LIMIT' ? 'menunggu harga kembali ke area ini' : 'masuk saat harga menembus level ini'})` : `▶️ Entry: <b>${fx(r.price, m.digits)}</b>`,
     `🛑 Stop loss: <b>${fx(r.sl, m.digits)}</b>  (−${slP.toFixed(0)} ${m.pip_label})`,
@@ -491,7 +491,7 @@ route('POST', '/signal/publish', 'signal_pub', async ({ request, env, base, wait
   const pending = orderType !== 'MARKET';
   const validMin = Math.max(1, Math.min(int(b.valid_min) || 10, pending ? 480 : 60));
   const riskPct = Math.max(0.25, Math.min(Number(b.risk_pct) || 1, 1));
-  const tag = str(b.tag, 8).toUpperCase() === 'NEWS' ? 'NEWS' : '';
+  const tag = ['NEWS', 'SCALP'].includes(str(b.tag, 8).toUpperCase()) ? str(b.tag, 8).toUpperCase() : '';
   const r = await env.DB.prepare(`INSERT INTO signals (symbol, bar_time, created_at, valid_until, decision, confidence, price, sl, tp, trend_h4, trend_h1, reason, model, cost_usd, tokens_in, tokens_out, status, news, reason_en, news_en, order_type, risk_pct, tag)
       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`)
     .bind(symbol, int(b.bar_time) || 0, t, t + validMin * 60, decision, Math.max(0, Math.min(int(b.confidence) || 0, 100)),
@@ -1277,8 +1277,8 @@ route('PUT', '/admin/ai', 'admin', async ({ request, env }) => {
       const st = int(m.session_start), en = int(m.session_end), mn = Number(m.min_sl), mx = Number(m.max_sl);
       if (!(st >= 0 && st <= 23 && en >= 1 && en <= 24 && st < en)) fail(400, `${sym}: jam sesi tidak valid`);
       if (!(mn > 0 && mx > mn && mx <= 100000)) fail(400, `${sym}: batas SL tidak valid (minimal harus lebih kecil dari maksimal)`);
-      await env.DB.prepare('UPDATE ai_symbols SET enabled=?, session_start=?, session_end=?, weekend=?, min_sl=?, max_sl=?, profile=? WHERE symbol=?')
-        .bind(m.enabled ? 1 : 0, st, en, m.weekend ? 1 : 0, mn, mx, str(m.profile, 2500), sym).run();
+      await env.DB.prepare('UPDATE ai_symbols SET enabled=?, session_start=?, session_end=?, weekend=?, min_sl=?, max_sl=?, profile=?, scalp=? WHERE symbol=?')
+        .bind(m.enabled ? 1 : 0, st, en, m.weekend ? 1 : 0, mn, mx, str(m.profile, 2500), m.scalp ? 1 : 0, sym).run();
     }
   }
   if (b.research_symbol) {
@@ -1380,7 +1380,7 @@ route('GET', '/signal/latest', 'signal_read', async ({ env, url }) => {
   const trackId = int(url.searchParams.get('track')) || 0;
   const tr = trackId && trackId !== (row && row.id) ? await env.DB.prepare('SELECT * FROM signals WHERE id=? AND symbol=?').bind(trackId, symbol).first() : null;
   return json({ ok: true, server_time: t, symbol, enabled: !!m.enabled, signal: signalView(row) || null, tracked: signalView(tr) || null,
-    next: trackId ? Math.min(nextSignalCheck(t, row, st), 60) : nextSignalCheck(t, row, st), filters: f, market: symView(m) });
+    next: Math.min(nextSignalCheck(t, row, st), trackId ? 60 : 3600, m.scalp ? 40 : 3600), filters: f, market: symView(m) });
 });
 
 // ---- Admin: Telegram bot ----

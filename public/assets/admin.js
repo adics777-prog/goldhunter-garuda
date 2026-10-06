@@ -1139,6 +1139,7 @@
                 <div class="field"><label>Berhenti (jam)</label><input class="mk-en" type="number" min="1" max="24" value="${m.session_end}"></div>
                 <div class="field"><label>SL min (${esc(m.pip_label)})</label><input class="mk-mn" type="number" step="any" value="${m.min_sl}"></div>
                 <div class="field"><label>SL maks (${esc(m.pip_label)})</label><input class="mk-mx" type="number" step="any" value="${m.max_sl}"></div>
+                <label class="row small" style="margin:24px 0 0;color:var(--text)" title="Tiap candle M15 tutup Claude mencari setup cepat (risiko maks. 0,5%, SL min 1,2 x ATR M15)"><input type="checkbox" class="mk-sc" ${m.scalp ? 'checked' : ''}> ⚡ Mode Scalping</label>
                 <label class="row small" style="margin:24px 0 0;color:var(--text)"><input type="checkbox" class="mk-we" ${m.weekend ? 'checked' : ''}> Sabtu–Minggu</label></div>
               <div class="field" style="margin-bottom:0"><label>Profil karakter (dibaca Claude)</label><textarea class="mk-pr" rows="4">${esc(m.profile)}</textarea></div></div>`;
           }).join('')}</div>
@@ -1192,7 +1193,7 @@
         news: !!f.news, intermarket: !!f.intermarket, vision: !!f.vision, chart: !!f.chart, paused: !!f.paused, master_trade: !!f.master_trade, level_trigger: !!f.level_trigger, news_mode: !!f.news_mode, momentum: !!f.momentum, momentum_24h: !!f.momentum_24h, interval_min: f.interval_min,
         news_max: f.news_max, research_every: f.research_every, session_start: f.session_start, session_end: f.session_end, friday_last: f.friday_last,
         min_conf: f.min_conf, min_rr: f.min_rr, min_conf_pending: f.min_conf_pending, min_ev: f.min_ev, max_trades_day: f.max_trades_day, max_daily_loss: f.max_daily_loss, valid_min: f.valid_min, cost_cap: f.cost_cap, research_symbol: f.research_symbol,
-        markets: $$('.mkt').map((r) => ({ symbol: r.dataset.sym, enabled: $('.mk-on', r).checked, weekend: $('.mk-we', r).checked,
+        markets: $$('.mkt').map((r) => ({ symbol: r.dataset.sym, enabled: $('.mk-on', r).checked, weekend: $('.mk-we', r).checked, scalp: $('.mk-sc', r).checked,
           session_start: $('.mk-st', r).value, session_end: $('.mk-en', r).value, min_sl: $('.mk-mn', r).value, max_sl: $('.mk-mx', r).value, profile: $('.mk-pr', r).value })),
       };
       await busy($('#aif button[type=submit]'), () => api('/admin/ai', { method: 'PUT', body }));

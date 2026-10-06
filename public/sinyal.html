@@ -107,13 +107,13 @@
   const STATUS_ = () => ({ open: ['b-gold', T('BERJALAN', 'RUNNING')], pending: ['b-blue', T('PENDING', 'PENDING')], cancel: ['b-gray', T('DIBATALKAN', 'CANCELLED')],
     TP: ['b-green', 'TP'], SL: ['b-red', 'SL'], BE: ['b-gold', 'BREAK EVEN'], CLOSE: ['b-gold', T('DITUTUP', 'CLOSED')] });
   const ordTag = (r) => (r.order_type === 'LIMIT' || r.order_type === 'STOP' ? ` <span class="tiny muted">${r.order_type}</span>` : '')
-    + (r.tag === 'NEWS' ? ' <span class="badge b-orange" style="font-size:.62rem;padding:1px 6px">NEWS</span>' : '');
+    + (r.tag === 'NEWS' ? ' <span class="badge b-orange" style="font-size:.62rem;padding:1px 6px">NEWS</span>' : r.tag === 'SCALP' ? ' <span class="badge b-blue" style="font-size:.62rem;padding:1px 6px">⚡ SCALP</span>' : '');
   const side = (d) => `<span class="badge ${d === 'BUY' ? 'b-green' : 'b-red'}">${d === 'BUY' ? '▲ BUY' : '▼ SELL'}</span>`;
   // signal heading: one badge with the order type, then a plain-language line (pending / AI confidence / AI risk)
   const isPend = (r) => r.order_type === 'LIMIT' || r.order_type === 'STOP';
   const pendWaiting = (r) => isPend(r) && (r.status === 'pending' || r.status === 'cancel');   // filled pendings are real positions
   const sigBadge = (r) => `<span class="badge ${r.decision === 'BUY' ? 'b-green' : 'b-red'}">${r.decision === 'BUY' ? '▲ BUY' : '▼ SELL'}${pendWaiting(r) ? ' ' + r.order_type : ''}</span>`
-    + (r.tag === 'NEWS' ? ' <span class="badge b-orange" style="font-size:.62rem;padding:1px 6px">NEWS</span>' : '');
+    + (r.tag === 'NEWS' ? ' <span class="badge b-orange" style="font-size:.62rem;padding:1px 6px">NEWS</span>' : r.tag === 'SCALP' ? ' <span class="badge b-blue" style="font-size:.62rem;padding:1px 6px">⚡ SCALP</span>' : '');
   const pendTxt = (r) => !isPend(r) ? ''
     : r.status === 'pending' ? T('Pending order, belum terisi', 'Pending order, not filled yet') + ' · '
     : r.status === 'cancel' ? T('Pending order tidak terisi', 'Pending order not filled') + ' · '
