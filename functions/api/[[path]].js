@@ -583,6 +583,36 @@ route('POST', '/signal/cancel', 'signal_pub', async ({ request, env, waitUntil }
   return json({ ok: true });
 });
 
+// A waiting pending order revised by the AI (same direction, new levels): same signal number, clients re-place their order
+route('POST', '/signal/modify', 'signal_pub', async ({ request, env, waitUntil }) => {
+  const b = await readJson(request);
+  const row = await env.DB.prepare('SELECT * FROM signals WHERE id=?').bind(int(b.id) || 0).first();
+  if (!row) fail(404, 'Sinyal tidak ditemukan');
+  if (row.status !== 'pending') fail(409, 'Sinyal bukan pending');
+  const type = ['LIMIT', 'STOP'].includes(str(b.order_type, 8).toUpperCase()) ? str(b.order_type, 8).toUpperCase() : row.order_type;
+  const price = Number(b.price), sl = Number(b.sl), tp = Number(b.tp);
+  if (!(price > 0 && sl > 0 && tp > 0)) fail(400, 'price / sl / tp tidak valid');
+  const buy = row.decision === 'BUY';
+  if (buy ? !(sl < price && tp > price) : !(sl > price && tp < price)) fail(400, 'SL / TP di sisi yang salah');
+  const until = now() + Math.max(1, Math.min(int(b.valid_min) || 60, 24 * 60)) * 60;
+  const conf = Math.max(0, Math.min(100, int(b.confidence) || row.confidence));
+  const why = str(b.reason, 2000);
+  await env.DB.prepare('UPDATE signals SET order_type=?, price=?, sl=?, tp=?, valid_until=?, confidence=? WHERE id=?').bind(type, price, sl, tp, until, conf, row.id).run();
+  const mk = await getSymbol(env, row.symbol);
+  let replyTo = null;
+  try { replyTo = row.tg_msgs ? JSON.parse(row.tg_msgs) : null; } catch { replyTo = null; }
+  const u = new Date((until + 7 * 3600) * 1000);
+  const slP = Math.abs(price - sl) / mk.pip, tpP = Math.abs(tp - price) / mk.pip;
+  waitUntil(tgBroadcast(env, [`✏️ <b>PENDING DIUBAH AI</b> · ${SIDE_TXT[row.decision]} ${type} ${mkTitle(row.symbol)} · #S${row.id}`, '',
+    `📌 Harga pending: ${fx(row.price, mk.digits)} → <b>${fx(price, mk.digits)}</b>`,
+    `🛑 SL: ${fx(row.sl, mk.digits)} → <b>${fx(sl, mk.digits)}</b> (−${slP.toFixed(0)} ${mk.pip_label})`,
+    `🎯 TP: ${fx(row.tp, mk.digits)} → <b>${fx(tp, mk.digits)}</b> (+${tpP.toFixed(0)} ${mk.pip_label})`,
+    `⏳ Berlaku sampai ${String(u.getUTCHours()).padStart(2, '0')}:${String(u.getUTCMinutes()).padStart(2, '0')} WIB · keyakinan AI ${conf}%`,
+    ...(why ? ['', `🧠 ${esc(why)}`] : []),
+    '', 'Belum ada posisi: order lama diganti order baru di level ini (lot dihitung ulang dari jarak SL).'].join('\n'), { replyTo }));
+  return json({ ok: true });
+});
+
 // The MASTER EA follows every BUY/SELL signal and reports how it ended; pips are computed here from the entry
 route('POST', '/signal/close', 'signal_pub', async ({ request, env, waitUntil }) => {
   const b = await readJson(request);
