@@ -617,7 +617,8 @@ route('POST', '/signal/modify', 'signal_pub', async ({ request, env, waitUntil }
   const until = now() + Math.max(1, Math.min(int(b.valid_min) || 60, 24 * 60)) * 60;
   const conf = Math.max(0, Math.min(100, int(b.confidence) || row.confidence));
   const why = str(b.reason, 2000);
-  await env.DB.prepare('UPDATE signals SET order_type=?, price=?, sl=?, tp=?, valid_until=?, confidence=? WHERE id=?').bind(type, price, sl, tp, until, conf, row.id).run();
+  const risk = Number(b.risk_pct) > 0 ? Math.max(0.25, Math.min(1, Number(b.risk_pct))) : row.risk_pct;
+  await env.DB.prepare('UPDATE signals SET order_type=?, price=?, sl=?, tp=?, valid_until=?, confidence=?, risk_pct=? WHERE id=?').bind(type, price, sl, tp, until, conf, risk, row.id).run();
   const mk = await getSymbol(env, row.symbol);
   let replyTo = null;
   try { replyTo = row.tg_msgs ? JSON.parse(row.tg_msgs) : null; } catch { replyTo = null; }
