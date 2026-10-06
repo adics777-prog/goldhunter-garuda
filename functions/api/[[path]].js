@@ -583,6 +583,26 @@ route('POST', '/signal/cancel', 'signal_pub', async ({ request, env, waitUntil }
   return json({ ok: true });
 });
 
+// The AI planned a pending order but the EA could not place it (filters / broker): clear reason on Telegram and on the live card
+route('POST', '/signal/pending-fail', 'signal_pub', async ({ request, env, waitUntil }) => {
+  const b = await readJson(request);
+  const symbol = canonSymbol(str(b.symbol, 20));
+  const mk = await getSymbol(env, symbol);
+  if (!mk) fail(404, 'Pasar tidak dikenal');
+  const dec = str(b.decision, 4).toUpperCase() === 'BUY' ? 'BUY' : 'SELL';
+  const type = str(b.order_type, 8).toUpperCase() === 'STOP' ? 'STOP' : 'LIMIT';
+  const price = Number(b.price) || 0, sl = Number(b.sl) || 0, tp = Number(b.tp) || 0;
+  const why = str(b.reason, 400) || 'tidak lolos saringan EA';
+  const text = `Rencana ${dec} ${type} ${fx(price, mk.digits)} tidak dipasang: ${why}`;
+  await env.DB.prepare("UPDATE signals SET pend_fail=? WHERE id = (SELECT MAX(id) FROM signals WHERE symbol=? AND decision='WAIT' AND created_at > ?)")
+    .bind(text, symbol, now() - 15 * 60).run();
+  waitUntil(tgBroadcast(env, [`⚠️ <b>PENDING TIDAK DIPASANG</b> · ${SIDE_TXT[dec]} ${type} ${mkTitle(symbol)}`, '',
+    `Rencana AI: ${dec} ${type} <b>${fx(price, mk.digits)}</b>${sl ? ` · SL ${fx(sl, mk.digits)}` : ''}${tp ? ` · TP ${fx(tp, mk.digits)}` : ''}${int(b.confidence) ? ` · keyakinan ${int(b.confidence)}%` : ''}`,
+    `❗ Alasan: ${esc(why)}`, '',
+    'Tidak ada order dan tidak ada posisi. AI terus memantau; pending baru bisa dipasang di analisis berikutnya.'].join('\n')));
+  return json({ ok: true });
+});
+
 // A waiting pending order revised by the AI (same direction, new levels): same signal number, clients re-place their order
 route('POST', '/signal/modify', 'signal_pub', async ({ request, env, waitUntil }) => {
   const b = await readJson(request);
@@ -1145,7 +1165,7 @@ route('GET', '/signal/feed', 'public', async ({ env, url, user }) => {
   const lastView = last ? { ...last, reason: openHidden(last) ? '' : last.reason, reason_en: openHidden(last) ? '' : last.reason_en } : null;   // news is public context
   // latest analysis of every market + its newest WAIT picture (last 24 h) for the live cards on /sinyal
   const { results: lastRows } = await env.DB.prepare(`SELECT id, symbol, decision, created_at, valid_until, reason, news, reason_en, news_en, trend_h4, trend_h1, confidence, status,
-      order_type, price, sl, tp, sl_now, be_at, (SELECT COUNT(*) FROM signal_charts c WHERE c.signal_id = signals.id AND c.kind = 'open') AS has_chart FROM signals
+      order_type, price, sl, tp, sl_now, be_at, pend_fail, (SELECT COUNT(*) FROM signal_charts c WHERE c.signal_id = signals.id AND c.kind = 'open') AS has_chart FROM signals
       WHERE id IN (SELECT MAX(id) FROM signals WHERE COALESCE(tag, '') <> 'SCALP' GROUP BY symbol)`).all();
   const { results: waitPics } = await env.DB.prepare(`SELECT s.symbol, MAX(s.id) AS id, MAX(s.created_at) AS at FROM signals s
       JOIN signal_charts c ON c.signal_id = s.id AND c.kind = 'open' WHERE s.decision = 'WAIT' AND s.created_at > ? GROUP BY s.symbol`).bind(t - DAY).all();

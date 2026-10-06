@@ -18,7 +18,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@700;900&family=Poppins:wght@300;400;600;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="/assets/app.css?v=f6514e61">
+<link rel="stylesheet" href="/assets/app.css?v=2c8dc762">
 <style>
   .pub-top{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:14px clamp(16px,4vw,40px);border-bottom:1px solid var(--line);background:var(--bg-2);position:sticky;top:0;z-index:20}
   .pub-top .brand{padding:0}
@@ -153,6 +153,7 @@
           <div class="row" style="gap:8px;flex-wrap:wrap"><span class="mk">${esc(x.symbol)}</span>${dec(x)}<span class="small muted">${esc(ago(x.created_at))}</span></div>
           <div class="small muted" style="margin-top:6px">${T('Tren', 'Trend')} H4 ${tr(x.trend_h4)} · H1 ${tr(x.trend_h1)}</div>
           ${lvl(x)}
+          ${x.decision === 'WAIT' && x.pend_fail ? `<div class="pend-box fail-box">⚠️ ${esc(x.pend_fail)}</div>` : ''}
           ${x.scalp ? `<div class="pend-box scalp-box"><div><b>⚡ SCALP</b> ${side(x.scalp.decision)} <span class="tiny muted">${esc(ago(x.scalp.created_at))}</span></div>
             ${x.scalp.locked ? `<div class="tiny">🔒 ${T('Entry, SL, TP khusus member.', 'Entry, SL, TP are for members only.')} <a href="/masuk">${T('Masuk', 'Log in')}</a></div>`
               : `<div>Entry <b class="mono">${num(x.scalp.price, x.symbol)}</b> · SL <b class="mono neg">${num(x.scalp.sl, x.symbol)}</b>${x.scalp.sl_now ? ` <b class="mono pos">→ BE ${num(x.scalp.sl_now, x.symbol)}</b>` : ''} · TP <b class="mono pos">${num(x.scalp.tp, x.symbol)}</b></div>`}
