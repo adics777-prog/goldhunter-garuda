@@ -1116,14 +1116,16 @@ route('GET', '/signal/feed', 'public', async ({ env, url, user }) => {
   // latest analysis of every market + its newest WAIT picture (last 24 h) for the live cards on /sinyal
   const { results: lastRows } = await env.DB.prepare(`SELECT id, symbol, decision, created_at, valid_until, reason, news, reason_en, news_en, trend_h4, trend_h1, confidence, status,
       order_type, price, sl, tp, sl_now, be_at, (SELECT COUNT(*) FROM signal_charts c WHERE c.signal_id = signals.id AND c.kind = 'open') AS has_chart FROM signals
-      WHERE id IN (SELECT MAX(id) FROM signals GROUP BY symbol)`).all();
+      WHERE id IN (SELECT MAX(id) FROM signals WHERE COALESCE(tag, '') <> 'SCALP' GROUP BY symbol)`).all();
   const { results: waitPics } = await env.DB.prepare(`SELECT s.symbol, MAX(s.id) AS id, MAX(s.created_at) AS at FROM signals s
       JOIN signal_charts c ON c.signal_id = s.id AND c.kind = 'open' WHERE s.decision = 'WAIT' AND s.created_at > ? GROUP BY s.symbol`).bind(t - DAY).all();
   // a running position (then a waiting pending order) is shown instead of a later WAIT analysis of that market
   const { results: liveRows } = await env.DB.prepare(`SELECT id, symbol, decision, created_at, valid_until, reason, news, reason_en, news_en, trend_h4, trend_h1, confidence, status,
-      order_type, price, sl, tp, sl_now, be_at, (SELECT COUNT(*) FROM signal_charts c WHERE c.signal_id = signals.id AND c.kind = 'open') AS has_chart FROM signals
+      order_type, price, sl, tp, sl_now, be_at, tag, (SELECT COUNT(*) FROM signal_charts c WHERE c.signal_id = signals.id AND c.kind = 'open') AS has_chart FROM signals
       WHERE decision IN ('BUY','SELL') AND status IN ('open','pending') AND created_at > ? ORDER BY CASE status WHEN 'open' THEN 0 ELSE 1 END, id DESC`).bind(t - 3 * DAY).all();
-  for (const lr of liveRows) {
+  const scalpBy = {};
+  for (const lr of liveRows) if (lr.tag === 'SCALP' && lr.status === 'open' && !scalpBy[lr.symbol]) scalpBy[lr.symbol] = lr;
+  for (const lr of liveRows.filter((x) => x.tag !== 'SCALP')) {
     const k = lastRows.findIndex((x) => x.symbol === lr.symbol);
     if (k >= 0 && lastRows[k].id !== lr.id && !(lastRows[k].status === 'open' && lr.status === 'pending')) lastRows[k] = lr;
     else if (k < 0) lastRows.push(lr);
@@ -1132,8 +1134,11 @@ route('GET', '/signal/feed', 'public', async ({ env, url, user }) => {
   const lastByMarket = lastRows.filter((x) => enabledSyms.has(x.symbol)).map((x) => {
     const pic = waitPics.find((p) => p.symbol === x.symbol);
     const hide = openHidden(x);
+    const sc = scalpBy[x.symbol];
+    const scalp = sc ? { id: sc.id, decision: sc.decision, created_at: sc.created_at, locked: !member, price: member ? sc.price : null, sl: member ? sc.sl : null,
+      tp: member ? sc.tp : null, sl_now: member ? sc.sl_now || 0 : 0, be_at: sc.be_at || 0 } : null;
     return { ...x, reason: hide ? '' : x.reason, reason_en: hide ? '' : x.reason_en, price: hide ? null : x.price, sl: hide ? null : x.sl, tp: hide ? null : x.tp,
-      locked: hide, has_chart: !!x.has_chart, wait_chart: pic ? pic.id : 0, wait_chart_at: pic ? pic.at : 0 };
+      locked: hide, has_chart: !!x.has_chart, wait_chart: pic ? pic.id : 0, wait_chart_at: pic ? pic.at : 0, scalp };
   });
   return json({ ok: true, server_time: t, member, signals, last: lastView, last_by_market: lastByMarket, stats30: stat, symbol: sym, market_stats: perMk,
     markets: markets.filter((m) => m.enabled).map((m) => { const v = symView(m); delete v.profile; return v; }) });
@@ -1370,9 +1375,14 @@ route('POST', '/admin/ai/test', 'admin', async ({ env }) => {
 
 route('GET', '/signal/latest', 'signal_read', async ({ env, url }) => {
   const symbol = canonSymbol(url.searchParams.get('symbol') || 'XAUUSD');      // old clients without ?symbol= follow gold
-  const row = await env.DB.prepare('SELECT * FROM signals WHERE symbol=? ORDER BY id DESC LIMIT 1').bind(symbol).first();
+  let row = await env.DB.prepare('SELECT * FROM signals WHERE symbol=? ORDER BY id DESC LIMIT 1').bind(symbol).first();
   const t = now();
   const m = await getSymbol(env, symbol);
+  if (m.scalp && row && row.tag !== 'SCALP' && !['BUY', 'SELL'].includes(row.decision)) {
+    const sc = await env.DB.prepare("SELECT * FROM signals WHERE symbol=? AND tag='SCALP' AND decision IN ('BUY','SELL') AND status='open' AND created_at > ? ORDER BY id DESC LIMIT 1")
+      .bind(symbol, t - 150).first();
+    if (sc) row = sc;
+  }
   const st = await getSettings(env);
   const f = signalFilters(st);
   f.min_sl = m.min_sl * m.pip;                 // price units, like the client's own checks

@@ -257,3 +257,4 @@ label.row{flex-wrap:nowrap}
 }
 .pend-box{margin-top:8px;padding:8px 10px;border:1px dashed rgba(77,163,255,.45);border-radius:10px;background:rgba(77,163,255,.06);font-size:.86rem;overflow-wrap:anywhere}
 .pend-box .pos{color:#6ee7a2}.pend-box .neg{color:#ff8b95}
+.scalp-box{border-color:rgba(245,196,81,.5);background:rgba(245,196,81,.06)}
