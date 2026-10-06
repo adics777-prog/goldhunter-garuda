@@ -1117,9 +1117,9 @@
           ${chk('paused', c.paused, '<b>JEDA analisis</b> (Claude tidak dipanggil, tidak ada sinyal baru)', 'Sinyal yang sedang berjalan tetap dipantau sampai selesai.')}
           ${chk('master_trade', c.master_trade, 'EA master ikut membuka order di akunnya sendiri')}</div>
         <div class="card" data-tab="jadwal"><h3>🎯 Saringan sinyal (berlaku untuk semua EA client)</h3>
-          <div class="grid c2" style="gap:0 12px">${num('min_conf', c.min_conf, 'Keyakinan minimal (%)')}${num('min_rr', c.min_rr, 'Reward : risk minimal', '', '0.1')}
+          <div class="grid c2" style="gap:0 12px">${num('min_conf_pending', c.min_conf_pending, 'Keyakinan minimal entry (%)', 'Berlaku untuk entry market & pending order')}${num('min_rr', c.min_rr, 'Reward : risk minimal', '', '0.1')}
 </div>
-          <div class="grid c2" style="gap:0 12px">${num('min_conf_pending', c.min_conf_pending, 'Keyakinan minimal pending order (%)', 'Pending di lokasi bagus dengan SL ketat boleh lebih rendah')}${num('min_ev', c.min_ev, 'Nilai harapan minimal (R)', 'keyakinan × R:R − (1 − keyakinan). 0,5 = rata-rata +0,5 kali risiko per trade', '0.1')}</div>
+          <div class="grid c2" style="gap:0 12px">${num('min_ev', c.min_ev, 'Nilai harapan minimal (R)', 'keyakinan × R:R − (1 − keyakinan). 0,5 = rata-rata +0,5 kali risiko per trade', '0.1')}</div>
           <div class="grid c2" style="gap:0 12px">${num('max_trades_day', c.max_trades_day || 10, 'Maksimal trade per hari (per pasar)', 'Berlaku untuk EA master & semua EA client')}${num('max_daily_loss', c.max_daily_loss ?? 3, 'Stop rugi harian (%)', 'Rugi hari ini mencapai x% saldo awal hari: berhenti sampai besok. 0 = mati', '0.5')}</div>
           ${num('valid_min', c.valid_min, 'Sinyal berlaku (menit)', 'Client tidak masuk lagi sesudah waktu ini')}
           ${num('cost_cap', c.cost_cap, 'Batas biaya Claude per hari ($)', 'Lewat batas: analisis berhenti sampai besok', '0.5')}</div>
