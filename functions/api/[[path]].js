@@ -1238,24 +1238,30 @@ const signalFilters = (s) => ({ min_conf: Number(s.ai_min_conf || 65), min_rr: N
 
 // MASTER EA: all settings incl. the Claude API key (only with the master secret). Also records that the master is alive.
 route('GET', '/master/config', 'signal_pub', async ({ env, url }) => {
-  const s = await getSettings(env);
-  const cfg = aiConfig(s);
-  cfg.claude_key = s.ai_claude_key_enc ? await decrypt(env, s.ai_claude_key_enc) : '';
   const sym = canonSymbol(url.searchParams.get('symbol') || 'XAUUSD');
-  const m = await getSymbol(env, sym);
-  cfg.market = symView(m);
-  cfg.research_role = sym === canonSymbol(s.ai_research_symbol || 'XAUUSD');
-  cfg.markets = (await allSymbols(env)).filter((x) => x.enabled).map((x) => x.symbol);
   // Claude cost of every master today (UTC), so the daily cap covers all markets together
   const t0 = now() - (now() % DAY);
-  const ct = await env.DB.prepare('SELECT COALESCE(SUM(cost_usd),0) AS c FROM signals WHERE created_at > ?').bind(t0).first();
+  // independent reads in parallel: the masters give up after a few seconds when D1 round trips are slow
+  const [s, m, all, ct] = await Promise.all([
+    getSettings(env),
+    getSymbol(env, sym),
+    allSymbols(env),
+    env.DB.prepare('SELECT COALESCE(SUM(cost_usd),0) AS c FROM signals WHERE created_at > ?').bind(t0).first(),
+  ]);
+  const cfg = aiConfig(s);
+  cfg.claude_key = s.ai_claude_key_enc ? await decrypt(env, s.ai_claude_key_enc) : '';
+  cfg.market = symView(m);
+  cfg.research_role = sym === canonSymbol(s.ai_research_symbol || 'XAUUSD');
+  cfg.markets = all.filter((x) => x.enabled).map((x) => x.symbol);
   cfg.cost_today = Number(ct.c) || 0;
   cfg.tg_wait = s.telegram_wait === '1' || s.web_wait_chart !== '0';      // picture also shown on /sinyal
   cfg.tg_wait_hours = Math.max(1, Math.min(Number(s.telegram_wait_hours) || 3, 24));
   const info = `${str(url.searchParams.get('acct'), 30)} · ${str(url.searchParams.get('ver'), 12)} · ${str(url.searchParams.get('status'), 80)}`;
-  await putSetting(env, 'ai_master_seen', String(now()));
-  await putSetting(env, 'ai_master_info', `${sym} · ${info}`);
-  if (m.symbol && m.pip) await env.DB.prepare('UPDATE ai_symbols SET master_seen=?, master_info=? WHERE symbol=?').bind(now(), info, sym).run();
+  await Promise.all([
+    putSetting(env, 'ai_master_seen', String(now())),
+    putSetting(env, 'ai_master_info', `${sym} · ${info}`),
+    m.symbol && m.pip ? env.DB.prepare('UPDATE ai_symbols SET master_seen=?, master_info=? WHERE symbol=?').bind(now(), info, sym).run() : null,
+  ]);
   return json({ ok: true, server_time: now(), config: cfg });
 });
 
