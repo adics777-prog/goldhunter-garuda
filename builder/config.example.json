@@ -3,7 +3,7 @@
   "token": "ISI_SAMA_DENGAN_BUILDER_TOKEN_DI_CLOUDFLARE",
   "poll_seconds": 15,
   "mt5": {
-    "ea_source": "C:/Users/User/Documents/Robot Trading/GoldHunter_Garuda.mq5",
+    "ea_source": "C:/Users/User/Documents/Robot Trading/GOLD HUNTER GARUDA.mq5",
     "metaeditor": "C:/Program Files/MetaTrader 5 EXNESS/MetaEditor64.exe",
     "mql_dir": "C:/Users/User/AppData/Roaming/MetaQuotes/Terminal/53785E099C927DB68A545C249CDBCE06/MQL5"
   },
@@ -14,7 +14,7 @@
   },
   "report_base": "https://goldhuntergaruda.com",
   "garuda_ai": {
-    "ex5": "C:/Users/User/Documents/Robot Trading/GarudaAI OneShot/GarudaAI_OneShot.ex5",
-    "mq5": "C:/Users/User/Documents/Robot Trading/GarudaAI OneShot/GarudaAI_OneShot.mq5"
+    "ex5": "C:/Users/User/Documents/Robot Trading/backup/arsip/GarudaAI OneShot/GarudaAI_OneShot.ex5",
+    "mq5": "C:/Users/User/Documents/Robot Trading/backup/arsip/GarudaAI OneShot/GarudaAI_OneShot.mq5"
   }
 }
