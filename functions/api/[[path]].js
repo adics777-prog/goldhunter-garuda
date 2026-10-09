@@ -311,6 +311,13 @@ const eaMoney = (v, cur) => `${Number(v) > 0 ? '+' : (Number(v) < 0 ? '-' : '')}
 const eaPlain = (v) => Math.abs(Number(v) || 0).toLocaleString('id-ID', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 const eaDur = (sec) => { const m = Math.max(0, Math.round(sec / 60)); return m >= 1440 ? `${Math.floor(m / 1440)} hari ${Math.floor((m % 1440) / 60)} jam` : m >= 60 ? `${Math.floor(m / 60)} jam ${m % 60} mnt` : `${m} menit`; };
 const EA_LIVE_KEYS = ['ea_master_key', 'ea_report_hour', 'ea_tg_min_layers', 'ea_offline_min', 'ea_tg_enabled'];
+const eaSym = (v) => { const x = String(v || '').toUpperCase(); const m = x.match(/^([A-Z]{6})/); return m ? m[1] : x.slice(0, 12); };
+const EA_SYM_NAME = { XAUUSD: 'Emas', BTCUSD: 'Bitcoin', EURUSD: 'EURUSD', USDJPY: 'USDJPY' };
+const eaSymTitle = (sym) => `${sym}${EA_SYM_NAME[sym] ? ` (${EA_SYM_NAME[sym]})` : ''}`;
+async function eaLiveSyms(env) {
+  const { results } = await env.DB.prepare('SELECT symbol, updated_at, data FROM ea_live_sym ORDER BY symbol').all();
+  return results.map((r) => { let d = {}; try { d = JSON.parse(r.data || '{}'); } catch { d = {}; } return { symbol: r.symbol, at: r.updated_at, d }; });
+}
 function eaCfg(s) {
   return { key: String(s.ea_master_key || '').trim(), hour: Number.isFinite(Number(s.ea_report_hour)) && s.ea_report_hour !== '' ? int(s.ea_report_hour) : 21,
     minLayers: s.ea_tg_min_layers === '' || s.ea_tg_min_layers == null ? 4 : int(s.ea_tg_min_layers), offlineMin: int(s.ea_offline_min) || 5, tg: s.ea_tg_enabled !== '0' };
@@ -334,28 +341,31 @@ async function eaOfflineCheck(env, s, base) {
   if (now() - at > cfg.offlineMin * 60 && s.ea_offline_state !== '1') {
     await putSetting(env, 'ea_offline_state', '1');
     await eaTg(env, cfg, [`🔴 <b>EA GOLD HUNTER GARUDA TIDAK MENGIRIM DATA</b>`, `Data terakhir ${wibClock(at)} (${eaDur(now() - at)} lalu). Cek VPS / MT5 / koneksi internet.`,
-      `Posisi terakhir: BUY ${(d.buy && d.buy.count) || 0} · SELL ${(d.sell && d.sell.count) || 0} · floating ${eaMoney(d.floating || 0, d.currency)}`].join('\n'), base);
+      `Floating akun terakhir ${eaMoney(d.floating || 0, d.currency)}`].join('\n'), base);
   }
 }
 async function eaDailyReport(env, s, cfg, d, t, base) {
   const day = wibDay(t);
   if (wibHour(t) < cfg.hour || s.ea_report_day === day) return;
   await putSetting(env, 'ea_report_day', day);
-  const [row, ser] = await Promise.all([
+  const [row, ser, syms, perSym] = await Promise.all([
     env.DB.prepare('SELECT * FROM ea_days WHERE day=?').bind(day).first(),
     env.DB.prepare(`SELECT COUNT(*) AS n, COALESCE(SUM(CASE WHEN profit>0 THEN 1 ELSE 0 END),0) AS wins, COALESCE(AVG(duration),0) AS dur,
         COALESCE(MAX(positions),0) AS maxpos, COALESCE(MAX(lots),0) AS maxlots FROM ea_series WHERE closed_at >= ?`).bind(wibDayStart(t)).first(),
+    eaLiveSyms(env),
+    env.DB.prepare('SELECT * FROM ea_days_sym WHERE day=? ORDER BY profit DESC').bind(day).all(),
   ]);
   const cur = d.currency || '';
+  const totalDay = perSym.results.length ? perSym.results.reduce((a, x) => a + x.profit, 0) : d.day;
   const pct = (v) => d.balance > 0 ? ` (${(v / d.balance * 100 >= 0 ? '+' : '')}${(v / d.balance * 100).toFixed(2)}% modal)` : '';
+  const posNow = syms.map((x) => `${eaSym(x.symbol)} B${(x.d.buy && x.d.buy.count) || 0}/S${(x.d.sell && x.d.sell.count) || 0}`).join(' · ');
   const text = [`📊 <b>LAPORAN HARIAN GOLD HUNTER GARUDA</b> · ${wibDate(t)}`, '',
-    `Profit hari ini: <b>${eaMoney(d.day, cur)}</b>${pct(d.day)}`,
-    `Minggu ini: ${eaMoney(d.week, cur)} · Bulan ini: ${eaMoney(d.month, cur)}`,
+    `Profit hari ini: <b>${eaMoney(totalDay, cur)}</b>${pct(totalDay)}`,
+    ...perSym.results.map((x) => `  • ${eaSym(x.symbol)}: ${eaMoney(x.profit, cur)} · ${x.series} seri (${x.wins} profit) · basket terpanjang ${x.max_layers} · floating terdalam ${eaMoney(x.min_float, cur)}`),
     `Seri selesai: ${ser.n} (${ser.wins} profit)${ser.n ? ` · rata-rata ${eaDur(ser.dur)} · basket terpanjang ${ser.maxpos} posisi / ${Number(ser.maxlots).toFixed(2)} lot` : ''}`,
-    `Equity ${eaPlain(d.equity)} ${cur} · floating ${eaMoney(d.floating, cur)} · DD terdalam hari ini ${row ? row.max_dd_pct.toFixed(2) : '0.00'}%`,
-    `Posisi sekarang: BUY ${(d.buy && d.buy.count) || 0} · SELL ${(d.sell && d.sell.count) || 0}`,
-    d.pocket ? `Kantong profit: saldo ${eaPlain(d.pocket.saldo)} · dipakai ${d.pocket.cuts || 0}×` : '',
-    `Mode ${esc(d.mode || '')} · lot ×${d.lot_mult} · TP ${d.tp_pts} poin · EA v${esc(d.version || '')}`].filter((x) => x !== '').join('\n');
+    `Equity ${eaPlain(d.equity)} ${cur} · floating akun ${eaMoney(d.floating, cur)} · DD terdalam hari ini ${row ? row.max_dd_pct.toFixed(2) : '0.00'}%`,
+    posNow ? `Posisi sekarang: ${posNow}` : '',
+    `Mode ${esc(d.mode || '')} · EA v${esc(d.version || '')}`].filter((x) => x !== '').join('\n');
   await eaTg(env, cfg, text, base);
 }
 route('POST', '/ea/live', 'public', async ({ request, env, waitUntil, base }) => {
@@ -377,14 +387,25 @@ route('POST', '/ea/live', 'public', async ({ request, env, waitUntil, base }) =>
     buy: side(b.buy), sell: side(b.sell), pocket: { saldo: eaNum(pk.saldo), in: eaNum(pk.in), out: eaNum(pk.out), cuts: int(pk.cuts) || 0 },
     news: { name: str(nw.name, 80), time: int(nw.time) || 0, active: !!nw.active, mode: str(nw.mode, 8) } };
   const day = wibDay(t);
-  const prev = await env.DB.prepare('SELECT min_equity, max_dd_pct FROM ea_days WHERE day=?').bind(day).first();
+  const sym = eaSym(snap.symbol);
+  const symFloat = ((snap.buy && snap.buy.profit) || 0) + ((snap.sell && snap.sell.profit) || 0);
+  const symLayers = Math.max((snap.buy && snap.buy.count) || 0, (snap.sell && snap.sell.count) || 0);
+  const [prev, prevSym] = await Promise.all([
+    env.DB.prepare('SELECT min_equity, max_dd_pct FROM ea_days WHERE day=?').bind(day).first(),
+    env.DB.prepare('SELECT max_layers, min_float FROM ea_days_sym WHERE symbol=? AND day=?').bind(sym, day).first(),
+  ]);
   const minEq = prev && prev.min_equity > 0 ? Math.min(prev.min_equity, snap.equity) : snap.equity;
   const dd = snap.balance > 0 ? Math.max(prev ? prev.max_dd_pct : 0, Math.max(0, (snap.balance - snap.equity) / snap.balance * 100)) : 0;
   await env.DB.batch([
     env.DB.prepare('UPDATE ea_live SET updated_at=?, data=? WHERE id=1').bind(t, JSON.stringify(snap)),
+    env.DB.prepare('INSERT INTO ea_live_sym (symbol, updated_at, data) VALUES (?,?,?) ON CONFLICT(symbol) DO UPDATE SET updated_at=excluded.updated_at, data=excluded.data').bind(sym, t, JSON.stringify(snap)),
+    env.DB.prepare(`INSERT INTO ea_days_sym (symbol, day, profit, max_layers, min_float, currency, updated_at) VALUES (?,?,?,?,?,?,?)
+        ON CONFLICT(symbol, day) DO UPDATE SET profit=excluded.profit, max_layers=excluded.max_layers, min_float=excluded.min_float, currency=excluded.currency, updated_at=excluded.updated_at`)
+      .bind(sym, day, snap.day, Math.max(prevSym ? prevSym.max_layers : 0, symLayers), Math.min(prevSym ? prevSym.min_float : 0, symFloat), snap.currency, t),
     env.DB.prepare(`INSERT INTO ea_days (day, profit, balance, equity, min_equity, max_dd_pct, currency, updated_at) VALUES (?,?,?,?,?,?,?,?)
-        ON CONFLICT(day) DO UPDATE SET profit=excluded.profit, balance=excluded.balance, equity=excluded.equity, min_equity=excluded.min_equity, max_dd_pct=excluded.max_dd_pct,
+        ON CONFLICT(day) DO UPDATE SET balance=excluded.balance, equity=excluded.equity, min_equity=excluded.min_equity, max_dd_pct=excluded.max_dd_pct,
         currency=excluded.currency, updated_at=excluded.updated_at`).bind(day, snap.day, snap.balance, snap.equity, minEq, Math.round(dd * 100) / 100, snap.currency, t),
+    env.DB.prepare('UPDATE ea_days SET profit=(SELECT COALESCE(SUM(profit),0) FROM ea_days_sym WHERE day=?), series=(SELECT COALESCE(SUM(series),0) FROM ea_days_sym WHERE day=?), wins=(SELECT COALESCE(SUM(wins),0) FROM ea_days_sym WHERE day=?) WHERE day=?').bind(day, day, day, day),
   ]);
   const msgs = [];
   const evs = Array.isArray(b.events) ? b.events.slice(0, 50) : [];
@@ -395,13 +416,14 @@ route('POST', '/ea/live', 'public', async ({ request, env, waitUntil, base }) =>
     const at = int(e.at) || t, sd = str(e.side, 4).toUpperCase(), profit = eaNum(e.profit), positions = int(e.positions) || 0, lots = eaNum(e.lots), dur = int(e.duration) || 0, text = str(e.text, 300);
     if (kind === 'seri') {
       await env.DB.batch([
-        env.DB.prepare('INSERT INTO ea_series (closed_at, side, positions, lots, profit, duration, currency) VALUES (?,?,?,?,?,?,?)').bind(at, sd, positions, lots, profit, dur, snap.currency),
+        env.DB.prepare('INSERT INTO ea_series (closed_at, side, positions, lots, profit, duration, currency, symbol) VALUES (?,?,?,?,?,?,?,?)').bind(at, sd, positions, lots, profit, dur, snap.currency, sym),
+        env.DB.prepare('INSERT INTO ea_days_sym (symbol, day, series, wins, currency, updated_at) VALUES (?,?,1,?,?,?) ON CONFLICT(symbol, day) DO UPDATE SET series=series+1, wins=wins+excluded.wins').bind(sym, wibDay(at), profit > 0 ? 1 : 0, snap.currency, t),
         env.DB.prepare('INSERT INTO ea_days (day, series, wins, currency, updated_at) VALUES (?,1,?,?,?) ON CONFLICT(day) DO UPDATE SET series=series+1, wins=wins+excluded.wins').bind(wibDay(at), profit > 0 ? 1 : 0, snap.currency, t),
       ]);
-      if (positions >= cfg.minLayers) msgs.push(`${profit >= 0 ? '✅' : '🟠'} <b>Seri ${sd} selesai ${eaMoney(profit, snap.currency)}</b>\n${positions} posisi · ${lots.toFixed(2)} lot · ${eaDur(dur)}`);
+      if (positions >= cfg.minLayers) msgs.push(`${profit >= 0 ? '✅' : '🟠'} <b>${eaSymTitle(sym)} · Seri ${sd} selesai ${eaMoney(profit, snap.currency)}</b>\n${positions} posisi · ${lots.toFixed(2)} lot · ${eaDur(dur)}`);
     } else {
-      await env.DB.prepare('INSERT INTO ea_events (at, kind, side, text, profit) VALUES (?,?,?,?,?)').bind(at, kind, sd, text, profit).run();
-      if (kind !== 'reduction') msgs.push(`<b>${TITLE[kind]}</b>\n${esc(text)}`);
+      await env.DB.prepare('INSERT INTO ea_events (at, kind, side, text, profit, symbol) VALUES (?,?,?,?,?,?)').bind(at, kind, sd, text, profit, sym).run();
+      if (kind !== 'reduction') msgs.push(`<b>${TITLE[kind]} · ${eaSymTitle(sym)}</b>\n${esc(text)}`);
     }
   }
   if (s.ea_offline_state === '1') { await putSetting(env, 'ea_offline_state', '0'); msgs.push('🟢 <b>EA GOLD HUNTER GARUDA online kembali</b>'); }
@@ -415,18 +437,23 @@ route('GET', '/live', 'public', async ({ env, waitUntil, base }) => {
   const { at, d } = await eaLiveRow(env);
   const t = now();
   waitUntil(eaOfflineCheck(env, s, base).catch((e) => console.error('ea offline', e)));
-  const [series, days, events, today] = await Promise.all([
-    env.DB.prepare('SELECT closed_at, side, positions, lots, profit, duration, currency FROM ea_series ORDER BY id DESC LIMIT 40').all(),
+  const [series, days, events, today, syms, daysSym, todaySym] = await Promise.all([
+    env.DB.prepare('SELECT closed_at, side, positions, lots, profit, duration, currency, symbol FROM ea_series ORDER BY id DESC LIMIT 60').all(),
     env.DB.prepare('SELECT * FROM ea_days ORDER BY day DESC LIMIT 31').all(),
-    env.DB.prepare('SELECT at, kind, side, text, profit FROM ea_events ORDER BY id DESC LIMIT 20').all(),
+    env.DB.prepare('SELECT at, kind, side, text, profit, symbol FROM ea_events ORDER BY id DESC LIMIT 30').all(),
     env.DB.prepare(`SELECT COUNT(*) AS n, COALESCE(SUM(CASE WHEN profit>0 THEN 1 ELSE 0 END),0) AS wins, COALESCE(SUM(profit),0) AS profit,
         COALESCE(AVG(duration),0) AS dur, COALESCE(MAX(positions),0) AS maxpos FROM ea_series WHERE closed_at >= ?`).bind(wibDayStart(t)).first(),
+    eaLiveSyms(env),
+    env.DB.prepare('SELECT * FROM ea_days_sym WHERE day >= ? ORDER BY day DESC, symbol').bind(wibDay(t - 30 * DAY)).all(),
+    env.DB.prepare(`SELECT symbol, COUNT(*) AS n, COALESCE(SUM(CASE WHEN profit>0 THEN 1 ELSE 0 END),0) AS wins, COALESCE(SUM(profit),0) AS profit,
+        COALESCE(AVG(duration),0) AS dur, COALESCE(MAX(positions),0) AS maxpos FROM ea_series WHERE closed_at >= ? GROUP BY symbol`).bind(wibDayStart(t)).all(),
   ]);
   const snap = { ...d };
   delete snap.login;
   delete snap.server;
+  const symbols = syms.map((x) => { const sd = { ...x.d }; delete sd.login; delete sd.server; return { symbol: x.symbol, at: x.at, online: t - x.at <= cfg.offlineMin * 60, snapshot: sd }; });
   return json({ ok: true, configured: !!cfg.key, at, age: at ? t - at : null, online: !!at && t - at <= cfg.offlineMin * 60, offline_min: cfg.offlineMin,
-    snapshot: snap, today, series: series.results, days: days.results, events: events.results, server_time: t });
+    snapshot: snap, symbols, today, today_sym: todaySym.results, series: series.results, days: days.results, days_sym: daysSym.results, events: events.results, server_time: t });
 });
 
 // ======================= AI SIGNALS (MASTER EA -> server -> CLIENT EAs) =======================

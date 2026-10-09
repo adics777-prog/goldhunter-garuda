@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title data-en="GOLD HUNTER GARUDA Live: real account, every minute">GOLD HUNTER GARUDA Live: akun nyata, tiap menit</title>
-<meta name="description" content="Pantau EA GOLD HUNTER GARUDA secara langsung: profit hari ini, minggu dan bulan, seri BUY / SELL yang berjalan, kantong profit, drawdown dan riwayat seri — data nyata dari akun kami, diperbarui tiap menit.">
+<meta name="description" content="Pantau EA GOLD HUNTER GARUDA secara langsung di emas, Bitcoin, EURUSD dan USDJPY: profit hari ini, minggu dan bulan, seri BUY / SELL yang berjalan, kantong profit, drawdown dan riwayat seri — data nyata dari akun kami, diperbarui tiap menit.">
 <meta name="robots" content="index,follow">
 <meta name="theme-color" content="#07070a">
 <link rel="canonical" href="https://goldhuntergaruda.com/live">
@@ -33,22 +33,27 @@
   .pos{color:#6ee7a2;font-weight:700}
   .neg{color:#ff8b95;font-weight:700}
   .gold{color:var(--gold);font-weight:700}
-  .live-dot{display:inline-block;width:9px;height:9px;border-radius:50%;margin-right:6px;vertical-align:middle}
-  .on .live-dot{background:#6ee7a2;box-shadow:0 0 0 4px rgba(110,231,162,.18)}
-  .off .live-dot{background:#ff8b95;box-shadow:0 0 0 4px rgba(255,139,149,.18)}
+  .live-dot{display:inline-block;width:9px;height:9px;border-radius:50%;margin-right:6px;vertical-align:middle;background:#ff8b95}
+  .live-dot.on{background:#6ee7a2;box-shadow:0 0 0 4px rgba(110,231,162,.18)}
   .tiles{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;margin-bottom:16px}
   @media(min-width:720px){.tiles{grid-template-columns:repeat(4,minmax(0,1fr))}}
   .tile{border:1px solid var(--line);border-radius:14px;background:var(--card);padding:14px 16px;min-width:0}
   .tile .k{color:var(--muted);font-size:.74rem;letter-spacing:.3px;text-transform:uppercase}
   .tile .v{font-size:clamp(1.15rem,2.6vw,1.5rem);font-weight:700;margin-top:4px;overflow-wrap:anywhere}
   .tile .s{color:var(--muted);font-size:.78rem;margin-top:2px}
+  .symtabs{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:14px}
+  .symtabs button{border:1px solid var(--line);background:var(--bg-2);color:var(--text);border-radius:10px;padding:7px 12px;font-weight:700;font-size:.82rem;cursor:pointer}
+  .symtabs button.active{border-color:var(--gold);color:var(--gold)}
+  .symtabs .live-dot{width:7px;height:7px;margin-right:5px}
   .cards{display:grid;grid-template-columns:1fr;gap:12px;margin-bottom:16px}
   @media(min-width:860px){.cards{grid-template-columns:1fr 1fr}}
+  .symhead{grid-column:1/-1;display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;margin-top:4px}
+  .symhead h3{margin:0;font-size:1rem}
   .seri{border:1px solid var(--line);border-radius:14px;padding:14px 16px;background:var(--bg-2);min-width:0}
   .seri.buy{border-color:rgba(72,152,255,.45);background:linear-gradient(180deg,rgba(72,152,255,.10),transparent)}
   .seri.sell{border-color:rgba(255,150,72,.45);background:linear-gradient(180deg,rgba(255,150,72,.10),transparent)}
   .seri h3{margin:0 0 6px;font-size:1rem}
-  .seri .big{font-size:1.4rem;font-weight:800}
+  .seri .big{font-size:1.3rem;font-weight:800}
   .kv{display:grid;grid-template-columns:auto 1fr;gap:4px 12px;font-size:.86rem;margin-top:8px}
   .kv dt{color:var(--muted)} .kv dd{margin:0;font-family:ui-monospace,Consolas,monospace;overflow-wrap:anywhere}
   .box{border:1px solid var(--line);border-radius:var(--radius);background:var(--card);padding:16px 18px;margin-bottom:16px}
@@ -57,11 +62,13 @@
   .mono{font-family:ui-monospace,Consolas,monospace}
   .tag{display:inline-block;font-size:.7rem;font-weight:700;padding:2px 8px;border-radius:6px;border:1px solid var(--line);background:var(--bg-2)}
   .tag.buy{color:#8fc0ff;border-color:rgba(72,152,255,.5)} .tag.sell{color:#ffb27a;border-color:rgba(255,150,72,.5)}
+  .mk{display:inline-block;font-size:.7rem;font-weight:700;letter-spacing:.4px;padding:2px 7px;border-radius:6px;background:var(--bg-2);border:1px solid var(--line);color:var(--text)}
   .ev{display:flex;gap:10px;padding:8px 0;border-bottom:1px solid var(--line);font-size:.86rem}
   .ev:last-child{border-bottom:0}
   .ev .t{color:var(--muted);white-space:nowrap;font-size:.78rem;min-width:88px}
   .bar{height:6px;border-radius:3px;background:var(--bg-2);overflow:hidden;margin-top:6px}
   .bar i{display:block;height:100%;background:#6ee7a2}
+  .best{color:var(--gold)}
   @media (max-width:600px){ .hide-sm{display:none} th,td{padding:10px 8px} }
 </style>
 </head>
@@ -74,19 +81,20 @@
   <div class="pub-hero">
     <span class="badge b-gold" data-en="📡 Live · real account · every minute">📡 Live · akun nyata · tiap menit</span>
     <h1><span class="gold-text">GOLD HUNTER GARUDA</span> Live</h1>
-    <p data-en="This is our own trading account running the EA. Profit, running series, pocket and drawdown are sent by the EA every minute. No filters, no edits: what you see is what the account does.">Ini akun trading kami sendiri yang menjalankan EA. Profit, seri yang berjalan, kantong dan drawdown dikirim EA tiap menit. Tanpa filter, tanpa edit: yang Anda lihat adalah yang akun ini kerjakan.</p>
+    <p data-en="Our own trading account running the EA on gold, Bitcoin, EURUSD and USDJPY. Profit, running series, pocket and drawdown are sent by the EA every minute. No filters, no edits: what you see is what the account does.">Akun trading kami sendiri yang menjalankan EA di emas, Bitcoin, EURUSD dan USDJPY. Profit, seri yang berjalan, kantong dan drawdown dikirim EA tiap menit. Tanpa filter, tanpa edit: yang Anda lihat adalah yang akun ini kerjakan.</p>
   </div>
   <div class="status" id="status"><span><span class="live-dot"></span><span data-en="Loading…">Memuat…</span></span></div>
   <div class="tiles" id="tiles"></div>
+  <div class="box" id="compare"></div>
+  <div class="symtabs" id="symtabs"></div>
   <div class="cards" id="cards"></div>
-  <div class="box" id="today"></div>
   <div class="box" id="series"></div>
   <div class="box" id="days"></div>
   <div class="box" id="events"></div>
   <p class="center tiny muted" data-en="Times are shown in your device's time zone. The page refreshes every 30 seconds.">Waktu ditampilkan sesuai jam perangkat Anda. Halaman diperbarui otomatis tiap 30 detik.</p>
-  <div class="alert err small center" style="line-height:1.7;margin-top:20px" data-en="<b>⚠️ RISK WARNING.</b> GOLD HUNTER GARUDA is a martingale / averaging EA: it adds positions while price moves against it, so the floating loss can get large before a series closes in profit. Past results are <b>not a guarantee</b> of future results. Trading gold is very high risk and can lead to the loss of part or all of your capital. <a href=&quot;/#risiko&quot; style=&quot;color:#ff8b95;text-decoration:underline&quot;>Read the full risk warning</a>.">
+  <div class="alert err small center" style="line-height:1.7;margin-top:20px" data-en="<b>⚠️ RISK WARNING.</b> GOLD HUNTER GARUDA is a martingale / averaging EA: it adds positions while price moves against it, so the floating loss can get large before a series closes in profit. Past results are <b>not a guarantee</b> of future results. Trading is very high risk and can lead to the loss of part or all of your capital. <a href=&quot;/#risiko&quot; style=&quot;color:#ff8b95;text-decoration:underline&quot;>Read the full risk warning</a>.">
     <b>⚠️ PERINGATAN RISIKO.</b> GOLD HUNTER GARUDA adalah EA martingale / averaging: ia menambah posisi saat harga melawan, sehingga floating rugi bisa membesar sebelum satu seri ditutup profit. Hasil masa lalu <b>bukan jaminan</b> hasil ke depan.
-    Trading emas berisiko sangat tinggi dan dapat menyebabkan kehilangan sebagian atau seluruh modal.
+    Trading berisiko sangat tinggi dan dapat menyebabkan kehilangan sebagian atau seluruh modal.
     <a href="/#risiko" style="color:#ff8b95;text-decoration:underline">Baca peringatan risiko lengkap</a>.
   </div>
 </main>
@@ -95,70 +103,113 @@
 <script>
 (() => {
   const { $, esc, fmtDateTime, ago } = GHG;
+  const NAME = () => ({ XAUUSD: T('Emas', 'Gold'), BTCUSD: 'Bitcoin', EURUSD: 'EURUSD', USDJPY: 'USDJPY' });
   const money = (v, cur) => (v > 0 ? '+' : v < 0 ? '-' : '') + Math.abs(Number(v) || 0).toLocaleString(T('id-ID', 'en-US'), { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + (cur ? ' ' + cur : '');
   const plain = (v) => Math.abs(Number(v) || 0).toLocaleString(T('id-ID', 'en-US'), { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   const cls = (v) => v > 0 ? 'pos' : v < 0 ? 'neg' : '';
   const dur = (sec) => { const m = Math.max(0, Math.round(sec / 60)); return m >= 1440 ? `${Math.floor(m / 1440)}${T('h', 'd')} ${Math.floor((m % 1440) / 60)}${T('j', 'h')}` : m >= 60 ? `${Math.floor(m / 60)}${T('j', 'h')} ${m % 60}m` : `${m} ${T('mnt', 'min')}`; };
-  const px = (v) => Number(v).toFixed(3);
   const pct = (v, bal) => bal > 0 ? `${v >= 0 ? '+' : ''}${(v / bal * 100).toFixed(2)}%` : '';
-  const sideName = (s) => s === 'BUY' ? 'BUY' : 'SELL';
   const KIND = () => ({ kantong: ['🟡', T('Kantong profit', 'Profit pocket')], pengaman: ['🛑', T('Pengaman equity', 'Equity guard')], dd: ['⚠️', T('Floating rugi besar', 'Large floating loss')], layer: ['⚠️', T('Basket panjang', 'Long basket')], reduction: ['🔁', 'Reduction'] });
+  let cur = new URLSearchParams(location.search).get('pasar') || '';
+  let D = null;
+
+  const digits = (sym) => sym === 'EURUSD' ? 5 : sym === 'USDJPY' || sym === 'XAUUSD' ? 3 : 2;
+  const px = (v, sym) => Number(v).toFixed(digits(sym));
+  function seriCard(sym, name, x, cur_, now) {
+    const b = name === 'BUY';
+    if (!x || !x.count) return `<div class="seri ${b ? 'buy' : 'sell'}"><h3><span class="tag ${b ? 'buy' : 'sell'}">${name}</span> ${T('tidak ada posisi', 'no positions')}</h3><div class="small muted">${T('Seri baru dibuka sesuai aturan EA.', 'A new series opens by the EA rules.')}</div></div>`;
+    return `<div class="seri ${b ? 'buy' : 'sell'}"><div class="row between" style="align-items:flex-start"><h3><span class="tag ${b ? 'buy' : 'sell'}">${name}</span> ${x.count} ${T('posisi', 'positions')} · ${Number(x.lots).toFixed(2)} lot</h3><span class="big ${cls(x.profit)}">${money(x.profit)}</span></div>
+      <dl class="kv"><dt>${T('Rata-rata', 'Average')}</dt><dd>${px(x.avg, sym)}</dd><dt>${T('TP bersama', 'Basket TP')}</dt><dd class="pos">${px(x.tp, sym)}</dd><dt>${T('Marty berikutnya', 'Next layer')}</dt><dd>${Number(x.next_lot).toFixed(2)} lot @ ${px(x.next_price, sym)}</dd><dt>${T('Berjalan', 'Running')}</dt><dd>${x.since ? dur(now - x.since) : '-'}</dd></dl></div>`;
+  }
+
+  function render() {
+    const d = D;
+    const syms = d.symbols || [];
+    const names = NAME();
+    const curCy = (syms[0] && syms[0].snapshot.currency) || (d.snapshot && d.snapshot.currency) || '';
+    const acc = d.snapshot || {};
+    const anyOn = syms.some((x) => x.online);
+    if (!syms.length) {
+      $('#status').innerHTML = `<span><span class="live-dot"></span>${T('EA belum pernah mengirim data.', 'The EA has not sent data yet.')}</span>`;
+      return;
+    }
+    $('#status').innerHTML = `<span><span class="live-dot ${anyOn ? 'on' : ''}"></span><b>${anyOn ? 'EA ONLINE' : T('EA TIDAK MENGIRIM DATA', 'EA NOT REPORTING')}</b> · ${T('data terakhir', 'last data')} ${esc(ago(d.at))}</span>
+      <span class="small">${syms.map((x) => `<span class="mk" title="${esc(x.snapshot.status || '')}"><span class="live-dot ${x.online ? 'on' : ''}"></span>${esc(x.symbol)} · ${esc(x.snapshot.mode || '')}</span>`).join(' ')}</span>`;
+    const sum = (k) => syms.reduce((a, x) => a + (Number(x.snapshot[k]) || 0), 0);
+    const fl = sum('floating') / (syms.length || 1) === acc.floating ? acc.floating : sum('floating');
+    $('#tiles').innerHTML = `
+      <div class="tile"><div class="k">${T('Profit hari ini', 'Profit today')}</div><div class="v ${cls(sum('day'))}">${money(sum('day'), curCy)}</div><div class="s">${pct(sum('day'), acc.balance)} ${T('modal', 'of balance')}</div></div>
+      <div class="tile"><div class="k">${T('Minggu ini', 'This week')}</div><div class="v ${cls(sum('week'))}">${money(sum('week'), curCy)}</div><div class="s">${pct(sum('week'), acc.balance)} ${T('modal', 'of balance')}</div></div>
+      <div class="tile"><div class="k">${T('Bulan ini', 'This month')}</div><div class="v ${cls(sum('month'))}">${money(sum('month'), curCy)}</div><div class="s">${pct(sum('month'), acc.balance)} ${T('modal', 'of balance')}</div></div>
+      <div class="tile"><div class="k">Equity</div><div class="v">${plain(acc.equity)} ${esc(curCy)}</div><div class="s">${T('floating akun', 'account floating')} <span class="${cls(acc.floating)}">${money(acc.floating)}</span> (${pct(acc.floating, acc.balance)})</div></div>`;
+
+    // comparison per pair: today, 7 days, 30 days, longest basket, deepest floating -> "most profitable / safest"
+    const ds = d.days_sym || [];
+    const today = d.today_sym || [];
+    const nowDay = (() => { const x = new Date((d.server_time + 7 * 3600) * 1000); return x.toISOString().slice(0, 10); })();
+    const dayOf = (off) => new Date((d.server_time + 7 * 3600 - off * 86400) * 1000).toISOString().slice(0, 10);
+    const d7 = dayOf(6), d30 = dayOf(29);
+    const rows = syms.map((x) => {
+      const s = x.symbol;
+      const mine = ds.filter((r) => r.symbol === s);
+      const t = today.find((r) => r.symbol === s) || { n: 0, wins: 0, profit: 0, dur: 0, maxpos: 0 };
+      const td = mine.find((r) => r.day === nowDay) || {};
+      const p7 = mine.filter((r) => r.day >= d7).reduce((a, r) => a + r.profit, 0);
+      const p30 = mine.filter((r) => r.day >= d30).reduce((a, r) => a + r.profit, 0);
+      const worst = Math.min(0, ...mine.map((r) => r.min_float));
+      const maxL = Math.max(0, ...mine.map((r) => r.max_layers));
+      return { s, name: names[s] || s, day: x.snapshot.day, n: t.n, wins: t.wins, dur: t.dur, maxpos: Math.max(t.maxpos, td.max_layers || 0), minf: td.min_float || 0, p7, p30, worst, maxL, fl: x.snapshot.floating, b: x.snapshot.buy, se: x.snapshot.sell };
+    }).sort((a, b) => b.p30 - a.p30);
+    const bestP = rows.length ? rows[0].s : '';
+    const bestS = rows.length ? rows.slice().sort((a, b) => (a.worst - b.worst) || (a.maxL - b.maxL)).reverse()[0].s : '';
+    $('#compare').innerHTML = `<h2>${T('Perbandingan pair', 'Pair comparison')} <span class="small muted" style="font-weight:400">· ${T('mana yang paling profit & paling aman', 'which is the most profitable & the safest')}</span></h2>
+      <div class="table-wrap"><table><thead><tr><th>Pair</th><th class="right">${T('Hari ini', 'Today')}</th><th class="right hide-sm">${T('Seri hari ini', 'Series today')}</th><th class="right">7 ${T('hari', 'days')}</th><th class="right">30 ${T('hari', 'days')}</th><th class="right hide-sm">${T('Basket terpanjang', 'Longest basket')}</th><th class="right">${T('Floating terdalam', 'Deepest floating')}</th><th class="right hide-sm">${T('Floating sekarang', 'Floating now')}</th></tr></thead><tbody>
+      ${rows.map((r) => `<tr><td><span class="mk">${esc(r.s)}</span> <span class="tiny muted">${esc(r.name)}</span>${r.s === bestP ? ` <span class="badge b-gold" style="font-size:.6rem;padding:1px 6px">🏆 ${T('profit', 'profit')}</span>` : ''}${r.s === bestS ? ` <span class="badge b-green" style="font-size:.6rem;padding:1px 6px">🛡️ ${T('aman', 'safest')}</span>` : ''}</td>
+        <td class="right ${cls(r.day)}">${money(r.day)}</td><td class="right hide-sm">${r.n} <span class="tiny muted">(${r.wins} ✓${r.n ? ' · ' + dur(r.dur) : ''})</span></td>
+        <td class="right ${cls(r.p7)}">${money(r.p7)}</td><td class="right ${cls(r.p30)}">${money(r.p30)}</td>
+        <td class="right hide-sm">${r.maxL} ${T('posisi', 'pos')}</td><td class="right ${cls(r.worst)}">${money(r.worst)}</td><td class="right hide-sm ${cls(r.fl)}">${money(r.fl)}</td></tr>`).join('')}</tbody></table></div>
+      <p class="tiny muted" style="margin:8px 0 0">${T('🏆 = profit 30 hari tertinggi · 🛡️ = floating terdalam paling kecil (risiko paling rendah). Semua angka dalam', '🏆 = highest 30-day profit · 🛡️ = smallest deepest floating (lowest risk). All figures in')} ${esc(curCy)}.</p>`;
+
+    // tabs + cards
+    const tabs = [['', T('Semua', 'All')], ...syms.map((x) => [x.symbol, x.symbol])];
+    $('#symtabs').innerHTML = tabs.map(([v, l]) => `<button type="button" data-sym="${esc(v)}" class="${v === cur ? 'active' : ''}">${v ? `<span class="live-dot ${(syms.find((x) => x.symbol === v) || {}).online ? 'on' : ''}"></span>` : ''}${esc(l)}</button>`).join('');
+    const shown = syms.filter((x) => !cur || x.symbol === cur);
+    $('#cards').innerHTML = shown.map((x) => {
+      const s = x.snapshot, pk = s.pocket || {};
+      const nw = s.news && s.news.name ? `📰 ${esc(s.news.name)} · ${esc(fmtDateTime(s.news.time))} · ${s.news.active ? T('sedang jendela berita', 'in the news window') : T('berikutnya', 'next')} · ${esc(s.news.mode)}` : `📰 ${T('tidak ada berita penting 6 jam ke depan', 'no high-impact news in the next 6 hours')}`;
+      return `<div class="symhead"><h3><span class="mk">${esc(x.symbol)}</span> ${esc(names[x.symbol] || '')} <span class="small muted" style="font-weight:400">· ${esc(s.status || '')}</span></h3>
+          <span class="small muted">${T('hari ini', 'today')} <b class="${cls(s.day)}">${money(s.day)}</b> · ${T('kantong', 'pocket')} ${plain(pk.saldo)} (${T('dipakai', 'used')} ${pk.cuts || 0}×) · spread ${s.spread} · TP ${s.tp_pts} · lot ×${s.lot_mult}</span></div>
+        ${seriCard(x.symbol, 'BUY', s.buy, s.currency, d.server_time)}${seriCard(x.symbol, 'SELL', s.sell, s.currency, d.server_time)}
+        <div class="small muted" style="grid-column:1/-1;margin-top:-4px">${nw}</div>`;
+    }).join('');
+
+    const ser = (d.series || []).filter((r) => !cur || r.symbol === cur);
+    $('#series').innerHTML = `<h2>${T('Seri selesai terakhir', 'Latest closed series')}</h2>` + (ser.length ? `<div class="table-wrap"><table><thead><tr><th>${T('Waktu', 'Time')}</th><th>Pair</th><th class="right">${T('Posisi', 'Positions')}</th><th class="right hide-sm">Lot</th><th class="right hide-sm">${T('Durasi', 'Duration')}</th><th class="right">${T('Hasil', 'Result')}</th></tr></thead><tbody>
+      ${ser.slice(0, 40).map((r) => `<tr><td class="small nowrap">${esc(fmtDateTime(r.closed_at))}</td><td><span class="mk">${esc(r.symbol)}</span> <span class="tag ${r.side === 'BUY' ? 'buy' : 'sell'}">${esc(r.side)}</span></td><td class="right">${r.positions}</td><td class="right hide-sm">${Number(r.lots).toFixed(2)}</td><td class="right hide-sm">${dur(r.duration)}</td><td class="right ${cls(r.profit)}">${money(r.profit, r.currency)}</td></tr>`).join('')}</tbody></table></div>`
+      : `<div class="small muted">${T('Belum ada seri yang selesai sejak live dimulai.', 'No series closed since live started.')}</div>`);
+    const days = cur ? ds.filter((r) => r.symbol === cur) : (d.days || []);
+    const mx = Math.max(1, ...days.map((x) => Math.abs(x.profit)));
+    $('#days').innerHTML = `<h2>${T('30 hari terakhir', 'Last 30 days')}${cur ? ' · ' + esc(cur) : ' · ' + T('semua pair', 'all pairs')}</h2>` + (days.length ? `<div class="table-wrap"><table><thead><tr><th>${T('Tanggal', 'Date')}</th><th>${T('Profit', 'Profit')}</th><th class="right">${T('Seri', 'Series')}</th><th class="right hide-sm">${cur ? T('Basket terpanjang', 'Longest basket') : T('DD terdalam', 'Max DD')}</th><th class="right hide-sm">${cur ? T('Floating terdalam', 'Deepest floating') : T('Equity akhir', 'End equity')}</th></tr></thead><tbody>
+      ${days.map((x) => `<tr><td class="nowrap">${esc(x.day)}</td><td><span class="${cls(x.profit)}">${money(x.profit, x.currency)}</span><div class="bar"><i style="width:${Math.round(Math.abs(x.profit) / mx * 100)}%;background:${x.profit < 0 ? '#ff8b95' : '#6ee7a2'}"></i></div></td><td class="right">${x.series} <span class="tiny muted">(${x.wins} ✓)</span></td>
+        <td class="right hide-sm">${cur ? x.max_layers + ' ' + T('posisi', 'pos') : (x.max_dd_pct ? '<span class="neg">-' + Number(x.max_dd_pct).toFixed(2) + '%</span>' : '-')}</td><td class="right hide-sm mono">${cur ? `<span class="${cls(x.min_float)}">${money(x.min_float)}</span>` : plain(x.equity)}</td></tr>`).join('')}</tbody></table></div>`
+      : `<div class="small muted">${T('Belum ada data harian.', 'No daily data yet.')}</div>`);
+    const ev = (d.events || []).filter((r) => !cur || r.symbol === cur);
+    const K = KIND();
+    $('#events').innerHTML = `<h2>${T('Kejadian & peringatan', 'Events & warnings')}</h2>` + (ev.length ? ev.map((e) => `<div class="ev"><span class="t">${esc(fmtDateTime(e.at))}</span><span><span class="mk">${esc(e.symbol)}</span> ${(K[e.kind] || ['•', e.kind])[0]} <b>${esc((K[e.kind] || ['', e.kind])[1])}</b>${e.side ? ' · ' + esc(e.side) : ''} — ${esc(e.text)}</span></div>`).join('')
+      : `<div class="small muted">${T('Belum ada kejadian. Di sini tercatat kantong yang dipakai, peringatan floating besar / basket panjang, dan pengaman equity.', 'No events yet. Pocket closes, large floating / long basket warnings and the equity guard are listed here.')}</div>`);
+  }
 
   async function load() {
     let d;
     try { d = await (await fetch('/api/live', { credentials: 'same-origin' })).json(); } catch { d = null; }
-    if (!d || !d.ok) { $('#status').innerHTML = `<span class="off"><span class="live-dot"></span>${T('Data belum bisa dimuat. Coba muat ulang halaman.', 'Data could not be loaded. Please reload.')}</span>`; return; }
-    const s = d.snapshot || {}, cur = s.currency || '';
-    const on = d.online;
-    if (!d.at) {
-      $('#status').innerHTML = `<span class="off"><span class="live-dot"></span>${T('EA belum pernah mengirim data.', 'The EA has not sent data yet.')}</span>`;
-      return;
-    }
-    $('#status').className = 'status ' + (on ? 'on' : 'off');
-    $('#status').innerHTML = `<span><span class="live-dot"></span><b>${on ? T('EA ONLINE', 'EA ONLINE') : T('EA TIDAK MENGIRIM DATA', 'EA NOT REPORTING')}</b> · ${T('data terakhir', 'last data')} ${esc(ago(d.at))}</span>
-      <span class="small muted">${esc(s.symbol || '')} · ${T('mode', 'mode')} <b class="gold">${esc(s.mode || '-')}</b> · lot ×${s.lot_mult} · TP ${s.tp_pts} ${T('poin', 'points')} · EA v${esc(s.version || '')}</span>
-      <span class="small" style="flex-basis:100%">${esc(s.status || '')}</span>`;
-    $('#tiles').innerHTML = `
-      <div class="tile"><div class="k">${T('Profit hari ini', 'Profit today')}</div><div class="v ${cls(s.day)}">${money(s.day, cur)}</div><div class="s">${pct(s.day, s.balance)} ${T('modal', 'of balance')}</div></div>
-      <div class="tile"><div class="k">${T('Minggu ini', 'This week')}</div><div class="v ${cls(s.week)}">${money(s.week, cur)}</div><div class="s">${pct(s.week, s.balance)} ${T('modal', 'of balance')}</div></div>
-      <div class="tile"><div class="k">${T('Bulan ini', 'This month')}</div><div class="v ${cls(s.month)}">${money(s.month, cur)}</div><div class="s">${pct(s.month, s.balance)} ${T('modal', 'of balance')}</div></div>
-      <div class="tile"><div class="k">Equity</div><div class="v">${plain(s.equity)} ${esc(cur)}</div><div class="s">${T('floating', 'floating')} <span class="${cls(s.floating)}">${money(s.floating)}</span> (${pct(s.floating, s.balance)})</div></div>`;
-    const seri = (name, x) => {
-      const b = name === 'BUY';
-      if (!x || !x.count) return `<div class="seri ${b ? 'buy' : 'sell'}"><h3><span class="tag ${b ? 'buy' : 'sell'}">${name}</span> ${T('tidak ada posisi', 'no positions')}</h3><div class="small muted">${T('Seri baru dibuka sesuai aturan EA.', 'A new series opens by the EA rules.')}</div></div>`;
-      const tp = x.tp, avg = x.avg;
-      return `<div class="seri ${b ? 'buy' : 'sell'}"><div class="row between" style="align-items:flex-start"><h3><span class="tag ${b ? 'buy' : 'sell'}">${name}</span> ${x.count} ${T('posisi', 'positions')} · ${Number(x.lots).toFixed(2)} lot</h3><span class="big ${cls(x.profit)}">${money(x.profit)}</span></div>
-        <dl class="kv"><dt>${T('Rata-rata', 'Average')}</dt><dd>${px(avg)}</dd><dt>${T('TP bersama', 'Basket TP')}</dt><dd class="pos">${px(tp)}</dd><dt>${T('Marty berikutnya', 'Next layer')}</dt><dd>${Number(x.next_lot).toFixed(2)} lot @ ${px(x.next_price)}</dd><dt>${T('Berjalan', 'Running')}</dt><dd>${x.since ? dur(d.server_time - x.since) : '-'}</dd></dl></div>`;
-    };
-    const pk = s.pocket || {};
-    $('#cards').innerHTML = seri('BUY', s.buy) + seri('SELL', s.sell);
-    const t = d.today || {};
-    const nwTxt = s.news && s.news.name ? `${esc(s.news.name)} · ${esc(fmtDateTime(s.news.time))} · ${s.news.active ? T('sedang jendela berita', 'in the news window') : T('berikutnya', 'next')} · ${esc(s.news.mode)}` : T('tidak ada berita penting 6 jam ke depan', 'no high-impact news in the next 6 hours');
-    $('#today').innerHTML = `<h2>${T('Hari ini', 'Today')}</h2>
-      <div class="grid c3" style="gap:10px">
-        <div><div class="small muted">${T('Seri selesai', 'Series closed')}</div><div class="big"><b>${t.n || 0}</b> <span class="small muted">(${t.wins || 0} ${T('profit', 'profit')})</span></div></div>
-        <div><div class="small muted">${T('Hasil seri hari ini', 'Series result today')}</div><div class="big ${cls(t.profit)}"><b>${money(t.profit, cur)}</b></div></div>
-        <div><div class="small muted">${T('Rata-rata durasi · basket terpanjang', 'Avg duration · longest basket')}</div><div class="big"><b>${t.n ? dur(t.dur) : '-'}</b> <span class="small muted">· ${t.maxpos || 0} ${T('posisi', 'positions')}</span></div></div>
-      </div>
-      <div class="small" style="margin-top:12px"><b class="gold">${T('Kantong profit', 'Profit pocket')}</b> ${plain(pk.saldo)} ${esc(cur)} · ${T('masuk bersih', 'net in')} <span class="${cls(pk.in)}">${money(pk.in)}</span> · ${T('dipakai', 'used')} <span class="gold">${plain(pk.out)}</span> (${pk.cuts || 0}×) · ${T('isi', 'fill')} ${s.pocket_pct}% · ${T('dipakai bila seri', 'used when a series has')} ≥ ${s.pocket_layers} layer</div>
-      <div class="small muted" style="margin-top:6px">📰 ${T('Berita', 'News')}: ${nwTxt} · spread ${s.spread} · margin level ${s.margin_level ? Math.round(s.margin_level) + '%' : '-'}</div>`;
-    const ser = d.series || [];
-    $('#series').innerHTML = `<h2>${T('Seri selesai terakhir', 'Latest closed series')}</h2>` + (ser.length ? `<div class="table-wrap"><table><thead><tr><th>${T('Waktu', 'Time')}</th><th>${T('Sisi', 'Side')}</th><th class="right">${T('Posisi', 'Positions')}</th><th class="right hide-sm">Lot</th><th class="right hide-sm">${T('Durasi', 'Duration')}</th><th class="right">${T('Hasil', 'Result')}</th></tr></thead><tbody>
-      ${ser.map((r) => `<tr><td class="small nowrap">${esc(fmtDateTime(r.closed_at))}</td><td><span class="tag ${r.side === 'BUY' ? 'buy' : 'sell'}">${esc(r.side)}</span></td><td class="right">${r.positions}</td><td class="right hide-sm">${Number(r.lots).toFixed(2)}</td><td class="right hide-sm">${dur(r.duration)}</td><td class="right ${cls(r.profit)}">${money(r.profit, r.currency)}</td></tr>`).join('')}</tbody></table></div>`
-      : `<div class="small muted">${T('Belum ada seri yang selesai sejak live dimulai.', 'No series closed since live started.')}</div>`);
-    const days = d.days || [];
-    const mx = Math.max(1, ...days.map((x) => Math.abs(x.profit)));
-    $('#days').innerHTML = `<h2>${T('30 hari terakhir', 'Last 30 days')}</h2>` + (days.length ? `<div class="table-wrap"><table><thead><tr><th>${T('Tanggal', 'Date')}</th><th>${T('Profit', 'Profit')}</th><th class="right">${T('Seri', 'Series')}</th><th class="right hide-sm">${T('DD terdalam', 'Max DD')}</th><th class="right hide-sm">${T('Equity akhir', 'End equity')}</th></tr></thead><tbody>
-      ${days.map((x) => `<tr><td class="nowrap">${esc(x.day)}</td><td><span class="${cls(x.profit)}">${money(x.profit, x.currency)}</span><div class="bar"><i style="width:${Math.round(Math.abs(x.profit) / mx * 100)}%;background:${x.profit < 0 ? '#ff8b95' : '#6ee7a2'}"></i></div></td><td class="right">${x.series} <span class="tiny muted">(${x.wins} ✓)</span></td><td class="right hide-sm ${x.max_dd_pct > 0 ? 'neg' : ''}">${x.max_dd_pct ? '-' + Number(x.max_dd_pct).toFixed(2) + '%' : '-'}</td><td class="right hide-sm mono">${plain(x.equity)}</td></tr>`).join('')}</tbody></table></div>`
-      : `<div class="small muted">${T('Belum ada data harian.', 'No daily data yet.')}</div>`);
-    const ev = d.events || [];
-    const K = KIND();
-    $('#events').innerHTML = `<h2>${T('Kejadian & peringatan', 'Events & warnings')}</h2>` + (ev.length ? ev.map((e) => `<div class="ev"><span class="t">${esc(fmtDateTime(e.at))}</span><span>${(K[e.kind] || ['•', e.kind])[0]} <b>${esc((K[e.kind] || ['', e.kind])[1])}</b>${e.side ? ' · ' + esc(e.side) : ''} — ${esc(e.text)}</span></div>`).join('')
-      : `<div class="small muted">${T('Belum ada kejadian. Di sini tercatat kantong yang dipakai, peringatan floating besar / basket panjang, dan pengaman equity.', 'No events yet. Pocket closes, large floating / long basket warnings and the equity guard are listed here.')}</div>`);
+    if (!d || !d.ok) { $('#status').innerHTML = `<span><span class="live-dot"></span>${T('Data belum bisa dimuat. Coba muat ulang halaman.', 'Data could not be loaded. Please reload.')}</span>`; return; }
+    D = d;
+    render();
     const me = await fetch('/api/me', { credentials: 'same-origin' }).then((r) => r.json()).catch(() => null);
     if (me && me.user) $('#top-btn').innerHTML = '<a class="btn btn-gold btn-sm" href="/member">Member Area</a>';
   }
-  document.addEventListener('ghg:lang', load);
+  $('#symtabs').onclick = (e) => { const b = e.target.closest('button[data-sym]'); if (!b) return; cur = b.dataset.sym; history.replaceState(null, '', cur ? '?pasar=' + cur : location.pathname); if (D) render(); };
+  document.addEventListener('ghg:lang', () => D && render());
   load();
   setInterval(load, 30000);
 })();
