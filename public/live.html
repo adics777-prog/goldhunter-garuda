@@ -1,0 +1,167 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title data-en="GOLD HUNTER GARUDA Live: real account, every minute">GOLD HUNTER GARUDA Live: akun nyata, tiap menit</title>
+<meta name="description" content="Pantau EA GOLD HUNTER GARUDA secara langsung: profit hari ini, minggu dan bulan, seri BUY / SELL yang berjalan, kantong profit, drawdown dan riwayat seri — data nyata dari akun kami, diperbarui tiap menit.">
+<meta name="robots" content="index,follow">
+<meta name="theme-color" content="#07070a">
+<link rel="canonical" href="https://goldhuntergaruda.com/live">
+<meta property="og:type" content="website">
+<meta property="og:url" content="https://goldhuntergaruda.com/live">
+<meta property="og:title" content="GOLD HUNTER GARUDA Live">
+<meta property="og:description" content="Pantau EA GOLD HUNTER GARUDA secara langsung dari akun nyata.">
+<meta property="og:image" content="https://goldhuntergaruda.com/assets/brand/goldhunter-garuda-banner-1200x630.jpg">
+<link rel="icon" href="/assets/brand/favicon.ico">
+<link rel="apple-touch-icon" href="/assets/brand/apple-touch-icon.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@700;900&family=Poppins:wght@300;400;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/assets/app.css?v=2c8dc762">
+<style>
+  .pub-top{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:14px clamp(16px,4vw,40px);border-bottom:1px solid var(--line);background:var(--bg-2);position:sticky;top:0;z-index:20}
+  .pub-top .brand{padding:0;flex-shrink:0}
+  .pub-top .row{flex-wrap:nowrap}
+  .pub-top .btn{white-space:nowrap}
+  @media(max-width:370px){.pub-top a[href="/masuk"]{display:none}}
+  @media(max-width:560px){.pub-top .brand span{display:none}.pub-top .btn{padding:7px 10px;font-size:.78rem}.pub-top .row{gap:6px!important}}
+  .pub-wrap{max-width:1180px;margin:0 auto;padding:30px clamp(16px,4vw,32px) 60px}
+  .pub-hero{text-align:center;margin-bottom:22px}
+  .pub-hero h1{font-family:'Cinzel',serif;font-size:clamp(1.5rem,4.5vw,2.3rem);margin:10px 0 8px}
+  .pub-hero p{color:var(--muted);max-width:680px;margin:0 auto}
+  .pos{color:#6ee7a2;font-weight:700}
+  .neg{color:#ff8b95;font-weight:700}
+  .gold{color:var(--gold);font-weight:700}
+  .live-dot{display:inline-block;width:9px;height:9px;border-radius:50%;margin-right:6px;vertical-align:middle}
+  .on .live-dot{background:#6ee7a2;box-shadow:0 0 0 4px rgba(110,231,162,.18)}
+  .off .live-dot{background:#ff8b95;box-shadow:0 0 0 4px rgba(255,139,149,.18)}
+  .tiles{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;margin-bottom:16px}
+  @media(min-width:720px){.tiles{grid-template-columns:repeat(4,minmax(0,1fr))}}
+  .tile{border:1px solid var(--line);border-radius:14px;background:var(--card);padding:14px 16px;min-width:0}
+  .tile .k{color:var(--muted);font-size:.74rem;letter-spacing:.3px;text-transform:uppercase}
+  .tile .v{font-size:clamp(1.15rem,2.6vw,1.5rem);font-weight:700;margin-top:4px;overflow-wrap:anywhere}
+  .tile .s{color:var(--muted);font-size:.78rem;margin-top:2px}
+  .cards{display:grid;grid-template-columns:1fr;gap:12px;margin-bottom:16px}
+  @media(min-width:860px){.cards{grid-template-columns:1fr 1fr}}
+  .seri{border:1px solid var(--line);border-radius:14px;padding:14px 16px;background:var(--bg-2);min-width:0}
+  .seri.buy{border-color:rgba(72,152,255,.45);background:linear-gradient(180deg,rgba(72,152,255,.10),transparent)}
+  .seri.sell{border-color:rgba(255,150,72,.45);background:linear-gradient(180deg,rgba(255,150,72,.10),transparent)}
+  .seri h3{margin:0 0 6px;font-size:1rem}
+  .seri .big{font-size:1.4rem;font-weight:800}
+  .kv{display:grid;grid-template-columns:auto 1fr;gap:4px 12px;font-size:.86rem;margin-top:8px}
+  .kv dt{color:var(--muted)} .kv dd{margin:0;font-family:ui-monospace,Consolas,monospace;overflow-wrap:anywhere}
+  .box{border:1px solid var(--line);border-radius:var(--radius);background:var(--card);padding:16px 18px;margin-bottom:16px}
+  .box h2{font-size:1.05rem;margin:0 0 10px}
+  .status{border:1px solid var(--line);border-radius:14px;background:var(--card);padding:12px 16px;margin-bottom:16px;display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap;align-items:center}
+  .mono{font-family:ui-monospace,Consolas,monospace}
+  .tag{display:inline-block;font-size:.7rem;font-weight:700;padding:2px 8px;border-radius:6px;border:1px solid var(--line);background:var(--bg-2)}
+  .tag.buy{color:#8fc0ff;border-color:rgba(72,152,255,.5)} .tag.sell{color:#ffb27a;border-color:rgba(255,150,72,.5)}
+  .ev{display:flex;gap:10px;padding:8px 0;border-bottom:1px solid var(--line);font-size:.86rem}
+  .ev:last-child{border-bottom:0}
+  .ev .t{color:var(--muted);white-space:nowrap;font-size:.78rem;min-width:88px}
+  .bar{height:6px;border-radius:3px;background:var(--bg-2);overflow:hidden;margin-top:6px}
+  .bar i{display:block;height:100%;background:#6ee7a2}
+  @media (max-width:600px){ .hide-sm{display:none} th,td{padding:10px 8px} }
+</style>
+</head>
+<body>
+<header class="pub-top">
+  <a class="brand" href="/"><img src="/assets/brand/goldhunter-garuda-logo-128.png" width="38" height="38" alt="GoldHunter Garuda"><span class="gold-text">GOLDHUNTER</span></a>
+  <div class="row" style="gap:8px"><a href="#" class="btn btn-ghost btn-sm" data-lang-toggle>🌐 EN</a><a class="btn btn-ghost btn-sm" href="/" data-en="🏠 Home">🏠 Beranda</a><span class="row" id="top-btn" style="gap:8px"><a class="btn btn-ghost btn-sm" href="/masuk" data-en="Log in">Masuk</a><a class="btn btn-gold btn-sm" href="/daftar" data-en="Sign Up Free">Daftar Gratis</a></span></div>
+</header>
+<main class="pub-wrap">
+  <div class="pub-hero">
+    <span class="badge b-gold" data-en="📡 Live · real account · every minute">📡 Live · akun nyata · tiap menit</span>
+    <h1><span class="gold-text">GOLD HUNTER GARUDA</span> Live</h1>
+    <p data-en="This is our own trading account running the EA. Profit, running series, pocket and drawdown are sent by the EA every minute. No filters, no edits: what you see is what the account does.">Ini akun trading kami sendiri yang menjalankan EA. Profit, seri yang berjalan, kantong dan drawdown dikirim EA tiap menit. Tanpa filter, tanpa edit: yang Anda lihat adalah yang akun ini kerjakan.</p>
+  </div>
+  <div class="status" id="status"><span><span class="live-dot"></span><span data-en="Loading…">Memuat…</span></span></div>
+  <div class="tiles" id="tiles"></div>
+  <div class="cards" id="cards"></div>
+  <div class="box" id="today"></div>
+  <div class="box" id="series"></div>
+  <div class="box" id="days"></div>
+  <div class="box" id="events"></div>
+  <p class="center tiny muted" data-en="Times are shown in your device's time zone. The page refreshes every 30 seconds.">Waktu ditampilkan sesuai jam perangkat Anda. Halaman diperbarui otomatis tiap 30 detik.</p>
+  <div class="alert err small center" style="line-height:1.7;margin-top:20px" data-en="<b>⚠️ RISK WARNING.</b> GOLD HUNTER GARUDA is a martingale / averaging EA: it adds positions while price moves against it, so the floating loss can get large before a series closes in profit. Past results are <b>not a guarantee</b> of future results. Trading gold is very high risk and can lead to the loss of part or all of your capital. <a href=&quot;/#risiko&quot; style=&quot;color:#ff8b95;text-decoration:underline&quot;>Read the full risk warning</a>.">
+    <b>⚠️ PERINGATAN RISIKO.</b> GOLD HUNTER GARUDA adalah EA martingale / averaging: ia menambah posisi saat harga melawan, sehingga floating rugi bisa membesar sebelum satu seri ditutup profit. Hasil masa lalu <b>bukan jaminan</b> hasil ke depan.
+    Trading emas berisiko sangat tinggi dan dapat menyebabkan kehilangan sebagian atau seluruh modal.
+    <a href="/#risiko" style="color:#ff8b95;text-decoration:underline">Baca peringatan risiko lengkap</a>.
+  </div>
+</main>
+<script src="/assets/i18n.js?v=489e4256"></script>
+<script src="/assets/common.js?v=aa4bb046"></script>
+<script>
+(() => {
+  const { $, esc, fmtDateTime, ago } = GHG;
+  const money = (v, cur) => (v > 0 ? '+' : v < 0 ? '-' : '') + Math.abs(Number(v) || 0).toLocaleString(T('id-ID', 'en-US'), { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + (cur ? ' ' + cur : '');
+  const plain = (v) => Math.abs(Number(v) || 0).toLocaleString(T('id-ID', 'en-US'), { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  const cls = (v) => v > 0 ? 'pos' : v < 0 ? 'neg' : '';
+  const dur = (sec) => { const m = Math.max(0, Math.round(sec / 60)); return m >= 1440 ? `${Math.floor(m / 1440)}${T('h', 'd')} ${Math.floor((m % 1440) / 60)}${T('j', 'h')}` : m >= 60 ? `${Math.floor(m / 60)}${T('j', 'h')} ${m % 60}m` : `${m} ${T('mnt', 'min')}`; };
+  const px = (v) => Number(v).toFixed(3);
+  const pct = (v, bal) => bal > 0 ? `${v >= 0 ? '+' : ''}${(v / bal * 100).toFixed(2)}%` : '';
+  const sideName = (s) => s === 'BUY' ? 'BUY' : 'SELL';
+  const KIND = () => ({ kantong: ['🟡', T('Kantong profit', 'Profit pocket')], pengaman: ['🛑', T('Pengaman equity', 'Equity guard')], dd: ['⚠️', T('Floating rugi besar', 'Large floating loss')], layer: ['⚠️', T('Basket panjang', 'Long basket')], reduction: ['🔁', 'Reduction'] });
+
+  async function load() {
+    let d;
+    try { d = await (await fetch('/api/live', { credentials: 'same-origin' })).json(); } catch { d = null; }
+    if (!d || !d.ok) { $('#status').innerHTML = `<span class="off"><span class="live-dot"></span>${T('Data belum bisa dimuat. Coba muat ulang halaman.', 'Data could not be loaded. Please reload.')}</span>`; return; }
+    const s = d.snapshot || {}, cur = s.currency || '';
+    const on = d.online;
+    if (!d.at) {
+      $('#status').innerHTML = `<span class="off"><span class="live-dot"></span>${T('EA belum pernah mengirim data.', 'The EA has not sent data yet.')}</span>`;
+      return;
+    }
+    $('#status').className = 'status ' + (on ? 'on' : 'off');
+    $('#status').innerHTML = `<span><span class="live-dot"></span><b>${on ? T('EA ONLINE', 'EA ONLINE') : T('EA TIDAK MENGIRIM DATA', 'EA NOT REPORTING')}</b> · ${T('data terakhir', 'last data')} ${esc(ago(d.at))}</span>
+      <span class="small muted">${esc(s.symbol || '')} · ${T('mode', 'mode')} <b class="gold">${esc(s.mode || '-')}</b> · lot ×${s.lot_mult} · TP ${s.tp_pts} ${T('poin', 'points')} · EA v${esc(s.version || '')}</span>
+      <span class="small" style="flex-basis:100%">${esc(s.status || '')}</span>`;
+    $('#tiles').innerHTML = `
+      <div class="tile"><div class="k">${T('Profit hari ini', 'Profit today')}</div><div class="v ${cls(s.day)}">${money(s.day, cur)}</div><div class="s">${pct(s.day, s.balance)} ${T('modal', 'of balance')}</div></div>
+      <div class="tile"><div class="k">${T('Minggu ini', 'This week')}</div><div class="v ${cls(s.week)}">${money(s.week, cur)}</div><div class="s">${pct(s.week, s.balance)} ${T('modal', 'of balance')}</div></div>
+      <div class="tile"><div class="k">${T('Bulan ini', 'This month')}</div><div class="v ${cls(s.month)}">${money(s.month, cur)}</div><div class="s">${pct(s.month, s.balance)} ${T('modal', 'of balance')}</div></div>
+      <div class="tile"><div class="k">Equity</div><div class="v">${plain(s.equity)} ${esc(cur)}</div><div class="s">${T('floating', 'floating')} <span class="${cls(s.floating)}">${money(s.floating)}</span> (${pct(s.floating, s.balance)})</div></div>`;
+    const seri = (name, x) => {
+      const b = name === 'BUY';
+      if (!x || !x.count) return `<div class="seri ${b ? 'buy' : 'sell'}"><h3><span class="tag ${b ? 'buy' : 'sell'}">${name}</span> ${T('tidak ada posisi', 'no positions')}</h3><div class="small muted">${T('Seri baru dibuka sesuai aturan EA.', 'A new series opens by the EA rules.')}</div></div>`;
+      const tp = x.tp, avg = x.avg;
+      return `<div class="seri ${b ? 'buy' : 'sell'}"><div class="row between" style="align-items:flex-start"><h3><span class="tag ${b ? 'buy' : 'sell'}">${name}</span> ${x.count} ${T('posisi', 'positions')} · ${Number(x.lots).toFixed(2)} lot</h3><span class="big ${cls(x.profit)}">${money(x.profit)}</span></div>
+        <dl class="kv"><dt>${T('Rata-rata', 'Average')}</dt><dd>${px(avg)}</dd><dt>${T('TP bersama', 'Basket TP')}</dt><dd class="pos">${px(tp)}</dd><dt>${T('Marty berikutnya', 'Next layer')}</dt><dd>${Number(x.next_lot).toFixed(2)} lot @ ${px(x.next_price)}</dd><dt>${T('Berjalan', 'Running')}</dt><dd>${x.since ? dur(d.server_time - x.since) : '-'}</dd></dl></div>`;
+    };
+    const pk = s.pocket || {};
+    $('#cards').innerHTML = seri('BUY', s.buy) + seri('SELL', s.sell);
+    const t = d.today || {};
+    const nwTxt = s.news && s.news.name ? `${esc(s.news.name)} · ${esc(fmtDateTime(s.news.time))} · ${s.news.active ? T('sedang jendela berita', 'in the news window') : T('berikutnya', 'next')} · ${esc(s.news.mode)}` : T('tidak ada berita penting 6 jam ke depan', 'no high-impact news in the next 6 hours');
+    $('#today').innerHTML = `<h2>${T('Hari ini', 'Today')}</h2>
+      <div class="grid c3" style="gap:10px">
+        <div><div class="small muted">${T('Seri selesai', 'Series closed')}</div><div class="big"><b>${t.n || 0}</b> <span class="small muted">(${t.wins || 0} ${T('profit', 'profit')})</span></div></div>
+        <div><div class="small muted">${T('Hasil seri hari ini', 'Series result today')}</div><div class="big ${cls(t.profit)}"><b>${money(t.profit, cur)}</b></div></div>
+        <div><div class="small muted">${T('Rata-rata durasi · basket terpanjang', 'Avg duration · longest basket')}</div><div class="big"><b>${t.n ? dur(t.dur) : '-'}</b> <span class="small muted">· ${t.maxpos || 0} ${T('posisi', 'positions')}</span></div></div>
+      </div>
+      <div class="small" style="margin-top:12px"><b class="gold">${T('Kantong profit', 'Profit pocket')}</b> ${plain(pk.saldo)} ${esc(cur)} · ${T('masuk bersih', 'net in')} <span class="${cls(pk.in)}">${money(pk.in)}</span> · ${T('dipakai', 'used')} <span class="gold">${plain(pk.out)}</span> (${pk.cuts || 0}×) · ${T('isi', 'fill')} ${s.pocket_pct}% · ${T('dipakai bila seri', 'used when a series has')} ≥ ${s.pocket_layers} layer</div>
+      <div class="small muted" style="margin-top:6px">📰 ${T('Berita', 'News')}: ${nwTxt} · spread ${s.spread} · margin level ${s.margin_level ? Math.round(s.margin_level) + '%' : '-'}</div>`;
+    const ser = d.series || [];
+    $('#series').innerHTML = `<h2>${T('Seri selesai terakhir', 'Latest closed series')}</h2>` + (ser.length ? `<div class="table-wrap"><table><thead><tr><th>${T('Waktu', 'Time')}</th><th>${T('Sisi', 'Side')}</th><th class="right">${T('Posisi', 'Positions')}</th><th class="right hide-sm">Lot</th><th class="right hide-sm">${T('Durasi', 'Duration')}</th><th class="right">${T('Hasil', 'Result')}</th></tr></thead><tbody>
+      ${ser.map((r) => `<tr><td class="small nowrap">${esc(fmtDateTime(r.closed_at))}</td><td><span class="tag ${r.side === 'BUY' ? 'buy' : 'sell'}">${esc(r.side)}</span></td><td class="right">${r.positions}</td><td class="right hide-sm">${Number(r.lots).toFixed(2)}</td><td class="right hide-sm">${dur(r.duration)}</td><td class="right ${cls(r.profit)}">${money(r.profit, r.currency)}</td></tr>`).join('')}</tbody></table></div>`
+      : `<div class="small muted">${T('Belum ada seri yang selesai sejak live dimulai.', 'No series closed since live started.')}</div>`);
+    const days = d.days || [];
+    const mx = Math.max(1, ...days.map((x) => Math.abs(x.profit)));
+    $('#days').innerHTML = `<h2>${T('30 hari terakhir', 'Last 30 days')}</h2>` + (days.length ? `<div class="table-wrap"><table><thead><tr><th>${T('Tanggal', 'Date')}</th><th>${T('Profit', 'Profit')}</th><th class="right">${T('Seri', 'Series')}</th><th class="right hide-sm">${T('DD terdalam', 'Max DD')}</th><th class="right hide-sm">${T('Equity akhir', 'End equity')}</th></tr></thead><tbody>
+      ${days.map((x) => `<tr><td class="nowrap">${esc(x.day)}</td><td><span class="${cls(x.profit)}">${money(x.profit, x.currency)}</span><div class="bar"><i style="width:${Math.round(Math.abs(x.profit) / mx * 100)}%;background:${x.profit < 0 ? '#ff8b95' : '#6ee7a2'}"></i></div></td><td class="right">${x.series} <span class="tiny muted">(${x.wins} ✓)</span></td><td class="right hide-sm ${x.max_dd_pct > 0 ? 'neg' : ''}">${x.max_dd_pct ? '-' + Number(x.max_dd_pct).toFixed(2) + '%' : '-'}</td><td class="right hide-sm mono">${plain(x.equity)}</td></tr>`).join('')}</tbody></table></div>`
+      : `<div class="small muted">${T('Belum ada data harian.', 'No daily data yet.')}</div>`);
+    const ev = d.events || [];
+    const K = KIND();
+    $('#events').innerHTML = `<h2>${T('Kejadian & peringatan', 'Events & warnings')}</h2>` + (ev.length ? ev.map((e) => `<div class="ev"><span class="t">${esc(fmtDateTime(e.at))}</span><span>${(K[e.kind] || ['•', e.kind])[0]} <b>${esc((K[e.kind] || ['', e.kind])[1])}</b>${e.side ? ' · ' + esc(e.side) : ''} — ${esc(e.text)}</span></div>`).join('')
+      : `<div class="small muted">${T('Belum ada kejadian. Di sini tercatat kantong yang dipakai, peringatan floating besar / basket panjang, dan pengaman equity.', 'No events yet. Pocket closes, large floating / long basket warnings and the equity guard are listed here.')}</div>`);
+    const me = await fetch('/api/me', { credentials: 'same-origin' }).then((r) => r.json()).catch(() => null);
+    if (me && me.user) $('#top-btn').innerHTML = '<a class="btn btn-gold btn-sm" href="/member">Member Area</a>';
+  }
+  document.addEventListener('ghg:lang', load);
+  load();
+  setInterval(load, 30000);
+})();
+</script>
+</body>
+</html>

@@ -296,6 +296,139 @@ route('POST', '/ea/report', 'public', async ({ request, env }) => {
   return json({ ok: true, next });
 });
 
+// ======================= GOLD HUNTER GARUDA LIVE (akun master -> website & Telegram) =======================
+// The master EA (input 13.2 = ea_master_key) posts a snapshot every minute plus the events since the last post.
+// The site keeps one live snapshot, the finished series, the events and one row per WIB day; Telegram gets reports
+// and warnings (never "signals").
+const eaNum = (v) => { const n = Number(v); return Number.isFinite(n) ? Math.round(n * 100) / 100 : 0; };
+const eaPx = (v) => { const n = Number(v); return Number.isFinite(n) ? Math.round(n * 1000) / 1000 : 0; };
+const wibDay = (t) => new Date((t + 7 * 3600) * 1000).toISOString().slice(0, 10);
+const wibHour = (t) => new Date((t + 7 * 3600) * 1000).getUTCHours();
+const wibDayStart = (t) => t - ((t + 7 * 3600) % 86400);
+const wibClock = (t) => { const d = new Date((t + 7 * 3600) * 1000); return `${String(d.getUTCHours()).padStart(2, '0')}:${String(d.getUTCMinutes()).padStart(2, '0')} WIB`; };
+const wibDate = (t) => { const d = new Date((t + 7 * 3600) * 1000); const m = ['Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun', 'Jul', 'Agu', 'Sep', 'Okt', 'Nov', 'Des']; return `${d.getUTCDate()} ${m[d.getUTCMonth()]} ${d.getUTCFullYear()}`; };
+const eaMoney = (v, cur) => `${Number(v) > 0 ? '+' : (Number(v) < 0 ? '-' : '')}${Math.abs(Number(v) || 0).toLocaleString('id-ID', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}${cur ? ' ' + cur : ''}`;
+const eaPlain = (v) => Math.abs(Number(v) || 0).toLocaleString('id-ID', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+const eaDur = (sec) => { const m = Math.max(0, Math.round(sec / 60)); return m >= 1440 ? `${Math.floor(m / 1440)} hari ${Math.floor((m % 1440) / 60)} jam` : m >= 60 ? `${Math.floor(m / 60)} jam ${m % 60} mnt` : `${m} menit`; };
+const EA_LIVE_KEYS = ['ea_master_key', 'ea_report_hour', 'ea_tg_min_layers', 'ea_offline_min', 'ea_tg_enabled'];
+function eaCfg(s) {
+  return { key: String(s.ea_master_key || '').trim(), hour: Number.isFinite(Number(s.ea_report_hour)) && s.ea_report_hour !== '' ? int(s.ea_report_hour) : 21,
+    minLayers: s.ea_tg_min_layers === '' || s.ea_tg_min_layers == null ? 4 : int(s.ea_tg_min_layers), offlineMin: int(s.ea_offline_min) || 5, tg: s.ea_tg_enabled !== '0' };
+}
+async function eaLiveRow(env) {
+  const r = await env.DB.prepare('SELECT updated_at, data FROM ea_live WHERE id=1').first();
+  let d = {};
+  try { d = JSON.parse((r && r.data) || '{}'); } catch { d = {}; }
+  return { at: (r && r.updated_at) || 0, d };
+}
+async function eaTg(env, cfg, text, base) {
+  if (!cfg.tg) return;
+  try { await tgBroadcast(env, text + (base ? `\n📈 <a href="${base}/live">goldhuntergaruda.com/live</a>` : '')); } catch (e) { console.error('ea telegram', e); }
+}
+// No heartbeat for more than x minutes -> one warning; the next heartbeat sends "online again". Checked by the public page and the builder poll.
+async function eaOfflineCheck(env, s, base) {
+  const cfg = eaCfg(s);
+  if (!cfg.key) return;
+  const { at, d } = await eaLiveRow(env);
+  if (!at) return;
+  if (now() - at > cfg.offlineMin * 60 && s.ea_offline_state !== '1') {
+    await putSetting(env, 'ea_offline_state', '1');
+    await eaTg(env, cfg, [`🔴 <b>EA GOLD HUNTER GARUDA TIDAK MENGIRIM DATA</b>`, `Data terakhir ${wibClock(at)} (${eaDur(now() - at)} lalu). Cek VPS / MT5 / koneksi internet.`,
+      `Posisi terakhir: BUY ${(d.buy && d.buy.count) || 0} · SELL ${(d.sell && d.sell.count) || 0} · floating ${eaMoney(d.floating || 0, d.currency)}`].join('\n'), base);
+  }
+}
+async function eaDailyReport(env, s, cfg, d, t, base) {
+  const day = wibDay(t);
+  if (wibHour(t) < cfg.hour || s.ea_report_day === day) return;
+  await putSetting(env, 'ea_report_day', day);
+  const [row, ser] = await Promise.all([
+    env.DB.prepare('SELECT * FROM ea_days WHERE day=?').bind(day).first(),
+    env.DB.prepare(`SELECT COUNT(*) AS n, COALESCE(SUM(CASE WHEN profit>0 THEN 1 ELSE 0 END),0) AS wins, COALESCE(AVG(duration),0) AS dur,
+        COALESCE(MAX(positions),0) AS maxpos, COALESCE(MAX(lots),0) AS maxlots FROM ea_series WHERE closed_at >= ?`).bind(wibDayStart(t)).first(),
+  ]);
+  const cur = d.currency || '';
+  const pct = (v) => d.balance > 0 ? ` (${(v / d.balance * 100 >= 0 ? '+' : '')}${(v / d.balance * 100).toFixed(2)}% modal)` : '';
+  const text = [`📊 <b>LAPORAN HARIAN GOLD HUNTER GARUDA</b> · ${wibDate(t)}`, '',
+    `Profit hari ini: <b>${eaMoney(d.day, cur)}</b>${pct(d.day)}`,
+    `Minggu ini: ${eaMoney(d.week, cur)} · Bulan ini: ${eaMoney(d.month, cur)}`,
+    `Seri selesai: ${ser.n} (${ser.wins} profit)${ser.n ? ` · rata-rata ${eaDur(ser.dur)} · basket terpanjang ${ser.maxpos} posisi / ${Number(ser.maxlots).toFixed(2)} lot` : ''}`,
+    `Equity ${eaPlain(d.equity)} ${cur} · floating ${eaMoney(d.floating, cur)} · DD terdalam hari ini ${row ? row.max_dd_pct.toFixed(2) : '0.00'}%`,
+    `Posisi sekarang: BUY ${(d.buy && d.buy.count) || 0} · SELL ${(d.sell && d.sell.count) || 0}`,
+    d.pocket ? `Kantong profit: saldo ${eaPlain(d.pocket.saldo)} · dipakai ${d.pocket.cuts || 0}×` : '',
+    `Mode ${esc(d.mode || '')} · lot ×${d.lot_mult} · TP ${d.tp_pts} poin · EA v${esc(d.version || '')}`].filter((x) => x !== '').join('\n');
+  await eaTg(env, cfg, text, base);
+}
+route('POST', '/ea/live', 'public', async ({ request, env, waitUntil, base }) => {
+  const s = await getSettings(env);
+  const cfg = eaCfg(s);
+  if (!cfg.key || request.headers.get('x-ea-key') !== cfg.key) fail(403, 'Kunci master salah (Admin > Pengaturan > EA Live)');
+  const b = await readJson(request);
+  const t = now();
+  const side = (x) => x && typeof x === 'object' && int(x.count) > 0
+    ? { count: int(x.count), lots: eaNum(x.lots), avg: eaPx(x.avg), tp: eaPx(x.tp), profit: eaNum(x.profit), next_lot: eaNum(x.next_lot), next_price: eaPx(x.next_price), since: int(x.since) || 0 }
+    : { count: 0 };
+  const pk = b.pocket && typeof b.pocket === 'object' ? b.pocket : {};
+  const nw = b.news && typeof b.news === 'object' ? b.news : {};
+  const snap = { login: str(b.login, 20), server: str(b.server, 60), currency: str(b.currency, 8).toUpperCase(), version: str(b.version, 12), symbol: str(b.symbol, 16),
+    balance: eaNum(b.balance), equity: eaNum(b.equity), floating: eaNum(b.floating), day: eaNum(b.day), week: eaNum(b.week), month: eaNum(b.month),
+    spread: int(b.spread) || 0, margin_level: eaNum(b.margin_level), status: str(b.status, 200), mode: str(b.mode, 12), trend_tf: str(b.trend_tf, 6), trend: int(b.trend) || 0, trend_why: str(b.trend_why, 120),
+    tp_pts: int(b.tp_pts) || 0, lot_mult: eaNum(b.lot_mult), dist_pts: int(b.dist_pts) || 0, first_lot: eaNum(b.first_lot), reduction_from: int(b.reduction_from) || 0,
+    pocket_pct: eaNum(b.pocket_pct), pocket_layers: int(b.pocket_layers) || 0,
+    buy: side(b.buy), sell: side(b.sell), pocket: { saldo: eaNum(pk.saldo), in: eaNum(pk.in), out: eaNum(pk.out), cuts: int(pk.cuts) || 0 },
+    news: { name: str(nw.name, 80), time: int(nw.time) || 0, active: !!nw.active, mode: str(nw.mode, 8) } };
+  const day = wibDay(t);
+  const prev = await env.DB.prepare('SELECT min_equity, max_dd_pct FROM ea_days WHERE day=?').bind(day).first();
+  const minEq = prev && prev.min_equity > 0 ? Math.min(prev.min_equity, snap.equity) : snap.equity;
+  const dd = snap.balance > 0 ? Math.max(prev ? prev.max_dd_pct : 0, Math.max(0, (snap.balance - snap.equity) / snap.balance * 100)) : 0;
+  await env.DB.batch([
+    env.DB.prepare('UPDATE ea_live SET updated_at=?, data=? WHERE id=1').bind(t, JSON.stringify(snap)),
+    env.DB.prepare(`INSERT INTO ea_days (day, profit, balance, equity, min_equity, max_dd_pct, currency, updated_at) VALUES (?,?,?,?,?,?,?,?)
+        ON CONFLICT(day) DO UPDATE SET profit=excluded.profit, balance=excluded.balance, equity=excluded.equity, min_equity=excluded.min_equity, max_dd_pct=excluded.max_dd_pct,
+        currency=excluded.currency, updated_at=excluded.updated_at`).bind(day, snap.day, snap.balance, snap.equity, minEq, Math.round(dd * 100) / 100, snap.currency, t),
+  ]);
+  const msgs = [];
+  const evs = Array.isArray(b.events) ? b.events.slice(0, 50) : [];
+  const TITLE = { kantong: '🟡 KANTONG PROFIT', pengaman: '🛑 PENGAMAN EQUITY', dd: '⚠️ FLOATING RUGI BESAR', layer: '⚠️ BASKET PANJANG', reduction: '🔁 REDUCTION' };
+  for (const e of evs) {
+    const kind = str(e.kind, 12);
+    if (!TITLE[kind] && kind !== 'seri') continue;
+    const at = int(e.at) || t, sd = str(e.side, 4).toUpperCase(), profit = eaNum(e.profit), positions = int(e.positions) || 0, lots = eaNum(e.lots), dur = int(e.duration) || 0, text = str(e.text, 300);
+    if (kind === 'seri') {
+      await env.DB.batch([
+        env.DB.prepare('INSERT INTO ea_series (closed_at, side, positions, lots, profit, duration, currency) VALUES (?,?,?,?,?,?,?)').bind(at, sd, positions, lots, profit, dur, snap.currency),
+        env.DB.prepare('INSERT INTO ea_days (day, series, wins, currency, updated_at) VALUES (?,1,?,?,?) ON CONFLICT(day) DO UPDATE SET series=series+1, wins=wins+excluded.wins').bind(wibDay(at), profit > 0 ? 1 : 0, snap.currency, t),
+      ]);
+      if (positions >= cfg.minLayers) msgs.push(`${profit >= 0 ? '✅' : '🟠'} <b>Seri ${sd} selesai ${eaMoney(profit, snap.currency)}</b>\n${positions} posisi · ${lots.toFixed(2)} lot · ${eaDur(dur)}`);
+    } else {
+      await env.DB.prepare('INSERT INTO ea_events (at, kind, side, text, profit) VALUES (?,?,?,?,?)').bind(at, kind, sd, text, profit).run();
+      if (kind !== 'reduction') msgs.push(`<b>${TITLE[kind]}</b>\n${esc(text)}`);
+    }
+  }
+  if (s.ea_offline_state === '1') { await putSetting(env, 'ea_offline_state', '0'); msgs.push('🟢 <b>EA GOLD HUNTER GARUDA online kembali</b>'); }
+  for (const m of msgs) waitUntil(eaTg(env, cfg, m, base));
+  waitUntil(eaDailyReport(env, s, cfg, snap, t, base).catch((e) => console.error('ea daily', e)));
+  return json({ ok: true, next: 60 });
+});
+route('GET', '/live', 'public', async ({ env, waitUntil, base }) => {
+  const s = await getSettings(env);
+  const cfg = eaCfg(s);
+  const { at, d } = await eaLiveRow(env);
+  const t = now();
+  waitUntil(eaOfflineCheck(env, s, base).catch((e) => console.error('ea offline', e)));
+  const [series, days, events, today] = await Promise.all([
+    env.DB.prepare('SELECT closed_at, side, positions, lots, profit, duration, currency FROM ea_series ORDER BY id DESC LIMIT 40').all(),
+    env.DB.prepare('SELECT * FROM ea_days ORDER BY day DESC LIMIT 31').all(),
+    env.DB.prepare('SELECT at, kind, side, text, profit FROM ea_events ORDER BY id DESC LIMIT 20').all(),
+    env.DB.prepare(`SELECT COUNT(*) AS n, COALESCE(SUM(CASE WHEN profit>0 THEN 1 ELSE 0 END),0) AS wins, COALESCE(SUM(profit),0) AS profit,
+        COALESCE(AVG(duration),0) AS dur, COALESCE(MAX(positions),0) AS maxpos FROM ea_series WHERE closed_at >= ?`).bind(wibDayStart(t)).first(),
+  ]);
+  const snap = { ...d };
+  delete snap.login;
+  delete snap.server;
+  return json({ ok: true, configured: !!cfg.key, at, age: at ? t - at : null, online: !!at && t - at <= cfg.offlineMin * 60, offline_min: cfg.offlineMin,
+    snapshot: snap, today, series: series.results, days: days.results, events: events.results, server_time: t });
+});
+
 // ======================= AI SIGNALS (MASTER EA -> server -> CLIENT EAs) =======================
 const signalView = (r) => r && ({
   id: r.id, symbol: r.symbol, bar_time: r.bar_time, created_at: r.created_at, valid_until: r.valid_until,
@@ -2082,7 +2215,8 @@ route('PUT', '/admin/products/:id', 'admin', async ({ request, env, params }) =>
 const EDITABLE_SETTINGS = ['durations', 'discounts', 'bank_list', 'admin_notify_email', 'whatsapp', 'pay_deadline_hours', 'reminder_days', 'mt4_enabled',
   'ib_brokers', 'auto_complete_ea', 'auto_process_paid', 'welcome_email_password', 'email_provider', 'email_from', 'email_from_name', 'vps_spec',
   'min_capital_usd', 'invoice_days_before', 'auto_rebuild_on_version', 'report_interval_min', 'board_enabled', 'board_name_mode', 'board_landing_top', 'board_stale_days', 'profit_est_enabled', 'profit_est_min_idr', 'profit_est_max_idr', 'profit_est_basis',
-  'telegram_enabled', 'telegram_targets', 'telegram_wait', 'telegram_wait_hours', 'usdt_enabled', 'usdt_address'];
+  'telegram_enabled', 'telegram_targets', 'telegram_wait', 'telegram_wait_hours', 'usdt_enabled', 'usdt_address',
+  'ea_master_key', 'ea_report_hour', 'ea_tg_min_layers', 'ea_offline_min', 'ea_tg_enabled'];
 route('GET', '/admin/settings', 'admin', async ({ env }) => {
   const s = await getSettings(env);
   const out = Object.fromEntries(EDITABLE_SETTINGS.map((k) => [k, s[k] ?? '']));
@@ -2171,6 +2305,7 @@ route('POST', '/builder/claim', 'builder', async ({ request, env, base, waitUnti
   // The builder polls every few seconds, so it also drives the daily job (reminders, expiries)
   // in case the GitHub Action cron is not configured.
   const s = await getSettings(env);
+  waitUntil(eaOfflineCheck(env, s, base).catch((e) => console.error('ea offline', e)));
   let last = 0;
   try { last = JSON.parse(s.daily_last_run || '{}').at || 0; } catch {}
   if (now() - last > 20 * 3600) {

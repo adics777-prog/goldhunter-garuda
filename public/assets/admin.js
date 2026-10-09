@@ -936,7 +936,7 @@
       <label class="row nowrap" style="margin:0;color:var(--text)"><input type="checkbox" class="ib-act" ${b.active ? 'checked' : ''}> aktif</label></div>`;
     view.innerHTML = `${title('🛠️ Pengaturan')}
       <p class="small muted" style="margin:-6px 0 14px">Telegram, Facebook, Instagram &amp; TikTok ada di menu <a href="#/sosmed">📣 Media Sosial</a>. Pengaturan analisis AI ada di <a href="#/garuda-ai">🤖 Sinyal &amp; Analisis AI</a>.</p>
-      ${tabBar('settings', [['bayar', '💳 Pembayaran'], ['order', '⚙️ Order &amp; Member'], ['email', '✉️ Email'], ['promo', '📈 Promo'], ['arsip', '🗄️ EA GoldHunter']])}
+      ${tabBar('settings', [['live', '📡 EA Live'], ['bayar', '💳 Pembayaran'], ['order', '⚙️ Order &amp; Member'], ['email', '✉️ Email'], ['promo', '📈 Promo'], ['arsip', '🗄️ EA GoldHunter']])}
       <form id="sf" class="grid" style="align-items:start;grid-template-columns:repeat(auto-fit,minmax(min(380px,100%),1fr))">
         <div class="card" style="grid-column:1/-1" data-tab="bayar"><h3>Pembayaran</h3>
           <label>Rekening / e-wallet tujuan transfer (tampil ke member saat bayar)</label>
@@ -1013,9 +1013,24 @@
           <dt>Kunci enkripsi</dt><dd>${env.data_key_set ? '✔' : '<span class="badge b-red">belum diatur</span>'}</dd>
           <dt>Token builder</dt><dd>${env.builder_token_set ? '✔' : '<span class="badge b-red">belum diatur</span>'}</dd>
           <dt>Secret cron</dt><dd>${env.cron_secret_set ? '✔' : '<span class="badge b-red">belum diatur</span>'}</dd></dl></div>
+        <div class="card" style="grid-column:1/-1" data-tab="live"><h3>📡 EA GOLD HUNTER GARUDA Live (akun master)</h3>
+          <p class="help" style="margin-top:0">EA di akun master mengirim data tiap menit ke website: tampil di halaman publik <a href="/live" target="_blank" rel="noopener">/live</a>, dan Telegram menerima laporan harian + peringatan (bukan sinyal).
+            Isi kunci di bawah ke input EA <b>13.2 Kunci master</b>, dan izinkan <span class="mono">https://goldhuntergaruda.com</span> di MT5 → Tools → Options → Expert Advisors → Allow WebRequest.</p>
+          <div class="grid c2" style="gap:0 14px;align-items:start">
+            <div class="field"><label>Kunci master (sama dengan input EA 13.2)</label>
+              <div class="row" style="gap:8px"><input name="ea_master_key" class="mono" style="flex:1" value="${esc(s.ea_master_key || '')}" autocomplete="off" placeholder="klik Buat kunci"><button type="button" class="btn btn-ghost btn-sm" id="ea-key-gen">Buat kunci</button></div>
+              <div class="help">Kosong = EA tidak bisa mengirim data. Ganti kunci bila bocor (EA harus diisi kunci baru).</div></div>
+            <div class="field"><label>Jam laporan harian ke Telegram (WIB)</label><input name="ea_report_hour" type="number" min="0" max="23" value="${esc(s.ea_report_hour === '' || s.ea_report_hour == null ? 21 : s.ea_report_hour)}"></div>
+            <div class="field"><label>Kirim "seri selesai" ke Telegram hanya bila posisinya &ge; </label><input name="ea_tg_min_layers" type="number" min="0" max="50" value="${esc(s.ea_tg_min_layers === '' || s.ea_tg_min_layers == null ? 4 : s.ea_tg_min_layers)}">
+              <div class="help">0 = setiap seri dikirim (mode BARBAR bisa puluhan pesan per hari).</div></div>
+            <div class="field"><label>Peringatan EA offline bila tidak ada data selama (menit)</label><input name="ea_offline_min" type="number" min="2" max="120" value="${esc(s.ea_offline_min || 5)}"></div>
+          </div>
+          <label class="row small" style="color:var(--text)"><input type="checkbox" name="ea_tg_enabled" ${s.ea_tg_enabled !== '0' ? 'checked' : ''}> Kirim laporan &amp; peringatan EA ke Telegram (bot &amp; target diatur di <a href="#/sosmed">📣 Media Sosial</a>)</label>
+          <p class="help">Isi Telegram: laporan harian (profit hari/minggu/bulan, seri selesai, equity, DD terdalam, kantong), seri selesai &ge; x posisi, peringatan floating rugi besar / basket panjang / kantong dipakai / pengaman equity / EA offline.</p></div>
         <div class="save-bar" style="grid-column:1/-1"><button class="btn btn-gold" type="submit">Simpan Pengaturan</button><span class="tiny muted">Menyimpan semua tab sekaligus</span></div>
       </form>`;
     initTabs('settings');
+    $('#ea-key-gen').onclick = () => { const a = new Uint8Array(16); crypto.getRandomValues(a); $('input[name=ea_master_key]').value = 'ghg-' + Array.from(a, (x) => x.toString(16).padStart(2, '0')).join(''); };
     $('#addib').onclick = () => $('#ibl').insertAdjacentHTML('beforeend', brokerRow());
     $('#addbk').onclick = () => $('#bkl').insertAdjacentHTML('beforeend', bankRow());
     $('#usdt-qr-file').onchange = async (e) => {
@@ -1052,6 +1067,7 @@
         ib_brokers: $$('.ibr').map((r) => ({ name: $('.ib-name', r).value, link: $('.ib-link', r).value, active: $('.ib-act', r).checked })),
         email_provider: d.email_provider, email_from: d.email_from, email_from_name: d.email_from_name, email_api_key: secretVal('email_api_key'),
         welcome_email_password: d.welcome_email_password ? '1' : '0',
+        ea_master_key: (d.ea_master_key || '').trim(), ea_report_hour: d.ea_report_hour, ea_tg_min_layers: d.ea_tg_min_layers, ea_offline_min: d.ea_offline_min, ea_tg_enabled: d.ea_tg_enabled ? '1' : '0',
       };
       await busy($('#sf button[type=submit]'), () => api('/admin/settings', { method: 'PUT', body }));
       toast('Pengaturan disimpan'); render();
