@@ -31,13 +31,15 @@ const GHL = (() => {
   const NAME = () => ({ XAUUSD: TT('Emas', 'Gold'), BTCUSD: 'Bitcoin', EURUSD: 'Euro / Dolar', USDJPY: TT('Dolar / Yen', 'Dollar / Yen') });
   const ICON = { XAUUSD: '🥇', BTCUSD: '₿', EURUSD: '💶', USDJPY: '💴' };
   const PAIRS = ['XAUUSD', 'BTCUSD', 'EURUSD', 'USDJPY'];
-  // The 12 monitoring-account presets (capital 10,000 USC = $100, lot follows the balance).
-  // hold = adverse move without any pause at -10% / -30% / -50% floating; layers = layers open at -50%.
+  // The 12 monitoring-account presets: first lot 0.01 per `caps` USC (LOW / MEDIUM / HIGH), lot follows the balance.
+  // Minimum account capital = capital per 0.01 lot (below it the broker minimum 0.01 is used, i.e. more risk).
+  // Tester 1 Jan - 10 Oct 2026 gold 0.01 per 10,000 (= HIGH): deepest floating of one side -41% (29 Jan, 48 positions).
+  // hold = adverse move without any pause at -10% / -30% / -50% floating.
   const PRESET = {
-    XAUUSD: { lots: [0.01, 0.02, 0.03], dist: '$1', tp: '$1,50', back: '$0,50', hold: [['$40', '$69', '$89', 26], ['$28', '$49', '$63', 23], ['$23', '$40', '$51', 21]] },
-    BTCUSD: { lots: [0.02, 0.04, 0.06], dist: '$35', tp: '$50', back: '$17,50', hold: [['$1.659', '$2.879', '$3.712', 28], ['$1.177', '$2.038', '$2.629', 25], ['$948', '$1.648', '$2.130', 23]] },
-    EURUSD: { lots: [0.02, 0.04, 0.06], dist: '3 pip', tp: '4 pip', back: '1,5 pip', hold: [['153 pip', '266 pip', '344 pip', 29], ['109 pip', '189 pip', '244 pip', 25], ['88 pip', '153 pip', '198 pip', 23]] },
-    USDJPY: { lots: [0.03, 0.06, 0.09], dist: '3 pip', tp: '4 pip', back: '1,5 pip', hold: [['158 pip', '274 pip', '353 pip', 29], ['111 pip', '192 pip', '249 pip', 26], ['91 pip', '158 pip', '204 pip', 24]] },
+    XAUUSD: { caps: [40000, 20000, 10000], dist: '$1', tp: '$1,50', back: '$0,50', hold: [['$80', '$138', '$178'], ['$56', '$97', '$126'], ['$40', '$69', '$89']] },
+    BTCUSD: { caps: [16000, 8000, 4000], dist: '$35', tp: '$50', back: '$17,50', hold: [['$2.977', '$5.153', '$6.653'], ['$2.110', '$3.643', '$4.705'], ['$1.498', '$2.583', '$3.327']] },
+    EURUSD: { caps: [12800, 6400, 3200], dist: '3 pip', tp: '4 pip', back: '1,5 pip', hold: [['247 pip', '427 pip', '551 pip'], ['175 pip', '302 pip', '389 pip'], ['124 pip', '214 pip', '276 pip']] },
+    USDJPY: { caps: [8000, 4000, 2000], dist: '3 pip', tp: '4 pip', back: '1,5 pip', hold: [['246 pip', '424 pip', '548 pip'], ['174 pip', '301 pip', '387 pip'], ['123 pip', '213 pip', '274 pip']] },
   };
   const RISKS = ['LOW', 'MEDIUM', 'HIGH'];
   const enNum = (s) => (TT('id', 'en') === 'en' ? String(s).replace(/\./g, '#').replace(/,/g, '.').replace(/#/g, ',') : s);
@@ -92,7 +94,8 @@ const GHL = (() => {
     return `<div class="ghl-offer r-${risk.toLowerCase()}">
       <div class="row between" style="gap:8px"><b class="ghl-oname">${R.name}</b><span class="badge ${R.cls}">${R.txt}</span></div>
       <dl class="ghl-dl">
-        <dt>${TT('Lot pertama', 'First lot')}</dt><dd>${p.lots[i].toFixed(2)} ${TT('per $100, ikut balance', 'per $100, grows with balance')}</dd>
+        <dt>${TT('Lot pertama', 'First lot')}</dt><dd>0.01 ${TT('per', 'per')} ${usd(p.caps[i] / 100, false).replace(/[.,]00$/, '')} ${TT('modal, ikut balance', 'of capital, grows with balance')}</dd>
+        <dt>${TT('Modal minimal', 'Min. capital')}</dt><dd>${usd(p.caps[i] / 100, false).replace(/[.,]00$/, '')} <small>(${num(p.caps[i])} USC)</small></dd>
         <dt>${TT('Tahan melawan', 'Withstands')}</dt><dd>${enNum(h[0])} <small>(−10%)</small> · ${enNum(h[2])} <small>(−50%)</small></dd>
         <dt>${TT('Jarak · TP', 'Step · TP')}</dt><dd>${enNum(p.dist)} · ${enNum(p.tp)}</dd>
       </dl>
