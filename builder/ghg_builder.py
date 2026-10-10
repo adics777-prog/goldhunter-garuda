@@ -374,6 +374,78 @@ def sync_garuda_ai(cfg, server_sha, variant='client'):
     log(f'EA Garuda AI {variant.upper()} v{version} di-upload ke web ({len(data) * 3 // 4:,} byte)')
 
 
+VPS_STATE = {'warned': '', 'failed_mtime': 0.0}
+
+
+def vps_paths(cfg):
+    p = cfg.get('mt5') or {}
+    src = p.get('ea_source') or ''
+    name = os.path.splitext(os.path.basename(src))[0]
+    ex5 = os.path.splitext(src)[0] + '.ex5'
+    pdir = os.path.join(p.get('mql_dir') or '', 'Presets')
+    return p, src, name, ex5, sorted(glob.glob(os.path.join(pdir, glob.escape(name) + '*.set')))
+
+
+def vps_warn(msg):
+    if VPS_STATE['warned'] != msg:
+        VPS_STATE['warned'] = msg
+        log(msg)
+
+
+def sync_vps_release(cfg, server):
+    """Publish GOLD HUNTER GARUDA (.ex5 + all its presets) for the VPS agents.
+    Code is published only when #property version changes (an edit without a version bump never reaches the live
+    accounts); a version bump that is not compiled yet is compiled here first. Preset-only changes are published too."""
+    if (cfg.get('vps') or {}).get('enabled') is False:
+        return
+    p, src, name, ex5, sets = vps_paths(cfg)
+    if not src or not os.path.exists(src):
+        return
+    if time.time() - os.path.getmtime(src) < 20:          # still being edited / saved
+        return
+    m = re.search(r'#property\s+version\s+"([^"]+)"', read_text(src))
+    version = m.group(1) if m else ''
+    sv = server.get('version') or ''
+    fresh = os.path.exists(ex5) and os.path.getmtime(ex5) >= os.path.getmtime(src)
+    if not fresh:
+        if version == sv:
+            vps_warn(f'VPS: {name}.mq5 berubah tetapi versi masih v{version}. Naikkan #property version untuk menerbitkan ke VPS.')
+            return
+        mt = os.path.getmtime(src)
+        if VPS_STATE['failed_mtime'] == mt:
+            return
+        logfile = os.path.join(WORK, 'vps_compile.log')
+        os.makedirs(WORK, exist_ok=True)
+        log(f'VPS: versi baru v{version} terdeteksi, compile {name}.mq5 ...')
+        subprocess.run([p['metaeditor'], f'/compile:{src}', f'/inc:{p["mql_dir"]}', f'/log:{logfile}'], timeout=240)
+        out = read_text(logfile) if os.path.exists(logfile) else ''
+        mm = re.search(r'(\d+)\s+errors?,\s*(\d+)\s+warnings?', out)
+        if not os.path.exists(ex5) or os.path.getmtime(ex5) < mt or (mm and int(mm.group(1)) > 0):
+            VPS_STATE['failed_mtime'] = mt
+            log('VPS: compile GAGAL, rilis tidak diterbitkan:\n' + out[-1500:])
+            return
+        log(f'VPS: compile OK ({mm.group(0) if mm else "selesai"})')
+    data = open(ex5, 'rb').read()
+    sha_ex5 = hashlib.sha256(data).hexdigest()
+    presets = [(os.path.basename(f), open(f, 'rb').read()) for f in sets]
+    sha_p = hashlib.sha256(b''.join(n.encode('utf-8') + b'\0' + b for n, b in presets)).hexdigest()
+    sha = hashlib.sha256(f'{version}|{sha_ex5}|{sha_p}'.encode()).hexdigest()
+    if sha == server.get('sha'):
+        return
+    if sv and version == sv and sha_ex5 != (server.get('sha_ex5') or ''):
+        if sha_p == (server.get('sha_presets') or ''):
+            vps_warn(f'VPS: {name}.ex5 berubah tetapi versi masih v{version}. Naikkan #property version untuk menerbitkan ke VPS.')
+            return
+        vps_warn(f'VPS: preset berubah tetapi {name}.ex5 juga berubah tanpa naik versi (v{version}); naikkan versi dulu, rilis ditahan.')
+        return
+    api(cfg, '/api/builder/vps-release', {
+        'version': version, 'sha': sha, 'sha_ex5': sha_ex5, 'sha_presets': sha_p, 'host': socket.gethostname(),
+        'ex5_name': name + '.ex5', 'ex5_b64': base64.b64encode(data).decode(),
+        'presets': [{'name': n, 'b64': base64.b64encode(b).decode()} for n, b in presets]})
+    VPS_STATE['warned'] = ''
+    log(f'VPS: rilis v{version} diterbitkan ({len(data):,} byte + {len(presets)} preset). Agen VPS memasangnya dalam ±1 menit.')
+
+
 def sync_content(cfg):
     """Promo videos: take one queued job from the website, render it here (garuda_video.py), keep the MP4 in the
     content folder and hand it to Telegram through the website."""
@@ -457,6 +529,11 @@ def main():
                         sync_garuda_ai(cfg, res.get('garuda_ai_master_sha') or '', 'master')
                 except Exception as e:
                     log(f'Gagal upload EA Garuda AI: {e}')
+            if 'vps_release' in res:
+                try:
+                    sync_vps_release(cfg, res.get('vps_release') or {})
+                except Exception as e:
+                    log(f'VPS: gagal menerbitkan rilis: {e}')
             if job:
                 handle(cfg, job)
                 continue          # look for the next job right away

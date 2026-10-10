@@ -928,6 +928,33 @@
     $$('[data-p]').forEach((b) => b.onclick = () => edit(products.find((x) => x.id == b.dataset.p)));
   }
 
+  // ------------------------------------------------------------------ VPS agents (inside Pengaturan > EA Live)
+  async function vpsBox() {
+    const box = $('#vps-box');
+    if (!box) return;
+    let d;
+    try { d = await api('/admin/vps'); } catch (err) { box.innerHTML = `<div class="small" style="color:#ff8b95">${esc(err.message)}</div>`; return; }
+    const rel = d.release;
+    const head = rel ? `<div class="alert small" style="margin-bottom:12px">📦 Rilis di web: <b>v${esc(rel.version)}</b> · ${fmtDateTime(rel.at)} · ${esc(rel.ex5.name)} (${Math.round(rel.ex5.size / 1024)} KB) + ${rel.presets.length} preset · dari ${esc(rel.by || 'builder')}</div>`
+      : '<div class="alert small" style="margin-bottom:12px">📦 Belum ada rilis. Builder menerbitkan otomatis begitu versi EA naik (atau saat pertama kali berjalan dengan kode ini).</div>';
+    const rows = d.agents || [];
+    box.innerHTML = head + (rows.length ? `<div class="table-wrap"><table><thead><tr><th>VPS</th><th>Versi terpasang</th><th>MT5</th><th>Detak terakhir</th><th>Catatan</th><th></th></tr></thead><tbody>
+      ${rows.map((a) => {
+        const cur = rel && a.sha === rel.sha;
+        const on = Date.now() / 1000 - a.updated_at < 600;
+        const run = a.terminals.filter((x) => x.running).length;
+        return `<tr><td><b>${esc(a.host)}</b><div class="tiny">${on ? '<span style="color:#6ee7a2">● online</span>' : '<span style="color:#ff8b95">● tidak melapor</span>'}</div></td>
+          <td>${a.version ? 'v' + esc(a.version) : '-'} ${cur ? '<span class="badge b-green">terbaru</span>' : rel ? '<span class="badge b-orange">menunggu</span>' : ''}<div class="tiny muted">${a.installed_at ? 'dipasang ' + fmtDateTime(a.installed_at) : ''}</div></td>
+          <td class="small">${a.terminals.length} folder · ${run} berjalan<div class="tiny muted" style="max-width:320px">${a.terminals.map((x) => esc((x.origin || x.data).split('\\').pop())).join(', ')}</div></td>
+          <td class="tiny nowrap">${ago(a.updated_at)}</td><td class="tiny">${esc(a.note)}</td>
+          <td><button type="button" class="btn btn-ghost btn-sm" data-vdel="${esc(a.host)}" title="Hapus dari daftar">🗑</button></td></tr>`;
+      }).join('')}</tbody></table></div>` : '<div class="small muted">Belum ada VPS yang melapor.</div>');
+    $$('[data-vdel]', box).forEach((b) => b.onclick = async () => {
+      if (!confirm('Hapus VPS ini dari daftar? (Agennya tetap berjalan dan akan muncul lagi bila masih aktif.)')) return;
+      try { await api('/admin/vps/' + encodeURIComponent(b.dataset.vdel), { method: 'DELETE' }); vpsBox(); } catch (err) { toast(err.message, 'err'); }
+    });
+  }
+
   // ------------------------------------------------------------------ EA live setups (inside Pengaturan > EA Live)
   async function eaSetupsBox() {
     const box = $('#ea-setups');
@@ -1084,10 +1111,18 @@
         <div class="card" style="grid-column:1/-1" data-tab="live"><h3>🎚️ Setup yang melapor</h3>
           <p class="help" style="margin-top:0">Muncul otomatis begitu EA pertama kali mengirim data. <b>Mulai hitung</b> = awal track record (profit, persen modal, lama berjalan, DD terdalam dihitung sejak itu); ubah tanggalnya atau klik <b>Mulai ulang</b> bila akun dipakai ulang. Setup yang disembunyikan tidak tampil di web dan tidak memicu peringatan offline.</p>
           <div id="ea-setups"><div class="small muted">Memuat…</div></div></div>
+        <div class="card" style="grid-column:1/-1" data-tab="live"><h3>🖥️ VPS: update otomatis EA &amp; preset</h3>
+          <p class="help" style="margin-top:0">Naikkan <span class="mono">#property version</span> di GOLD HUNTER GARUDA.mq5 → builder di PC Anda meng-compile dan menerbitkan rilis (EA + semua preset) → agen di setiap VPS memasangnya ke semua MT5 dan me-restart MT5 (chart &amp; input tersimpan). Perubahan tanpa naik versi tidak diterbitkan; preset yang berubah tetap diterbitkan.</p>
+          <ol class="small" style="margin:0 0 12px 18px;line-height:1.8">
+            <li>Unduh 3 file ini, taruh di <b>satu folder</b> di VPS (mis. <span class="mono">C:\\GHG-Agent</span>): <a href="/api/admin/vps/download?f=agent">GHG-VPS-Agent.ps1</a> · <a href="/api/admin/vps/download?f=install">Pasang-Agen-VPS.bat</a> · <a href="/api/admin/vps/download?f=config">config.json</a> (berisi kunci master, jangan dibagikan).</li>
+            <li>Di VPS klik dua kali <b>Pasang-Agen-VPS.bat</b>: uji koneksi, lalu agen jalan tersembunyi dan otomatis jalan lagi setiap Windows login.</li>
+            <li>Pasang tiap MT5 + EA sekali secara manual (Load preset). Rilis berikutnya masuk sendiri; status VPS tampil di bawah.</li></ol>
+          <div id="vps-box"><div class="small muted">Memuat…</div></div></div>
         <div class="save-bar" style="grid-column:1/-1"><button class="btn btn-gold" type="submit">Simpan Pengaturan</button><span class="tiny muted">Menyimpan semua tab sekaligus</span></div>
       </form>`;
     initTabs('settings');
     eaSetupsBox();
+    vpsBox();
     $('#ea-report-send').onclick = async (e) => {
       try { const r = await busy(e.target, () => api('/admin/ea/report-send', { method: 'POST' })); toast(`Laporan gambar terkirim ke ${r.targets} target Telegram`); } catch (err) { toast(err.message, 'err'); }
     };

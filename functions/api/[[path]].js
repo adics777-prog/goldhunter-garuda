@@ -11,6 +11,8 @@ import {
 } from '../../server/logic.js';
 import { layout, sendEmail } from '../../server/email.js';
 import { reportPng } from '../../server/report-image.js';
+import AGENT_PS1 from '../../server/vps/GHG-VPS-Agent.ps1.txt';
+import AGENT_BAT from '../../server/vps/Pasang-Agen-VPS.bat.txt';
 
 const routes = [];
 const route = (method, path, auth, handler) => {
@@ -1658,6 +1660,88 @@ function garudaEa(s, master = false) {
   if (typeof v === 'string') { try { v = JSON.parse(v); } catch { v = null; } }
   return v && v.file_id ? v : null;
 }
+// ======================= VPS AUTO-UPDATE (GOLD HUNTER GARUDA ex5 + presets -> every MT5 on the VPS) =======================
+// The builder on the owner's PC publishes a release when #property version changes (or the presets change);
+// the VPS agent (PowerShell) polls GET /vps/release with x-ea-key = ea_master_key, downloads, installs into every
+// MT5 data folder and restarts the terminals, then reports to POST /vps/status.
+const vpsRelease = (s) => { try { const r = JSON.parse(s.vps_release || 'null'); return r && r.sha ? r : null; } catch { return null; } };
+async function vpsAuth(env, request) {
+  const s = await getSettings(env);
+  const key = String(s.ea_master_key || '').trim();
+  if (!key || request.headers.get('x-ea-key') !== key) fail(403, 'Kunci master salah (Admin > Pengaturan > EA Live)');
+  return s;
+}
+route('POST', '/builder/vps-release', 'builder', async ({ request, env }) => {
+  const b = await readJson(request);
+  const ex5 = String(b.ex5_b64 || '');
+  if (!ex5 || ex5.length > 2.6e6) fail(400, 'File EA kosong atau terlalu besar');
+  const presets = (Array.isArray(b.presets) ? b.presets : []).slice(0, 60)
+    .map((p) => ({ name: str(p.name, 120).replace(/[\\/:*?"<>|]/g, ''), data: String(p.b64 || '') }))
+    .filter((p) => p.name.toLowerCase().endsWith('.set') && p.data && p.data.length < 200000);
+  const t = now();
+  const name = str(b.ex5_name, 120).replace(/[\\/:*?"<>|]/g, '') || 'GOLD HUNTER GARUDA.ex5';
+  const old = await env.DB.prepare("SELECT id FROM files WHERE kind IN ('vps_ex5','vps_preset')").all();
+  const ins = (kind, nm, mime, data) => env.DB.prepare('INSERT INTO files (user_id, kind, name, mime, size, data_b64, created_at) VALUES (NULL, ?, ?, ?, ?, ?, ?)')
+    .bind(kind, nm, mime, Math.floor(data.length * 3 / 4), data, t);
+  const r1 = await ins('vps_ex5', name, 'application/octet-stream', ex5).run();
+  const pres = [];
+  for (const p of presets) { const r = await ins('vps_preset', p.name, 'application/octet-stream', p.data).run(); pres.push({ id: r.meta.last_row_id, name: p.name, size: Math.floor(p.data.length * 3 / 4) }); }
+  if (old.results.length) await env.DB.batch(old.results.map((x) => env.DB.prepare('DELETE FROM files WHERE id=?').bind(x.id)));
+  const rel = { version: str(b.version, 12), sha: str(b.sha, 80), sha_ex5: str(b.sha_ex5, 80), sha_presets: str(b.sha_presets, 80), at: t,
+    ex5: { id: r1.meta.last_row_id, name, size: Math.floor(ex5.length * 3 / 4) }, presets: pres, by: str(b.host, 60) };
+  await putSetting(env, 'vps_release', JSON.stringify(rel));
+  return json({ ok: true, sha: rel.sha });
+});
+route('GET', '/vps/release', 'public', async ({ request, env, url }) => {
+  const rel = vpsRelease(await vpsAuth(env, request));
+  if (!rel) return json({ ok: true, none: true });
+  if (url.searchParams.get('have') === rel.sha) return json({ ok: true, same: true, version: rel.version, sha: rel.sha });
+  return json({ ok: true, ...rel });
+});
+route('GET', '/vps/file/:id', 'public', async ({ request, env, params }) => {
+  await vpsAuth(env, request);
+  const f = await env.DB.prepare("SELECT name, data_b64 FROM files WHERE id=? AND kind IN ('vps_ex5','vps_preset')").bind(int(params.id)).first();
+  if (!f) fail(404, 'File rilis tidak ada (sudah diganti rilis baru?)');
+  return new Response(unb64(f.data_b64), { headers: { 'content-type': 'application/octet-stream', 'cache-control': 'private, no-store' } });
+});
+route('POST', '/vps/status', 'public', async ({ request, env }) => {
+  await vpsAuth(env, request);
+  const b = await readJson(request);
+  const host = str(b.host, 60);
+  if (!host) fail(400, 'Nama VPS kosong');
+  const terms = (Array.isArray(b.terminals) ? b.terminals : []).slice(0, 40).map((x) => ({ data: str(x.data, 200), origin: str(x.origin, 200), running: !!x.running, ok: x.ok !== false }));
+  const t = now();
+  await env.DB.prepare(`INSERT INTO ea_vps (host, version, sha, terminals, note, updated_at, installed_at) VALUES (?,?,?,?,?,?,?)
+      ON CONFLICT(host) DO UPDATE SET version=excluded.version, sha=excluded.sha, terminals=excluded.terminals, note=excluded.note, updated_at=excluded.updated_at,
+      installed_at=CASE WHEN excluded.installed_at > 0 THEN excluded.installed_at ELSE installed_at END`)
+    .bind(host, str(b.version, 12), str(b.sha, 80), JSON.stringify(terms), str(b.note, 300), t, b.installed ? t : 0).run();
+  return json({ ok: true });
+});
+route('GET', '/admin/vps', 'admin', async ({ env }) => {
+  const s = await getSettings(env);
+  const { results } = await env.DB.prepare('SELECT * FROM ea_vps ORDER BY host').all();
+  return json({ release: vpsRelease(s), key_set: !!String(s.ea_master_key || '').trim(),
+    agents: results.map((r) => { let tm = []; try { tm = JSON.parse(r.terminals || '[]'); } catch { tm = []; } return { ...r, terminals: tm }; }) });
+});
+route('DELETE', '/admin/vps/:host', 'admin', async ({ env, params }) => {
+  await env.DB.prepare('DELETE FROM ea_vps WHERE host=?').bind(decodeURIComponent(params.host)).run();
+  return json({ ok: true });
+});
+// Agent files for the VPS; config.json comes with the web address and the master key filled in.
+route('GET', '/admin/vps/download', 'admin', async ({ env, url, base }) => {
+  const f = url.searchParams.get('f');
+  const s = await getSettings(env);
+  const file = (name, body, mime) => new Response(body, { headers: { 'content-type': mime, 'content-disposition': `attachment; filename="${name}"`, 'cache-control': 'private, no-store' } });
+  if (f === 'agent') return file('GHG-VPS-Agent.ps1', '\ufeff' + AGENT_PS1.replace(/\r?\n/g, '\r\n'), 'text/plain; charset=utf-8');
+  if (f === 'install') return file('Pasang-Agen-VPS.bat', AGENT_BAT.replace(/\r?\n/g, '\r\n'), 'text/plain; charset=utf-8');
+  if (f === 'config') {
+    const key = String(s.ea_master_key || '').trim();
+    if (!key) fail(400, 'Buat & simpan kunci master dulu (Pengaturan > EA Live)');
+    return file('config.json', JSON.stringify({ web: base || 'https://goldhuntergaruda.com', key, interval_seconds: 60, restart_terminals: true, restart_gap_seconds: 20, extra_data_dirs: [] }, null, 2), 'application/json');
+  }
+  fail(404, 'File tidak dikenal');
+});
+
 route('POST', '/builder/garuda-ai', 'builder', async ({ request, env }) => {
   const b = await readJson(request);
   const data = String(b.data_b64 || '');
@@ -2494,8 +2578,10 @@ route('POST', '/builder/claim', 'builder', async ({ request, env, base, waitUnti
     waitUntil(runDaily(env, base).catch((e) => console.error('daily', e)));
   }
   const ea = garudaEa(s), eam = garudaEa(s, true);
+  const rel = vpsRelease(s);
   return json({ job: await claimBuild(env, str(b.builder_id, 60) || 'builder', b.versions && typeof b.versions === 'object' ? b.versions : {}),
-    garuda_ai_sha: ea ? ea.sha : '', garuda_ai_master_sha: eam ? eam.sha : '' });
+    garuda_ai_sha: ea ? ea.sha : '', garuda_ai_master_sha: eam ? eam.sha : '',
+    vps_release: rel ? { version: rel.version, sha: rel.sha, sha_ex5: rel.sha_ex5 || '', sha_presets: rel.sha_presets || '' } : { version: '', sha: '', sha_ex5: '', sha_presets: '' } });
 });
 route('POST', '/builder/result', 'builder', async ({ request, env, base }) => {
   const b = await readJson(request);

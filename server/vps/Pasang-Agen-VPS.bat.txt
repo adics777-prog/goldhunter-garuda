@@ -1,0 +1,24 @@
+@echo off
+rem ============================================================================
+rem  Pasang GHG VPS Agent: update otomatis EA GOLD HUNTER GARUDA + preset di VPS ini.
+rem  Taruh file ini, GHG-VPS-Agent.ps1 dan config.json dalam SATU folder, lalu klik dua kali.
+rem  Agen berjalan tersembunyi dan otomatis jalan lagi setiap kali Windows login.
+rem ============================================================================
+cd /d "%~dp0"
+title Pasang GHG VPS Agent
+if not exist "GHG-VPS-Agent.ps1" ( echo GHG-VPS-Agent.ps1 tidak ada di folder ini. & pause & exit /b 1 )
+if not exist "config.json" ( echo config.json tidak ada. Unduh dari Admin web ^> Pengaturan ^> EA Live ^> VPS. & pause & exit /b 1 )
+powershell -NoProfile -ExecutionPolicy Bypass -Command "Get-ChildItem -Path '%~dp0' | Unblock-File"
+echo.
+echo === 1/3 Uji koneksi ke web (tanpa menyalin apa pun) ===
+powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0GHG-VPS-Agent.ps1" -Once -DryRun
+echo.
+echo === 2/3 Jalan otomatis setiap Windows login (shortcut di folder Startup) ===
+powershell -NoProfile -ExecutionPolicy Bypass -Command "$s=(New-Object -ComObject WScript.Shell).CreateShortcut([Environment]::GetFolderPath('Startup')+'\GHG VPS Agent.lnk'); $s.TargetPath='powershell.exe'; $s.Arguments='-NoProfile -WindowStyle Hidden -ExecutionPolicy Bypass -File ""%~dp0GHG-VPS-Agent.ps1""'; $s.WorkingDirectory='%~dp0'; $s.WindowStyle=7; $s.Save(); 'Shortcut dibuat: ' + $s.FullName"
+echo.
+echo === 3/3 Menjalankan agen sekarang (tersembunyi) ===
+powershell -NoProfile -Command "Start-Process powershell.exe -WindowStyle Hidden -ArgumentList '-NoProfile','-WindowStyle','Hidden','-ExecutionPolicy','Bypass','-File','""%~dp0GHG-VPS-Agent.ps1""'"
+echo.
+echo SELESAI. Log ada di agent.log di folder ini. Status VPS tampil di Admin web ^> Pengaturan ^> EA Live.
+echo Untuk berhenti: hapus shortcut "GHG VPS Agent" di folder Startup lalu restart Windows.
+pause

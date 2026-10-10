@@ -1,0 +1,151 @@
+# =====================================================================================
+#  GHG VPS Agent - update otomatis EA GOLD HUNTER GARUDA + preset di semua MT5 VPS ini
+#  - tiap menit mengecek rilis terbaru di goldhuntergaruda.com (kunci = kunci master EA)
+#  - rilis baru: .ex5 disalin ke MQL5\Experts, semua preset ke MQL5\Presets (+ Profiles\Tester)
+#    di SETIAP folder data MT5, lalu MT5 ditutup normal (chart & input tersimpan) dan dibuka lagi
+#  - melapor status ke web (Admin > Pengaturan > EA Live > VPS)
+#  Jalankan sekali:  Pasang-Agen-VPS.bat   (otomatis jalan lagi setiap Windows login)
+#  Uji tanpa menyalin / me-restart:  powershell -ExecutionPolicy Bypass -File GHG-VPS-Agent.ps1 -DryRun -Once
+# =====================================================================================
+param([switch]$Once, [switch]$DryRun)
+$ErrorActionPreference = 'Stop'
+$Here = Split-Path -Parent $MyInvocation.MyCommand.Path
+$LogFile = Join-Path $Here 'agent.log'
+$StateFile = Join-Path $Here 'state.json'
+[Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
+
+function Log([string]$m) {
+  $line = "[{0}] {1}" -f (Get-Date -Format 'yyyy-MM-dd HH:mm:ss'), $m
+  Write-Host $line
+  try {
+    if ((Test-Path $LogFile) -and (Get-Item $LogFile).Length -gt 2MB) { Move-Item $LogFile "$LogFile.old" -Force }
+    Add-Content -Path $LogFile -Value $line -Encoding UTF8
+  } catch { }
+}
+
+# satu agen saja per Windows
+$mutex = New-Object System.Threading.Mutex($false, 'Global\GHG-VPS-Agent')
+if (-not $mutex.WaitOne(0)) { Log 'Agen sudah berjalan, keluar.'; exit 0 }
+
+$cfgPath = Join-Path $Here 'config.json'
+if (-not (Test-Path $cfgPath)) { Log 'config.json tidak ada. Unduh dari Admin web > Pengaturan > EA Live > VPS.'; exit 1 }
+$Cfg = Get-Content $cfgPath -Raw -Encoding UTF8 | ConvertFrom-Json
+$Web = ([string]$Cfg.web).Trim().TrimEnd('/')
+$Key = ([string]$Cfg.key).Trim()
+$Every = 60; if ($Cfg.interval_seconds) { $Every = [Math]::Max(30, [int]$Cfg.interval_seconds) }
+$Restart = $true; if ($null -ne $Cfg.restart_terminals) { $Restart = [bool]$Cfg.restart_terminals }
+$Gap = 20; if ($Cfg.restart_gap_seconds) { $Gap = [Math]::Max(5, [int]$Cfg.restart_gap_seconds) }
+$Headers = @{ 'x-ea-key' = $Key; 'User-Agent' = 'GHG-VPS-Agent/1.0' }
+
+function Load-State { if (Test-Path $StateFile) { try { return Get-Content $StateFile -Raw | ConvertFrom-Json } catch { } } return [pscustomobject]@{ sha = ''; version = '' } }
+function Save-State($st) { $st | ConvertTo-Json | Set-Content -Path $StateFile -Encoding UTF8 }
+
+# Semua folder data MT5 (yang punya MQL5\Experts): %APPDATA%\MetaQuotes\Terminal\<id> + folder portable di config
+function Get-DataDirs {
+  $dirs = @()
+  $root = Join-Path $env:APPDATA 'MetaQuotes\Terminal'
+  if (($Cfg.scan_appdata -ne $false) -and (Test-Path $root)) {
+    Get-ChildItem $root -Directory | ForEach-Object { if (Test-Path (Join-Path $_.FullName 'MQL5\Experts')) { $dirs += $_.FullName } }
+  }
+  if ($Cfg.extra_data_dirs) { foreach ($d in $Cfg.extra_data_dirs) { if ($d -and (Test-Path (Join-Path $d 'MQL5\Experts'))) { $dirs += (Resolve-Path $d).Path } } }
+  return $dirs | Select-Object -Unique
+}
+# folder instalasi MT5 milik folder data (origin.txt), atau folder itu sendiri bila portable
+function Get-Origin([string]$dataDir) {
+  $o = Join-Path $dataDir 'origin.txt'
+  if (Test-Path $o) { try { return (Get-Content $o -Raw -Encoding Unicode).Trim() } catch { } }
+  if (Test-Path (Join-Path $dataDir 'terminal64.exe')) { return $dataDir }
+  return ''
+}
+function Get-TerminalProcs([string]$installDir) {
+  if (-not $installDir) { return @() }
+  $exe = (Join-Path $installDir 'terminal64.exe').ToLower()
+  return @(Get-CimInstance Win32_Process -Filter "Name='terminal64.exe'" | Where-Object { $_.ExecutablePath -and $_.ExecutablePath.ToLower() -eq $exe })
+}
+
+function Get-Json([string]$path) { return Invoke-RestMethod -Uri ($Web + '/api' + $path) -Headers $Headers -TimeoutSec 60 }
+function Get-File([int]$id, [string]$out) { Invoke-WebRequest -Uri ($Web + '/api/vps/file/' + $id) -Headers $Headers -OutFile $out -UseBasicParsing -TimeoutSec 180 }
+
+function Send-Status([string]$version, [string]$sha, [string]$note, [bool]$installed) {
+  $terms = @()
+  foreach ($d in (Get-DataDirs)) { $org = Get-Origin $d; $terms += @{ data = $d; origin = $org; running = ((Get-TerminalProcs $org).Count -gt 0) } }
+  $body = @{ host = $env:COMPUTERNAME; version = $version; sha = $sha; note = $note; installed = $installed; terminals = $terms } | ConvertTo-Json -Depth 5
+  try { Invoke-RestMethod -Uri ($Web + '/api/vps/status') -Method Post -Headers $Headers -ContentType 'application/json; charset=utf-8' -Body ([Text.Encoding]::UTF8.GetBytes($body)) -TimeoutSec 60 | Out-Null }
+  catch { Log ("Status gagal dikirim: " + $_.Exception.Message) }
+}
+
+# MT5 ditutup normal (seperti klik X) supaya chart, EA & inputnya tersimpan, lalu dibuka lagi dengan argumen yang sama
+function Restart-Terminal([string]$installDir) {
+  foreach ($p in (Get-TerminalProcs $installDir)) {
+    $exe = $p.ExecutablePath
+    $argLine = ''
+    if ($p.CommandLine) { $cl = $p.CommandLine.Trim(); if ($cl.StartsWith('"')) { $i = $cl.IndexOf('"', 1); $argLine = $cl.Substring($i + 1).Trim() } else { $i = $cl.IndexOf(' '); if ($i -gt 0) { $argLine = $cl.Substring($i + 1).Trim() } } }
+    if ($DryRun) { Log ("  [uji] akan me-restart PID {0}: {1} {2}" -f $p.ProcessId, $exe, $argLine); continue }
+    $proc = Get-Process -Id $p.ProcessId -ErrorAction SilentlyContinue
+    if (-not $proc) { continue }
+    Log ("  menutup MT5 PID {0} ({1})" -f $p.ProcessId, $installDir)
+    [void]$proc.CloseMainWindow()
+    if (-not $proc.WaitForExit(90000)) { Log '  MT5 tidak menutup dalam 90 detik: dibiarkan (restart manual MT5 ini agar EA versi baru aktif)'; continue }
+    Start-Sleep -Seconds 3
+    if ($argLine) { Start-Process -FilePath $exe -ArgumentList $argLine -WorkingDirectory (Split-Path $exe) } else { Start-Process -FilePath $exe -WorkingDirectory (Split-Path $exe) }
+    Log '  MT5 dibuka lagi'
+    Start-Sleep -Seconds $Gap
+  }
+}
+
+function Install-Release($rel) {
+  $tmp = Join-Path $env:TEMP ('ghg-rel-' + $rel.sha.Substring(0, 12))
+  if (Test-Path $tmp) { Remove-Item $tmp -Recurse -Force }
+  New-Item -ItemType Directory -Path $tmp | Out-Null
+  $ex5 = Join-Path $tmp $rel.ex5.name
+  Get-File $rel.ex5.id $ex5
+  if ((Get-Item $ex5).Length -ne [int64]$rel.ex5.size) { throw "Ukuran $($rel.ex5.name) tidak cocok (unduhan rusak)" }
+  $sets = @()
+  foreach ($p in $rel.presets) { $f = Join-Path $tmp $p.name; Get-File $p.id $f; $sets += $f }
+  $dirs = Get-DataDirs
+  if (-not $dirs) { throw 'Tidak ada folder data MT5 (jalankan MT5 sekali dulu, atau isi extra_data_dirs di config.json)' }
+  $origins = @()
+  foreach ($d in $dirs) {
+    $targets = @((Join-Path $d 'MQL5\Experts'), (Join-Path $d 'MQL5\Presets'), (Join-Path $d 'MQL5\Profiles\Tester'))
+    if ($DryRun) { Log ("  [uji] akan menyalin {0} + {1} preset ke {2}" -f $rel.ex5.name, $sets.Count, $d) }
+    else {
+      foreach ($t in $targets) { if (-not (Test-Path $t)) { New-Item -ItemType Directory -Path $t -Force | Out-Null } }
+      Copy-Item $ex5 (Join-Path $targets[0] $rel.ex5.name) -Force
+      foreach ($f in $sets) { Copy-Item $f $targets[1] -Force; Copy-Item $f $targets[2] -Force }
+      Log ("  {0} + {1} preset -> {2}" -f $rel.ex5.name, $sets.Count, $d)
+    }
+    $o = Get-Origin $d
+    if ($o -and ($origins -notcontains $o)) { $origins += $o }
+  }
+  if ($Restart) { foreach ($o in $origins) { Restart-Terminal $o } }
+  else { Log '  restart_terminals = false: EA versi baru aktif setelah MT5 di-restart manual' }
+  Remove-Item $tmp -Recurse -Force -ErrorAction SilentlyContinue
+}
+
+Log ("GHG VPS Agent aktif -> {0} (cek tiap {1} detik, restart MT5: {2}{3})" -f $Web, $Every, $Restart, $(if ($DryRun) { ', MODE UJI' } else { '' }))
+$state = Load-State
+$lastStatus = [datetime]::MinValue
+while ($true) {
+  try {
+    $rel = Get-Json ('/vps/release?have=' + [uri]::EscapeDataString([string]$state.sha))
+    if ($rel.none) {
+      if (((Get-Date) - $lastStatus).TotalMinutes -ge 5) { Send-Status $state.version $state.sha 'belum ada rilis di web' $false; $lastStatus = Get-Date }
+    } elseif (-not $rel.same) {
+      Log ("Rilis baru v{0} ({1} preset) - memasang..." -f $rel.version, @($rel.presets).Count)
+      Install-Release $rel
+      if (-not $DryRun) { $state = [pscustomobject]@{ sha = $rel.sha; version = $rel.version }; Save-State $state }
+      Log ("Rilis v{0} terpasang" -f $rel.version)
+      Send-Status $rel.version $rel.sha ('terpasang ' + (Get-Date -Format 'yyyy-MM-dd HH:mm')) (-not $DryRun)
+      $lastStatus = Get-Date
+    } elseif (((Get-Date) - $lastStatus).TotalMinutes -ge 5) {
+      Send-Status $state.version $state.sha 'ok' $false
+      $lastStatus = Get-Date
+    }
+  } catch {
+    $msg = $_.Exception.Message
+    if ($_.Exception.Response) { try { $msg = "HTTP {0}: {1}" -f [int]$_.Exception.Response.StatusCode, $msg } catch { } }
+    Log ("Gagal: " + $msg)
+  }
+  if ($Once) { break }
+  Start-Sleep -Seconds $Every
+}
