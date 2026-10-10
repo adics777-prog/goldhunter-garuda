@@ -3,5 +3,6 @@
   <url><loc>https://goldhuntergaruda.com/</loc><changefreq>weekly</changefreq><priority>1.0</priority></url>
 
   <url><loc>https://goldhuntergaruda.com/live</loc><changefreq>hourly</changefreq><priority>0.8</priority></url>
+  <url><loc>https://goldhuntergaruda.com/profit</loc><changefreq>hourly</changefreq><priority>0.8</priority></url>
   <url><loc>https://goldhuntergaruda.com/daftar</loc><changefreq>monthly</changefreq><priority>0.6</priority></url>
 </urlset>

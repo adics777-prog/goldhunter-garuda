@@ -3,15 +3,15 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Progress Profit Member EA GoldHunter Garuda (Rupiah)</title>
-<meta name="description" content="Progress profit harian, mingguan dan bulanan akun member yang menjalankan EA emas GoldHunter Garuda, dilaporkan otomatis oleh EA dan dikonversi ke Rupiah.">
+<title data-en="Member Results · GOLD HUNTER GARUDA">Hasil Member · GOLD HUNTER GARUDA</title>
+<meta name="description" content="Hasil trading nyata member yang menjalankan EA GOLD HUNTER GARUDA: lama trading, modal, profit dalam dolar dan persen dari modal, dilaporkan otomatis oleh EA. Nama member disensor.">
 <meta name="robots" content="index,follow">
 <meta name="theme-color" content="#07070a">
 <link rel="canonical" href="https://goldhuntergaruda.com/profit">
 <meta property="og:type" content="website">
 <meta property="og:url" content="https://goldhuntergaruda.com/profit">
-<meta property="og:title" content="Progress Profit Member — GoldHunter Garuda">
-<meta property="og:description" content="Profit akun member EA GoldHunter Garuda, dilaporkan otomatis oleh EA, dalam Rupiah.">
+<meta property="og:title" content="Hasil Member — GOLD HUNTER GARUDA">
+<meta property="og:description" content="Profit akun member EA GOLD HUNTER GARUDA dalam dolar dan persen modal, dilaporkan otomatis oleh EA.">
 <meta property="og:image" content="https://goldhuntergaruda.com/assets/brand/goldhunter-garuda-banner-1200x630.jpg">
 <link rel="icon" href="/assets/brand/favicon.ico">
 <link rel="apple-touch-icon" href="/assets/brand/apple-touch-icon.png">
@@ -25,7 +25,7 @@
   .pub-top .row{flex-wrap:nowrap}
   .pub-top .btn{white-space:nowrap}
   .pub-top .brand{flex-shrink:0}
-  @media(max-width:370px){.pub-top a[href="/masuk"]{display:none}}
+  @media(max-width:420px){.pub-top a[href="/masuk"]{display:none}}@media(max-width:360px){.pub-top a.btn[href="/"]{display:none}}
   @media(max-width:560px){.pub-top .brand span{display:none}.pub-top .btn{padding:7px 10px;font-size:.78rem}.pub-top .row{gap:6px!important}}
   .pub-wrap{max-width:1000px;margin:0 auto;padding:34px clamp(16px,4vw,32px) 60px}
   .pub-hero{text-align:center;margin-bottom:26px}
@@ -41,63 +41,73 @@
 <body>
 <header class="pub-top">
   <a class="brand" href="/"><img src="/assets/brand/goldhunter-garuda-logo-128.png" width="38" height="38" alt="GoldHunter Garuda"><span class="gold-text">GOLDHUNTER</span></a>
-  <div class="row" style="gap:8px"><a class="btn btn-ghost btn-sm" href="/">🏠 Beranda</a><a class="btn btn-ghost btn-sm" href="/masuk">Masuk</a><a class="btn btn-gold btn-sm" href="/daftar">Daftar Gratis</a></div>
+  <div class="row" style="gap:8px"><a href="#" class="btn btn-ghost btn-sm" data-lang-toggle>🌐 EN</a><a class="btn btn-ghost btn-sm" href="/" data-en="🏠 Home">🏠 Beranda</a><a class="btn btn-ghost btn-sm" href="/masuk" data-en="Log in">Masuk</a><a class="btn btn-gold btn-sm" href="/daftar" data-en="Sign Up Free">Daftar Gratis</a></div>
 </header>
 <main class="pub-wrap">
   <div class="pub-hero">
-    <span class="badge b-gold">📈 Dilaporkan otomatis oleh EA</span>
-    <h1 style="margin-top:12px">Progress <span class="gold-text">Member</span></h1>
-    <p>Profit posisi yang sudah ditutup dari akun member yang menjalankan EA GoldHunter Garuda, dikonversi ke Rupiah dengan kurs terbaru.</p>
+    <span class="badge b-gold" data-en="📈 Reported automatically by the EA">📈 Dilaporkan otomatis oleh EA</span>
+    <h1 style="margin-top:12px" data-en="Member &lt;span class=&quot;gold-text&quot;&gt;Results&lt;/span&gt;">Hasil <span class="gold-text">Member</span></h1>
+    <p data-en="Real accounts of members running GOLD HUNTER GARUDA. The EA reports closed profit by itself: how long it has been trading, the capital, profit in US dollars and as a % of capital. Names are censored.">Akun nyata member yang menjalankan GOLD HUNTER GARUDA. EA sendiri yang melaporkan profit tertutup: sudah berapa lama trading, modalnya, profit dalam dolar dan persen dari modal. Nama member disensor.</p>
   </div>
   <div class="row" style="justify-content:center;margin-bottom:18px">
     <div class="choice" id="tabs">
-      <label><input type="radio" name="p" value="day"><span>Hari ini</span></label>
-      <label><input type="radio" name="p" value="week"><span>Minggu ini</span></label>
-      <label><input type="radio" name="p" value="month" checked><span>Bulan ini</span></label>
+      <label><input type="radio" name="p" value="all" checked><span data-en="Since start">Sejak mulai</span></label>
+      <label><input type="radio" name="p" value="month"><span data-en="This month">Bulan ini</span></label>
+      <label><input type="radio" name="p" value="week"><span data-en="This week">Minggu ini</span></label>
+      <label><input type="radio" name="p" value="day"><span data-en="Today">Hari ini</span></label>
     </div>
   </div>
   <div class="grid c3" style="margin-bottom:18px" id="tiles"></div>
   <div id="list"><div class="loading"><span class="spinner"></span></div></div>
-  <p class="center tiny muted" id="rate" style="margin-top:12px"></p>
-  <div class="center" style="margin:28px 0"><a class="btn btn-gold" href="/live">📡 Lihat Live GOLD HUNTER GARUDA</a></div>
-  <div class="alert err small center" style="line-height:1.7">
+  <p class="center tiny muted" id="note" style="margin-top:12px"></p>
+  <div class="center" style="margin:28px 0"><a class="btn btn-gold" href="/live" data-en="📡 See the live setup reports">📡 Lihat laporan live tiap setup</a></div>
+  <div class="alert err small center" style="line-height:1.7" data-en="<b>⚠️ RISK WARNING.</b> These are real member accounts reported automatically by the EA, unedited, and they are <b>not a guarantee</b> of your results. Trading forex, gold and crypto carries a very high risk and can lead to the loss of part or all of your capital. Results differ per account depending on capital, settings, start date and broker. Some members chose not to be shown. <a href='/#risiko' style='color:#ff8b95;text-decoration:underline'>Read the full risk warning</a>.">
     <b>⚠️ PERINGATAN RISIKO.</b> Data di atas adalah hasil nyata akun member yang dilaporkan otomatis oleh EA, tanpa diubah, dan <b>bukan jaminan</b> hasil Anda.
-    Trading forex &amp; emas berisiko sangat tinggi dan dapat menyebabkan kehilangan sebagian atau seluruh modal. Kondisi market dinamis dan tidak bisa dikendalikan siapa pun.
-    Hasil tiap akun berbeda tergantung modal, setting, waktu mulai dan broker. Sebagian member memilih tidak ditampilkan atau menyamarkan namanya.
+    Trading forex, emas &amp; kripto berisiko sangat tinggi dan dapat menyebabkan kehilangan sebagian atau seluruh modal.
+    Hasil tiap akun berbeda tergantung modal, setting, waktu mulai dan broker. Sebagian member memilih tidak ditampilkan.
     <a href="/#risiko" style="color:#ff8b95;text-decoration:underline">Baca peringatan risiko lengkap</a>.
   </div>
 </main>
+<script src="/assets/i18n.js?v=489e4256"></script>
 <script src="/assets/common.js?v=aa4bb046"></script>
+<script src="/assets/ghlive.js?v=cba5353a"></script>
 <script>
 (() => {
-  const { $, esc, rupiah, ago } = GHG;
-  const money = (n) => n == null ? '-' : (n < 0 ? '- ' : '+ ') + rupiah(Math.abs(n));
-  const label = { day: 'hari ini', week: 'minggu ini', month: 'bulan ini' };
-  async function load(period) {
-    $('#list').innerHTML = '<div class="loading"><span class="spinner"></span></div>';
-    let d;
-    try { d = await (await fetch('/api/board?period=' + period)).json(); } catch { d = { enabled: false }; }
-    if (!d.enabled) { $('#tiles').innerHTML = ''; $('#list').innerHTML = '<div class="card empty">Papan progress sedang tidak ditampilkan.</div>'; return; }
-    const k = period + '_idr', pk = period + '_pct';
+  const { $, esc, ago } = GHG;
+  const { usd, pct, cls, days } = GHL;
+  const label = () => ({ all: T('sejak mulai', 'since start'), day: T('hari ini', 'today'), week: T('minggu ini', 'this week'), month: T('bulan ini', 'this month') });
+  let D = null, P = 'all';
+  function render() {
+    const d = D;
+    if (!d || !d.enabled) { $('#tiles').innerHTML = ''; $('#list').innerHTML = `<div class="card empty">${T('Papan hasil member sedang tidak ditampilkan.', 'The member results board is currently hidden.')}</div>`; return; }
+    const k = P + '_usd', pk = P + '_pct', L = label()[P];
     const plus = d.rows.filter((r) => (r[k] || 0) > 0).length;
     $('#tiles').innerHTML = `
-      <div class="stat"><b>${d.total_accounts}</b><span>Akun aktif melapor</span></div>
-      <div class="stat"><b style="font-size:1.25rem" class="${d.total_idr < 0 ? 'neg' : ''}">${money(d.total_idr)}</b><span>Total profit ${label[period]}</span></div>
-      <div class="stat"><b>${plus}/${d.rows.length}</b><span>Akun profit ${label[period]}</span></div>`;
-    $('#list').innerHTML = d.rows.length ? `<div class="table-wrap"><table class="board"><thead><tr><th>#</th><th>Member</th><th class="hide-sm">Akun</th><th class="right">Profit ${label[period]}</th><th class="right hide-sm">%</th><th class="hide-sm">Update</th></tr></thead><tbody>
-      ${d.rows.map((r, i) => `<tr><td class="rank">${i + 1}</td><td><b>${esc(r.name)}</b><div class="tiny muted">${esc(r.broker)} · ${String(r.platform).toUpperCase()}</div></td>
-        <td class="hide-sm mono small">${esc(r.account)}</td>
-        <td class="right nowrap ${(r[k] || 0) < 0 ? 'neg' : 'pos'}">${money(r[k])}</td>
-        <td class="right hide-sm small">${r[pk] == null ? '-' : (r[pk] > 0 ? '+' : '') + r[pk] + '%'}</td>
-        <td class="hide-sm tiny muted nowrap">${ago(r.updated_at)}</td></tr>`).join('')}</tbody></table></div>`
-      : '<div class="card empty">Belum ada laporan dari EA member.</div>';
-    $('#rate').textContent = d.usd_idr ? `Kurs ${rupiah(d.usd_idr)}/USD · akun cent: 100 USC = $1 · data diperbarui otomatis tiap beberapa menit` : '';
+      <div class="stat"><b>${d.total_accounts}</b><span>${T('Akun member melapor', 'Member accounts reporting')}</span></div>
+      <div class="stat"><b style="font-size:1.25rem" class="${d.total_usd < 0 ? 'neg' : ''}">${usd(d.total_usd)}</b><span>${T('Total profit', 'Total profit')} ${L}</span></div>
+      <div class="stat"><b>${plus}/${d.rows.length}</b><span>${T('Akun profit', 'Accounts in profit')} ${L}</span></div>`;
+    $('#list').innerHTML = d.rows.length ? `<div class="table-wrap"><table class="board"><thead><tr><th>#</th><th>Member</th><th class="right">${T('Lama trading', 'Trading for')}</th><th class="right hide-sm">${T('Modal', 'Capital')}</th><th class="right">Profit ${L}</th><th class="right">% ${T('modal', 'capital')}</th><th class="hide-sm">Update</th></tr></thead><tbody>
+      ${d.rows.map((r, i) => `<tr><td class="rank">${i + 1}</td><td><b>${esc(r.name)}</b><div class="tiny muted">${esc(r.broker)} · ${esc(r.account)}</div></td>
+        <td class="right nowrap small">${r.since ? days(Math.max(0, d.generated_at - r.since)) : '-'}</td>
+        <td class="right hide-sm nowrap small">${r.modal_usd == null ? '-' : usd(r.modal_usd, false)}</td>
+        <td class="right nowrap ${cls(r[k])}">${r[k] == null ? '-' : usd(r[k])}</td>
+        <td class="right nowrap ${cls(r[pk])}">${pct(r[pk])}</td>
+        <td class="hide-sm tiny muted nowrap">${esc(ago(r.updated_at))}</td></tr>`).join('')}</tbody></table></div>`
+      : `<div class="card empty" style="text-align:center">${T('Belum ada akun member yang melapor. Sementara itu, lihat hasil setup kami sendiri di', 'No member account is reporting yet. In the meantime, see our own setups on')} <a href="/live" style="color:var(--gold)">${T('halaman live', 'the live page')}</a>.</div>`;
+    $('#note').textContent = T('Diurutkan dari persen profit tertinggi. Modal = saldo awal + deposit − penarikan. Akun cent: 100 USC = $1. Data diperbarui otomatis tiap beberapa menit.',
+      'Sorted by highest % profit. Capital = start balance + deposits − withdrawals. Cent accounts: 100 USC = $1. Data refreshes automatically every few minutes.');
+  }
+  async function load() {
+    $('#list').innerHTML = '<div class="loading"><span class="spinner"></span></div>';
+    try { D = await (await fetch('/api/board?period=' + P)).json(); } catch { D = { enabled: false }; }
+    render();
   }
   const tabs = $('#tabs');
   const start = new URLSearchParams(location.search).get('p');
-  if (['day', 'week', 'month'].includes(start)) tabs.querySelector(`[value=${start}]`).checked = true;
-  tabs.onchange = (e) => { history.replaceState(null, '', '?p=' + e.target.value); load(e.target.value); };
-  load(tabs.querySelector('input:checked').value);
+  if (['all', 'day', 'week', 'month'].includes(start)) { P = start; tabs.querySelector(`[value=${start}]`).checked = true; }
+  tabs.onchange = (e) => { P = e.target.value; history.replaceState(null, '', '?p=' + P); load(); };
+  document.addEventListener('ghg:lang', render);
+  load();
 })();
 </script>
 </body>

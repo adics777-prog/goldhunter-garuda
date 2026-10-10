@@ -136,6 +136,7 @@ REPORT_BLOCK = r"""
 datetime g_ghgNextReport = 0;
 int      g_ghgEvery      = GHG_REPORT_EVERY;   // seconds; updated from the server reply
 bool     g_ghgWebWarned  = false;
+long     g_ghgSince      = 0;                  // start of the member's track record (UTC seconds, from the server reply)
 
 void GHG_Report()
   {
@@ -174,9 +175,31 @@ void GHG_Report()
          if(when >= dayStart)   pd += p;
         }
      }
-   string json = StringFormat("{\"lic\":%d,\"token\":\"%s\",\"login\":%I64d,\"server\":\"%s\",\"currency\":\"%s\",\"balance\":%.2f,\"equity\":%.2f,\"day\":%.2f,\"week\":%.2f,\"month\":%.2f,\"positions\":%d,\"version\":\"%s\"}",
+//--- closed profit since the start of the track record (modal = balance - total, so deposits count as capital)
+   double total = 0.0;
+   if(g_ghgSince > 0)
+     {
+      long off = (long)(TimeTradeServer() - TimeGMT());
+      off = (long)MathRound(off / 900.0) * 900;
+      if(HistorySelect((datetime)(g_ghgSince + off), TimeCurrent() + 86400))
+        {
+         int n2 = HistoryDealsTotal();
+         for(int i = 0; i < n2; i++)
+           {
+            ulong t = HistoryDealGetTicket(i);
+            if(t == 0)
+               continue;
+            long type = HistoryDealGetInteger(t, DEAL_TYPE);
+            if(type != DEAL_TYPE_BUY && type != DEAL_TYPE_SELL)
+               continue;
+            total += HistoryDealGetDouble(t, DEAL_PROFIT) + HistoryDealGetDouble(t, DEAL_SWAP)
+                     + HistoryDealGetDouble(t, DEAL_COMMISSION) + HistoryDealGetDouble(t, DEAL_FEE);
+           }
+        }
+     }
+   string json = StringFormat("{\"lic\":%d,\"token\":\"%s\",\"login\":%I64d,\"server\":\"%s\",\"currency\":\"%s\",\"balance\":%.2f,\"equity\":%.2f,\"day\":%.2f,\"week\":%.2f,\"month\":%.2f,\"positions\":%d,\"version\":\"%s\",\"since_used\":%I64d,\"total\":%.2f}",
                               GHG_LIC_ID, GHG_REPORT_TOKEN, login, AccountInfoString(ACCOUNT_SERVER), AccountInfoString(ACCOUNT_CURRENCY),
-                              AccountInfoDouble(ACCOUNT_BALANCE), AccountInfoDouble(ACCOUNT_EQUITY), pd, pw, pm, PositionsTotal(), GHG_EA_VERSION);
+                              AccountInfoDouble(ACCOUNT_BALANCE), AccountInfoDouble(ACCOUNT_EQUITY), pd, pw, pm, PositionsTotal(), GHG_EA_VERSION, g_ghgSince, total);
    char data[], res[];
    string resHeaders;
    int len = StringToCharArray(json, data, 0, WHOLE_ARRAY, CP_UTF8);
@@ -187,6 +210,17 @@ void GHG_Report()
      {
       // server reply e.g. {"ok":true,"next":1800} -> report interval set by the admin
       string reply = CharArrayToString(res, 0, WHOLE_ARRAY, CP_UTF8);
+      int ks = StringFind(reply, "\"since\":");
+      if(ks >= 0)
+        {
+         long sn = StringToInteger(StringSubstr(reply, ks + 8, 12));
+         if(sn > 0 && sn != g_ghgSince)
+           {
+            g_ghgSince = sn;
+            g_ghgNextReport = TimeLocal() + 5;    // resend soon with the correct total
+            return;
+           }
+        }
       int k = StringFind(reply, "\"next\":");
       if(k >= 0)
         {

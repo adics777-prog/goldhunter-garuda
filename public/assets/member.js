@@ -61,31 +61,18 @@
 
   // ------------------------------------------------------------------ beranda
   async function home() {
-    const [s, lic, n, c, f] = await Promise.all([api('/member/summary'), api('/licenses'), api('/notifications'), getCatalog(),
-      api('/signal/feed?limit=8').catch(() => null)]);
+    const [s, lic, n, c, lv] = await Promise.all([api('/member/summary'), api('/licenses'), api('/notifications'), getCatalog(),
+      (typeof GHL !== 'undefined' ? GHL.load(true) : Promise.resolve(null)).catch(() => null)]);
     const vpsP = c.products.find((p) => p.requires_ib && p.includes_vps) || c.products.find((p) => p.includes_vps);
     const ibOffer = c.products.some((p) => p.requires_ib);
-    const mk = f ? Object.fromEntries((f.markets || []).map((m) => [m.symbol, m])) : {};
-    const dgt = (sym) => (mk[sym] || { digits: 2 }).digits;
-    const st = f && f.stats30 ? f.stats30 : { wins: 0, losses: 0 };
-    const wr = st.wins + st.losses ? Math.round(st.wins / (st.wins + st.losses) * 100) + '%' : '-';
-    const running = f ? f.signals.filter((x) => x.status === 'open' || x.status === 'pending') : [];
-    const closed = f ? f.signals.filter((x) => ['TP', 'SL', 'BE', 'CLOSE'].includes(x.status)).slice(0, 4) : [];
-    const dec = (d) => `<span class="badge ${d === 'BUY' ? 'b-green' : d === 'SELL' ? 'b-red' : 'b-gold'}">${d === 'WAIT' ? 'TUNGGU' : d}</span>`;
-    const aiCard = f ? `<div class="card gold" style="margin-bottom:22px">
-        <div class="row between" style="flex-wrap:wrap;gap:10px;margin-bottom:12px"><h3 style="margin:0">🤖 Sinyal Garuda AI</h3>
-          <div class="row" style="gap:8px;flex-wrap:wrap">${c.telegram_link ? `<a class="btn btn-outline btn-sm" href="${esc(c.telegram_link)}" target="_blank" rel="noopener">✈️ Gabung Telegram</a>` : ''}<a class="btn btn-gold btn-sm" href="/sinyal">📡 Lihat semua sinyal</a></div></div>
-        <div class="grid stats-grid" style="margin-bottom:14px">
-          <div class="stat"><b>${wr}</b><span>Win rate 30 hari</span></div>
-          <div class="stat"><b>${Number(st.wins || 0)} / ${Number(st.losses || 0)}</b><span>TP / SL 30 hari</span></div>
-          <div class="stat"><b>${running.length}</b><span>Sinyal berjalan</span></div></div>
-        ${(f.last_by_market || []).map((x) => `<div class="sig-mini"><div>${x.status === 'pending' ? `<span class="badge b-blue">⏳ PENDING ${esc(x.decision)} ${esc(x.order_type)}</span>${x.price ? ` <span class="small mono">@${Number(x.price).toFixed(dgt(x.symbol))}</span>` : ''}` : x.status === 'cancel' ? '<span class="badge b-gray">PENDING DIBATALKAN</span>' : dec(x.decision)} <b>${esc(x.symbol)}</b> <span class="tiny muted">${ago(x.created_at)}</span>
-            <div class="small muted" style="margin-top:4px;max-width:720px">${esc(String(x.reason || '').slice(0, 170))}${String(x.reason || '').length > 170 ? '…' : ''}</div></div></div>`).join('')}
-        ${running.map((x) => `<div class="sig-mini"><div>${dec(x.decision)} <b>${esc(x.symbol)}</b> ${x.status === 'pending' ? `<span class="badge b-blue">pending ${esc(x.order_type)}</span>` : '<span class="badge b-gold">berjalan</span>'}</div>
-            <div class="small mono right">Entry ${Number(x.price).toFixed(dgt(x.symbol))}<div class="tiny"><span style="color:#ff8b95">SL ${Number(x.sl).toFixed(dgt(x.symbol))}</span> · <span style="color:#6ee7a2">TP ${Number(x.tp).toFixed(dgt(x.symbol))}</span></div></div></div>`).join('')}
-        ${closed.length ? `<div class="tiny muted" style="margin:14px 0 4px;letter-spacing:1px">HASIL TERAKHIR</div>${closed.map((x) => `<div class="sig-mini"><div>${dec(x.decision)} <b>${esc(x.symbol)}</b> <span class="tiny muted">${fmtDate(x.created_at)}</span></div>
-            <b class="small" style="color:${x.pips > 0 ? '#6ee7a2' : x.pips < 0 ? '#ff8b95' : 'inherit'}">${x.pips > 0 ? '+' : ''}${Number(x.pips).toFixed(1)} ${esc((mk[x.symbol] || { pip_label: 'pips' }).pip_label)} · ${esc(x.status)}</b></div>`).join('')}` : ''}
-        <p class="tiny muted" style="margin-top:12px">Bukan saran investasi. Trading berisiko tinggi; hasil masa lalu tidak menjamin hasil berikutnya.</p></div>` : '';
+    // GOLD HUNTER GARUDA live: the setups reporting from real accounts (the AI signal card is archived)
+    const setups = lv && lv.setups ? lv.setups : [];
+    const top = setups.slice().sort((a, b) => (b.online - a.online) || ((b.total_pct ?? -1e9) - (a.total_pct ?? -1e9))).slice(0, 4);
+    const aiCard = `<div class="card gold" style="margin-bottom:22px">
+        <div class="row between" style="flex-wrap:wrap;gap:10px;margin-bottom:12px"><h3 style="margin:0">📡 Laporan Live GOLD HUNTER GARUDA</h3>
+          <div class="row" style="gap:8px;flex-wrap:wrap">${c.telegram_link ? `<a class="btn btn-outline btn-sm" href="${esc(c.telegram_link)}" target="_blank" rel="noopener">✈️ Gabung Telegram</a>` : ''}<a class="btn btn-gold btn-sm" href="/live">Buka semua setup</a></div></div>
+        ${top.length ? `<div class="ghl-cards">${top.map((x) => GHL.card(x)).join('')}</div>` : '<p class="small muted">Akun pantau sedang disiapkan. Laporan live tampil di sini begitu EA-nya mulai mengirim data.</p>'}
+        <p class="tiny muted" style="margin-top:12px">Bukan saran investasi. Trading berisiko tinggi; hasil masa lalu tidak menjamin hasil berikutnya.</p></div>`;
     const active = lic.licenses.filter((l) => l.status !== 'suspended').slice(0, 3);
     const bills = (await api('/orders')).orders.filter((o) => o.status === 'awaiting_payment' && o.total > 0);
     view.innerHTML = `
@@ -398,10 +385,13 @@
     if (!r) return `<div class="small muted" style="margin-top:12px">📈 Laporan profit: <b>belum masuk</b>. Izinkan WebRequest di MetaTrader agar progress Anda tampil (panduan di bawah).</div>`;
     const cur = esc(r.currency);
     const f = (v) => `${v < 0 ? '-' : '+'}${Math.abs(v).toLocaleString('id-ID', { maximumFractionDigits: 2 })} ${cur}`;
-    return `<div class="small" style="margin-top:12px">📈 Laporan EA ${ago(r.updated_at)}: hari ini <b>${f(r.profit_day)}</b> · minggu ini <b>${f(r.profit_week)}</b> · bulan ini <b>${f(r.profit_month)}</b></div>`;
+    const modal = r.total_ok ? r.balance - r.total_profit : null;
+    const days = r.started_at ? Math.max(0, Math.floor((Date.now() / 1000 - r.started_at) / 86400)) : 0;
+    const tot = r.total_ok ? ` · sejak mulai (${days} hari) <b>${f(r.total_profit)}</b>${modal > 0 ? ` (${(r.total_profit / modal * 100 >= 0 ? '+' : '')}${(r.total_profit / modal * 100).toFixed(2)}% modal)` : ''}` : '';
+    return `<div class="small" style="margin-top:12px">📈 Laporan EA ${ago(r.updated_at)}: hari ini <b>${f(r.profit_day)}</b> · minggu ini <b>${f(r.profit_week)}</b> · bulan ini <b>${f(r.profit_month)}</b>${tot}</div>`;
   };
   const reportGuide = () => `<div class="card"><h3>📈 Aktifkan laporan profit ke web (sekali saja)</h3>
-      <p class="small muted" style="margin-bottom:12px">EA mengirim profit harian, mingguan dan bulanan ke slide "Profit Member" di halaman utama web. EA tetap trading normal walaupun langkah ini belum dilakukan.</p>
+      <p class="small muted" style="margin-bottom:12px">EA mengirim lama trading, modal dan profit (sejak mulai, bulan, minggu, hari) ke papan <a href="/profit" target="_blank" rel="noopener">Hasil Member</a> di web, nama Anda disensor. EA tetap trading normal walaupun langkah ini belum dilakukan.</p>
       <ol class="steps small">
         <li><b>Buka pengaturan MetaTrader</b>Menu <i>Tools → Options</i> (atau tekan <span class="mono">Ctrl+O</span>), tab <i>Expert Advisors</i>.</li>
         <li><b>Izinkan alamat web</b>Centang <i>Allow WebRequest for listed URL</i>, klik tanda <b>+</b>, ketik <span class="copy mono" data-copy="https://goldhuntergaruda.com">https://goldhuntergaruda.com</span>, lalu <b>OK</b>.</li>

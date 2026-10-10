@@ -276,32 +276,40 @@ route('POST', '/ea/report', 'public', async ({ request, env }) => {
   const t = now();
   const num = (v) => { const n = Number(v); return Number.isFinite(n) ? Math.round(n * 100) / 100 : 0; };
   const next = reportInterval(await getSettings(env));      // the EA follows this, no recompile needed
-  const last = await env.DB.prepare('SELECT updated_at FROM ea_stats WHERE license_id=?').bind(l.id).first();
-  if (last && t - last.updated_at < 60) return json({ ok: true, throttled: true, next });
+  const last = await env.DB.prepare('SELECT updated_at, started_at FROM ea_stats WHERE license_id=?').bind(l.id).first();
+  const since = last && last.started_at ? last.started_at : t;     // track record starts with the first report (admin can reset)
+  if (last && t - last.updated_at < 60) return json({ ok: true, throttled: true, next, since });
+  const totalOk = int(b.since_used) === since ? 1 : 0;
   const cur = str(b.currency, 8).toUpperCase();
   const wib = new Date((t + 7 * 3600) * 1000).toISOString().slice(0, 10);
   const wibOf = (x) => new Date((x + 7 * 3600) * 1000).toISOString().slice(0, 10);
   // Save writes: the daily history row is refreshed at most every 30 minutes (and at each new day)
   const writeDaily = !last || wibOf(last.updated_at) !== wib || t - last.updated_at >= 1800 || next >= 1800;
   await env.DB.batch([
-    env.DB.prepare(`INSERT INTO ea_stats (license_id, login, server, currency, balance, equity, profit_day, profit_week, profit_month, positions, ea_version, updated_at)
-        VALUES (?,?,?,?,?,?,?,?,?,?,?,?) ON CONFLICT(license_id) DO UPDATE SET login=excluded.login, server=excluded.server, currency=excluded.currency,
+    env.DB.prepare(`INSERT INTO ea_stats (license_id, login, server, currency, balance, equity, profit_day, profit_week, profit_month, positions, ea_version, updated_at, started_at, total_profit, total_ok)
+        VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?) ON CONFLICT(license_id) DO UPDATE SET login=excluded.login, server=excluded.server, currency=excluded.currency,
         balance=excluded.balance, equity=excluded.equity, profit_day=excluded.profit_day, profit_week=excluded.profit_week, profit_month=excluded.profit_month,
-        positions=excluded.positions, ea_version=excluded.ea_version, updated_at=excluded.updated_at`)
-      .bind(l.id, str(b.login, 20), str(b.server, 80), cur, num(b.balance), num(b.equity), num(b.day), num(b.week), num(b.month), int(b.positions) || 0, str(b.version, 20), t),
+        positions=excluded.positions, ea_version=excluded.ea_version, updated_at=excluded.updated_at,
+        started_at=CASE WHEN started_at > 0 THEN started_at ELSE excluded.started_at END,
+        total_profit=CASE WHEN excluded.total_ok=1 THEN excluded.total_profit ELSE total_profit END, total_ok=CASE WHEN excluded.total_ok=1 THEN 1 ELSE total_ok END`)
+      .bind(l.id, str(b.login, 20), str(b.server, 80), cur, num(b.balance), num(b.equity), num(b.day), num(b.week), num(b.month), int(b.positions) || 0, str(b.version, 20), t,
+        since, num(b.total), totalOk),
     env.DB.prepare(`INSERT INTO ea_stats_daily (license_id, day, profit, balance, currency) VALUES (?,?,?,?,?)
         ON CONFLICT(license_id, day) DO UPDATE SET profit=excluded.profit, balance=excluded.balance, currency=excluded.currency`)
       .bind(l.id, wib, num(b.day), num(b.balance), cur),
   ].slice(0, writeDaily ? 2 : 1));
-  return json({ ok: true, next });
+  return json({ ok: true, next, since });
 });
 
-// ======================= GOLD HUNTER GARUDA LIVE (akun master -> website & Telegram) =======================
-// The master EA (input 13.2 = ea_master_key) posts a snapshot every minute plus the events since the last post.
-// The site keeps one live snapshot, the finished series, the events and one row per WIB day; Telegram gets reports
+// ======================= GOLD HUNTER GARUDA LIVE (setup per chart -> website & Telegram) =======================
+// Every chart running the EA with input 13.2 = ea_master_key is one SETUP, keyed by account login + pair: the master
+// account (4 pairs on one account) is 4 setups, each monitoring account (pair x LOW / MEDIUM / HIGH) is one setup.
+// The EA posts a snapshot every minute plus the events since the last post. The reply carries `since` (start of the
+// setup's track record, editable by the admin); the EA answers with the closed profit since then, so
+// modal = balance - closed profit of the account since `since` (deposits count as capital). Telegram gets reports
 // and warnings (never "signals").
 const eaNum = (v) => { const n = Number(v); return Number.isFinite(n) ? Math.round(n * 100) / 100 : 0; };
-const eaPx = (v) => { const n = Number(v); return Number.isFinite(n) ? Math.round(n * 1000) / 1000 : 0; };
+const eaPx = (v) => { const n = Number(v); return Number.isFinite(n) ? Math.round(n * 100000) / 100000 : 0; };
 const wibDay = (t) => new Date((t + 7 * 3600) * 1000).toISOString().slice(0, 10);
 const wibHour = (t) => new Date((t + 7 * 3600) * 1000).getUTCHours();
 const wibDayStart = (t) => t - ((t + 7 * 3600) % 86400);
@@ -313,100 +321,135 @@ const eaDur = (sec) => { const m = Math.max(0, Math.round(sec / 60)); return m >
 const EA_LIVE_KEYS = ['ea_master_key', 'ea_report_hour', 'ea_tg_min_layers', 'ea_offline_min', 'ea_tg_enabled'];
 const eaSym = (v) => { const x = String(v || '').toUpperCase(); const m = x.match(/^([A-Z]{6})/); return m ? m[1] : x.slice(0, 12); };
 const EA_SYM_NAME = { XAUUSD: 'Emas', BTCUSD: 'Bitcoin', EURUSD: 'EURUSD', USDJPY: 'USDJPY' };
+const EA_SYM_ORDER = ['XAUUSD', 'BTCUSD', 'EURUSD', 'USDJPY'];
+const EA_RISKS = ['LOW', 'MEDIUM', 'HIGH'];
+const EA_RISK_NAME = { LOW: 'Low', MEDIUM: 'Medium', HIGH: 'High' };
 const eaSymTitle = (sym) => `${sym}${EA_SYM_NAME[sym] ? ` (${EA_SYM_NAME[sym]})` : ''}`;
-async function eaLiveSyms(env) {
-  const { results } = await env.DB.prepare('SELECT symbol, updated_at, data FROM ea_live_sym ORDER BY symbol').all();
-  return results.map((r) => { let d = {}; try { d = JSON.parse(r.data || '{}'); } catch { d = {}; } return { symbol: r.symbol, at: r.updated_at, d }; });
-}
+const eaParse = (txt) => { try { return JSON.parse(txt || '{}') || {}; } catch { return {}; } };
+// admin choice wins; '' = follow the EA's input 13.6; 'NONE' = no label
+const eaRisk = (r) => { const a = String(r.risk || ''); if (a === 'NONE') return ''; if (EA_RISKS.includes(a)) return a; return EA_RISKS.includes(r.ea_risk) ? r.ea_risk : ''; };
+const eaLabel = (r) => r.label || `${r.symbol}${eaRisk(r) ? ' · ' + EA_RISK_NAME[eaRisk(r)] : ''}`;
+// account currency -> US dollar (cent accounts: 100 USC = $1)
+const eaUsd = (v, cur) => { if (v == null || !Number.isFinite(Number(v))) return null; const c = String(cur || '').toUpperCase(); if (c === 'USC' || c === 'USX' || c === 'UST') return Math.round(v) / 100; if (c === 'USD') return Math.round(v * 100) / 100; return null; };
 function eaCfg(s) {
   return { key: String(s.ea_master_key || '').trim(), hour: Number.isFinite(Number(s.ea_report_hour)) && s.ea_report_hour !== '' ? int(s.ea_report_hour) : 21,
     minLayers: s.ea_tg_min_layers === '' || s.ea_tg_min_layers == null ? 4 : int(s.ea_tg_min_layers), offlineMin: int(s.ea_offline_min) || 5, tg: s.ea_tg_enabled !== '0' };
 }
-async function eaLiveRow(env) {
-  const r = await env.DB.prepare('SELECT updated_at, data FROM ea_live WHERE id=1').first();
-  let d = {};
-  try { d = JSON.parse((r && r.data) || '{}'); } catch { d = {}; }
-  return { at: (r && r.updated_at) || 0, d };
-}
-async function eaTg(env, cfg, text, base) {
+async function eaTg(env, cfg, text, base, setupId) {
   if (!cfg.tg) return;
-  try { await tgBroadcast(env, text + (base ? `\n📈 <a href="${base}/live">goldhuntergaruda.com/live</a>` : '')); } catch (e) { console.error('ea telegram', e); }
+  const link = base ? `\n📈 <a href="${base}/live${setupId ? '?setup=' + setupId : ''}">goldhuntergaruda.com/live</a>` : '';
+  try { await tgBroadcast(env, text + link); } catch (e) { console.error('ea telegram', e); }
 }
-// No heartbeat for more than x minutes -> one warning; the next heartbeat sends "online again". Checked by the public page and the builder poll.
+// Public view of one setup (no login, no server name).
+function eaSetupView(r, t, cfg) {
+  const d = eaParse(r.data);
+  const risk = eaRisk(r);
+  const total = r.total_ok ? r.total : null;
+  const modal = r.total_ok ? Math.round((r.balance - r.acct_total) * 100) / 100 : null;
+  const pctOf = (v) => (v != null && modal > 0 ? Math.round(v / modal * 10000) / 100 : null);
+  const side = (x) => (x && x.count ? { count: x.count, lots: x.lots, profit: x.profit } : { count: 0 });
+  const floating = ((d.buy && d.buy.profit) || 0) + ((d.sell && d.sell.profit) || 0);
+  return {
+    id: r.id, symbol: r.symbol, broker_symbol: r.broker_symbol, risk, label: eaLabel(r), account: maskAccount(r.login), currency: r.currency,
+    since: r.since, days: r.since ? Math.max(0, Math.floor((t - r.since) / DAY)) : 0, running: r.since ? t - r.since : 0,
+    online: !!r.updated_at && t - r.updated_at <= cfg.offlineMin * 60, at: r.updated_at,
+    balance: r.balance, equity: r.equity, modal, total, total_pct: pctOf(total),
+    modal_usd: eaUsd(modal, r.currency), total_usd: eaUsd(total, r.currency), balance_usd: eaUsd(r.balance, r.currency),
+    day: eaNum(d.day), week: eaNum(d.week), month: eaNum(d.month), day_pct: pctOf(eaNum(d.day)), month_pct: pctOf(eaNum(d.month)),
+    day_usd: eaUsd(eaNum(d.day), r.currency), month_usd: eaUsd(eaNum(d.month), r.currency),
+    floating: eaNum(floating), floating_pct: pctOf(floating), max_dd_pct: r.max_dd_pct, min_float: r.min_float, min_float_pct: pctOf(r.min_float), max_layers: r.max_layers,
+    version: d.version || '', mode: d.mode || '', status: d.status || '', buy: side(d.buy), sell: side(d.sell),
+    tp_pts: d.tp_pts || 0, dist_pts: d.dist_pts || 0, first_lot: d.first_lot || 0, lot_mult: d.lot_mult || 0, reduction_from: d.reduction_from || 0,
+    pocket_pct: d.pocket_pct || 0, pocket_layers: d.pocket_layers || 0, cfg: d.cfg && typeof d.cfg === 'object' ? d.cfg : {},
+  };
+}
+const eaSymIdx = (sym) => { const i = EA_SYM_ORDER.indexOf(sym); return i < 0 ? 99 : i; };
+// admin order first, then pair (gold, bitcoin, EUR, JPY), then unlabelled (master) before LOW, MEDIUM, HIGH
+const EA_SETUP_ORDER = (a, b) => (a.sort - b.sort) || (eaSymIdx(a.symbol) - eaSymIdx(b.symbol)) || (EA_RISKS.indexOf(eaRisk(a)) - EA_RISKS.indexOf(eaRisk(b))) || (a.id - b.id);
+// No heartbeat for more than x minutes -> one warning per setup; the next heartbeat sends "online again".
+// Checked by the public page and the builder poll.
 async function eaOfflineCheck(env, s, base) {
   const cfg = eaCfg(s);
   if (!cfg.key) return;
-  const { at, d } = await eaLiveRow(env);
-  if (!at) return;
-  if (now() - at > cfg.offlineMin * 60 && s.ea_offline_state !== '1') {
-    await putSetting(env, 'ea_offline_state', '1');
-    await eaTg(env, cfg, [`🔴 <b>EA GOLD HUNTER GARUDA TIDAK MENGIRIM DATA</b>`, `Data terakhir ${wibClock(at)} (${eaDur(now() - at)} lalu). Cek VPS / MT5 / koneksi internet.`,
-      `Floating akun terakhir ${eaMoney(d.floating || 0, d.currency)}`].join('\n'), base);
-  }
+  const t = now();
+  const { results } = await env.DB.prepare('SELECT * FROM ea_setups WHERE visible=1 AND offline_state=0 AND updated_at > 0 AND updated_at < ?').bind(t - cfg.offlineMin * 60).all();
+  if (!results.length) return;
+  await env.DB.batch(results.map((r) => env.DB.prepare('UPDATE ea_setups SET offline_state=1 WHERE id=?').bind(r.id)));
+  const lines = results.map((r) => `• ${esc(eaLabel(r))} (akun ${maskAccount(r.login)}): data terakhir ${wibClock(r.updated_at)}, ${eaDur(t - r.updated_at)} lalu`);
+  await eaTg(env, cfg, [`🔴 <b>EA GOLD HUNTER GARUDA TIDAK MENGIRIM DATA</b>`, ...lines, 'Cek VPS / MT5 / koneksi internet.'].join('\n'), base);
 }
-async function eaDailyReport(env, s, cfg, d, t, base) {
+async function eaDailyReport(env, s, cfg, t, base) {
   const day = wibDay(t);
   if (wibHour(t) < cfg.hour || s.ea_report_day === day) return;
   await putSetting(env, 'ea_report_day', day);
-  const [row, ser, syms, perSym] = await Promise.all([
-    env.DB.prepare('SELECT * FROM ea_days WHERE day=?').bind(day).first(),
-    env.DB.prepare(`SELECT COUNT(*) AS n, COALESCE(SUM(CASE WHEN profit>0 THEN 1 ELSE 0 END),0) AS wins, COALESCE(AVG(duration),0) AS dur,
-        COALESCE(MAX(positions),0) AS maxpos, COALESCE(MAX(lots),0) AS maxlots FROM ea_series WHERE closed_at >= ?`).bind(wibDayStart(t)).first(),
-    eaLiveSyms(env),
-    env.DB.prepare('SELECT * FROM ea_days_sym WHERE day=? ORDER BY profit DESC').bind(day).all(),
+  const [{ results: rows }, { results: days }, { results: ser }] = await Promise.all([
+    env.DB.prepare('SELECT * FROM ea_setups WHERE visible=1').all(),
+    env.DB.prepare('SELECT * FROM ea_setup_days WHERE day=?').bind(day).all(),
+    env.DB.prepare(`SELECT setup_id, COUNT(*) AS n, COALESCE(SUM(CASE WHEN profit>0 THEN 1 ELSE 0 END),0) AS wins, COALESCE(MAX(positions),0) AS maxpos
+        FROM ea_series WHERE closed_at >= ? GROUP BY setup_id`).bind(wibDayStart(t)).all(),
   ]);
-  const cur = d.currency || '';
-  const totalDay = perSym.results.length ? perSym.results.reduce((a, x) => a + x.profit, 0) : d.day;
-  const pct = (v) => d.balance > 0 ? ` (${(v / d.balance * 100 >= 0 ? '+' : '')}${(v / d.balance * 100).toFixed(2)}% modal)` : '';
-  const posNow = syms.map((x) => `${eaSym(x.symbol)} B${(x.d.buy && x.d.buy.count) || 0}/S${(x.d.sell && x.d.sell.count) || 0}`).join(' · ');
-  const text = [`📊 <b>LAPORAN HARIAN GOLD HUNTER GARUDA</b> · ${wibDate(t)}`, '',
-    `Profit hari ini: <b>${eaMoney(totalDay, cur)}</b>${pct(totalDay)}`,
-    ...perSym.results.map((x) => `  • ${eaSym(x.symbol)}: ${eaMoney(x.profit, cur)} · ${x.series} seri (${x.wins} profit) · basket terpanjang ${x.max_layers} · floating terdalam ${eaMoney(x.min_float, cur)}`),
-    `Seri selesai: ${ser.n} (${ser.wins} profit)${ser.n ? ` · rata-rata ${eaDur(ser.dur)} · basket terpanjang ${ser.maxpos} posisi / ${Number(ser.maxlots).toFixed(2)} lot` : ''}`,
-    `Equity ${eaPlain(d.equity)} ${cur} · floating akun ${eaMoney(d.floating, cur)} · DD terdalam hari ini ${row ? row.max_dd_pct.toFixed(2) : '0.00'}%`,
-    posNow ? `Posisi sekarang: ${posNow}` : '',
-    `Mode ${esc(d.mode || '')} · EA v${esc(d.version || '')}`].filter((x) => x !== '').join('\n');
-  await eaTg(env, cfg, text, base);
+  if (!rows.length) return;
+  rows.sort(EA_SETUP_ORDER);
+  const lines = rows.map((r) => {
+    const v = eaSetupView(r, t, cfg);
+    const dd = days.find((x) => x.setup_id === r.id) || {};
+    const sr = ser.find((x) => x.setup_id === r.id) || { n: 0, wins: 0, maxpos: 0 };
+    const p = dd.profit != null ? dd.profit : v.day;
+    const pc = v.modal > 0 ? ` (${p >= 0 ? '+' : ''}${(p / v.modal * 100).toFixed(2)}%)` : '';
+    const tot = v.total != null && v.modal > 0 ? ` · total ${eaMoney(v.total, r.currency)} (${v.total_pct >= 0 ? '+' : ''}${v.total_pct}%) dalam ${v.days} hari` : '';
+    return `• <b>${esc(v.label)}</b>: ${eaMoney(p, r.currency)}${pc} · ${sr.n} seri (${sr.wins} profit) · basket terpanjang ${Math.max(sr.maxpos, dd.max_layers || 0)}${tot}${v.online ? '' : ' · 🔴 offline'}`;
+  });
+  await eaTg(env, cfg, [`📊 <b>LAPORAN HARIAN GOLD HUNTER GARUDA</b> · ${wibDate(t)}`, '', ...lines].join('\n'), base);
 }
+
 route('POST', '/ea/live', 'public', async ({ request, env, waitUntil, base }) => {
   const s = await getSettings(env);
   const cfg = eaCfg(s);
   if (!cfg.key || request.headers.get('x-ea-key') !== cfg.key) fail(403, 'Kunci master salah (Admin > Pengaturan > EA Live)');
   const b = await readJson(request);
   const t = now();
+  const login = str(b.login, 20);
+  if (!login) fail(400, 'Nomor akun kosong');
   const side = (x) => x && typeof x === 'object' && int(x.count) > 0
     ? { count: int(x.count), lots: eaNum(x.lots), avg: eaPx(x.avg), tp: eaPx(x.tp), profit: eaNum(x.profit), next_lot: eaNum(x.next_lot), next_price: eaPx(x.next_price), since: int(x.since) || 0 }
     : { count: 0 };
   const pk = b.pocket && typeof b.pocket === 'object' ? b.pocket : {};
   const nw = b.news && typeof b.news === 'object' ? b.news : {};
-  const snap = { login: str(b.login, 20), server: str(b.server, 60), currency: str(b.currency, 8).toUpperCase(), version: str(b.version, 12), symbol: str(b.symbol, 16),
+  const c = b.cfg && typeof b.cfg === 'object' ? b.cfg : {};
+  const cfgSnap = { start_lot: eaNum(c.start_lot), lot_capital: eaNum(c.lot_capital), auto_lot: !!c.auto_lot, max_lot: eaNum(c.max_lot), dist_from: int(c.dist_from) || 0,
+    dist_mult: eaNum(c.dist_mult), reentry_pts: int(c.reentry_pts) || 0, new_series: int(c.new_series) || 0, tp_mode: str(c.tp_mode, 8), tp_net: !!c.tp_net,
+    reduction: !!c.reduction, reduction_pct: eaNum(c.reduction_pct), pocket: !!c.pocket, pocket_min_loss: eaNum(c.pocket_min_loss), news_mode: str(c.news_mode, 8),
+    max_spread: int(c.max_spread) || 0, equity_stop: eaNum(c.equity_stop), point: Number(c.point) || 0, digits: int(c.digits) || 0 };
+  const snap = { currency: str(b.currency, 8).toUpperCase(), version: str(b.version, 12), symbol: str(b.symbol, 16), magic: int(b.magic) || 0, risk: str(b.risk, 8).toUpperCase(),
     balance: eaNum(b.balance), equity: eaNum(b.equity), floating: eaNum(b.floating), day: eaNum(b.day), week: eaNum(b.week), month: eaNum(b.month),
     spread: int(b.spread) || 0, margin_level: eaNum(b.margin_level), status: str(b.status, 200), mode: str(b.mode, 12), trend_tf: str(b.trend_tf, 6), trend: int(b.trend) || 0, trend_why: str(b.trend_why, 120),
     tp_pts: int(b.tp_pts) || 0, lot_mult: eaNum(b.lot_mult), dist_pts: int(b.dist_pts) || 0, first_lot: eaNum(b.first_lot), reduction_from: int(b.reduction_from) || 0,
     pocket_pct: eaNum(b.pocket_pct), pocket_layers: int(b.pocket_layers) || 0,
     buy: side(b.buy), sell: side(b.sell), pocket: { saldo: eaNum(pk.saldo), in: eaNum(pk.in), out: eaNum(pk.out), cuts: int(pk.cuts) || 0 },
-    news: { name: str(nw.name, 80), time: int(nw.time) || 0, active: !!nw.active, mode: str(nw.mode, 8) } };
-  const day = wibDay(t);
+    news: { name: str(nw.name, 80), time: int(nw.time) || 0, active: !!nw.active, mode: str(nw.mode, 8) }, cfg: cfgSnap };
   const sym = eaSym(snap.symbol);
-  const symFloat = ((snap.buy && snap.buy.profit) || 0) + ((snap.sell && snap.sell.profit) || 0);
-  const symLayers = Math.max((snap.buy && snap.buy.count) || 0, (snap.sell && snap.sell.count) || 0);
-  const [prev, prevSym] = await Promise.all([
-    env.DB.prepare('SELECT min_equity, max_dd_pct FROM ea_days WHERE day=?').bind(day).first(),
-    env.DB.prepare('SELECT max_layers, min_float FROM ea_days_sym WHERE symbol=? AND day=?').bind(sym, day).first(),
-  ]);
-  const minEq = prev && prev.min_equity > 0 ? Math.min(prev.min_equity, snap.equity) : snap.equity;
-  const dd = snap.balance > 0 ? Math.max(prev ? prev.max_dd_pct : 0, Math.max(0, (snap.balance - snap.equity) / snap.balance * 100)) : 0;
+  await env.DB.prepare(`INSERT INTO ea_setups (login, symbol, broker_symbol, server, currency, magic, ea_risk, since, created_at, updated_at)
+      VALUES (?,?,?,?,?,?,?,?,?,0) ON CONFLICT(login, symbol) DO NOTHING`)
+    .bind(login, sym, snap.symbol, str(b.server, 60), snap.currency, snap.magic, EA_RISKS.includes(snap.risk) ? snap.risk : '', t, t).run();
+  const row = await env.DB.prepare('SELECT * FROM ea_setups WHERE login=? AND symbol=?').bind(login, sym).first();
+  const totalOk = row.since > 0 && int(b.since_used) === row.since ? 1 : 0;
+  const day = wibDay(t);
+  const symFloat = (snap.buy.profit || 0) + (snap.sell.profit || 0);
+  const layers = Math.max(snap.buy.count || 0, snap.sell.count || 0);
+  const dd = snap.balance > 0 ? Math.round(Math.max(0, (snap.balance - snap.equity) / snap.balance * 100) * 100) / 100 : 0;
   await env.DB.batch([
-    env.DB.prepare('UPDATE ea_live SET updated_at=?, data=? WHERE id=1').bind(t, JSON.stringify(snap)),
-    env.DB.prepare('INSERT INTO ea_live_sym (symbol, updated_at, data) VALUES (?,?,?) ON CONFLICT(symbol) DO UPDATE SET updated_at=excluded.updated_at, data=excluded.data').bind(sym, t, JSON.stringify(snap)),
-    env.DB.prepare(`INSERT INTO ea_days_sym (symbol, day, profit, max_layers, min_float, currency, updated_at) VALUES (?,?,?,?,?,?,?)
-        ON CONFLICT(symbol, day) DO UPDATE SET profit=excluded.profit, max_layers=excluded.max_layers, min_float=excluded.min_float, currency=excluded.currency, updated_at=excluded.updated_at`)
-      .bind(sym, day, snap.day, Math.max(prevSym ? prevSym.max_layers : 0, symLayers), Math.min(prevSym ? prevSym.min_float : 0, symFloat), snap.currency, t),
-    env.DB.prepare(`INSERT INTO ea_days (day, profit, balance, equity, min_equity, max_dd_pct, currency, updated_at) VALUES (?,?,?,?,?,?,?,?)
-        ON CONFLICT(day) DO UPDATE SET balance=excluded.balance, equity=excluded.equity, min_equity=excluded.min_equity, max_dd_pct=excluded.max_dd_pct,
-        currency=excluded.currency, updated_at=excluded.updated_at`).bind(day, snap.day, snap.balance, snap.equity, minEq, Math.round(dd * 100) / 100, snap.currency, t),
-    env.DB.prepare('UPDATE ea_days SET profit=(SELECT COALESCE(SUM(profit),0) FROM ea_days_sym WHERE day=?), series=(SELECT COALESCE(SUM(series),0) FROM ea_days_sym WHERE day=?), wins=(SELECT COALESCE(SUM(wins),0) FROM ea_days_sym WHERE day=?) WHERE day=?').bind(day, day, day, day),
+    env.DB.prepare(`UPDATE ea_setups SET broker_symbol=?, server=?, currency=?, magic=?, ea_risk=?, balance=?, equity=?, updated_at=?, data=?, offline_state=0,
+        total=CASE WHEN ?=1 THEN ? ELSE total END, acct_total=CASE WHEN ?=1 THEN ? ELSE acct_total END, total_ok=CASE WHEN ?=1 THEN 1 ELSE total_ok END,
+        max_dd_pct=MAX(max_dd_pct, ?), min_float=MIN(min_float, ?), max_layers=MAX(max_layers, ?) WHERE id=?`)
+      .bind(snap.symbol, str(b.server, 60), snap.currency, snap.magic, EA_RISKS.includes(snap.risk) ? snap.risk : '', snap.balance, snap.equity, t, JSON.stringify(snap),
+        totalOk, eaNum(b.total), totalOk, eaNum(b.acct_total), totalOk, dd, symFloat, layers, row.id),
+    env.DB.prepare(`INSERT INTO ea_setup_days (setup_id, day, profit, balance, equity, min_equity, max_dd_pct, max_layers, min_float, currency, updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?)
+        ON CONFLICT(setup_id, day) DO UPDATE SET profit=excluded.profit, balance=excluded.balance, equity=excluded.equity,
+        min_equity=CASE WHEN min_equity > 0 THEN MIN(min_equity, excluded.equity) ELSE excluded.equity END, max_dd_pct=MAX(max_dd_pct, excluded.max_dd_pct),
+        max_layers=MAX(max_layers, excluded.max_layers), min_float=MIN(min_float, excluded.min_float), currency=excluded.currency, updated_at=excluded.updated_at`)
+      .bind(row.id, day, snap.day, snap.balance, snap.equity, snap.equity, dd, layers, Math.min(0, symFloat), snap.currency, t),
   ]);
+  const label = eaLabel({ ...row, ea_risk: EA_RISKS.includes(snap.risk) ? snap.risk : row.ea_risk });
   const msgs = [];
   const evs = Array.isArray(b.events) ? b.events.slice(0, 50) : [];
   const TITLE = { kantong: '🟡 KANTONG PROFIT', pengaman: '🛑 PENGAMAN EQUITY', dd: '⚠️ FLOATING RUGI BESAR', layer: '⚠️ BASKET PANJANG', reduction: '🔁 REDUCTION' };
@@ -416,44 +459,99 @@ route('POST', '/ea/live', 'public', async ({ request, env, waitUntil, base }) =>
     const at = int(e.at) || t, sd = str(e.side, 4).toUpperCase(), profit = eaNum(e.profit), positions = int(e.positions) || 0, lots = eaNum(e.lots), dur = int(e.duration) || 0, text = str(e.text, 300);
     if (kind === 'seri') {
       await env.DB.batch([
-        env.DB.prepare('INSERT INTO ea_series (closed_at, side, positions, lots, profit, duration, currency, symbol) VALUES (?,?,?,?,?,?,?,?)').bind(at, sd, positions, lots, profit, dur, snap.currency, sym),
-        env.DB.prepare('INSERT INTO ea_days_sym (symbol, day, series, wins, currency, updated_at) VALUES (?,?,1,?,?,?) ON CONFLICT(symbol, day) DO UPDATE SET series=series+1, wins=wins+excluded.wins').bind(sym, wibDay(at), profit > 0 ? 1 : 0, snap.currency, t),
-        env.DB.prepare('INSERT INTO ea_days (day, series, wins, currency, updated_at) VALUES (?,1,?,?,?) ON CONFLICT(day) DO UPDATE SET series=series+1, wins=wins+excluded.wins').bind(wibDay(at), profit > 0 ? 1 : 0, snap.currency, t),
+        env.DB.prepare('INSERT INTO ea_series (closed_at, side, positions, lots, profit, duration, currency, symbol, setup_id) VALUES (?,?,?,?,?,?,?,?,?)').bind(at, sd, positions, lots, profit, dur, snap.currency, sym, row.id),
+        env.DB.prepare('INSERT INTO ea_setup_days (setup_id, day, series, wins, currency, updated_at) VALUES (?,?,1,?,?,?) ON CONFLICT(setup_id, day) DO UPDATE SET series=series+1, wins=wins+excluded.wins')
+          .bind(row.id, wibDay(at), profit > 0 ? 1 : 0, snap.currency, t),
       ]);
-      if (positions >= cfg.minLayers) msgs.push(`${profit >= 0 ? '✅' : '🟠'} <b>${eaSymTitle(sym)} · Seri ${sd} selesai ${eaMoney(profit, snap.currency)}</b>\n${positions} posisi · ${lots.toFixed(2)} lot · ${eaDur(dur)}`);
+      if (positions >= cfg.minLayers) msgs.push(`${profit >= 0 ? '✅' : '🟠'} <b>${esc(label)} · Seri ${sd} selesai ${eaMoney(profit, snap.currency)}</b>\n${positions} posisi · ${lots.toFixed(2)} lot · ${eaDur(dur)}`);
     } else {
-      await env.DB.prepare('INSERT INTO ea_events (at, kind, side, text, profit, symbol) VALUES (?,?,?,?,?,?)').bind(at, kind, sd, text, profit, sym).run();
-      if (kind !== 'reduction') msgs.push(`<b>${TITLE[kind]} · ${eaSymTitle(sym)}</b>\n${esc(text)}`);
+      await env.DB.prepare('INSERT INTO ea_events (at, kind, side, text, profit, symbol, setup_id) VALUES (?,?,?,?,?,?,?)').bind(at, kind, sd, text, profit, sym, row.id).run();
+      if (kind !== 'reduction') msgs.push(`<b>${TITLE[kind]} · ${esc(label)}</b>\n${esc(text)}`);
     }
   }
-  if (s.ea_offline_state === '1') { await putSetting(env, 'ea_offline_state', '0'); msgs.push('🟢 <b>EA GOLD HUNTER GARUDA online kembali</b>'); }
-  for (const m of msgs) waitUntil(eaTg(env, cfg, m, base));
-  waitUntil(eaDailyReport(env, s, cfg, snap, t, base).catch((e) => console.error('ea daily', e)));
-  return json({ ok: true, next: 60 });
+  if (row.offline_state === 1) msgs.push(`🟢 <b>${esc(label)} online kembali</b>`);
+  for (const m of msgs) waitUntil(eaTg(env, cfg, m, base, row.id));
+  waitUntil(eaDailyReport(env, s, cfg, t, base).catch((e) => console.error('ea daily', e)));
+  return json({ ok: true, next: 60, since: row.since });
 });
-route('GET', '/live', 'public', async ({ env, waitUntil, base }) => {
+
+// Public: all visible setups (overview), or ?setup=id with series, days and events since the setup's start.
+route('GET', '/live', 'public', async ({ env, url, waitUntil, base }) => {
   const s = await getSettings(env);
   const cfg = eaCfg(s);
-  const { at, d } = await eaLiveRow(env);
   const t = now();
   waitUntil(eaOfflineCheck(env, s, base).catch((e) => console.error('ea offline', e)));
-  const [series, days, events, today, syms, daysSym, todaySym] = await Promise.all([
-    env.DB.prepare('SELECT closed_at, side, positions, lots, profit, duration, currency, symbol FROM ea_series ORDER BY id DESC LIMIT 60').all(),
-    env.DB.prepare('SELECT * FROM ea_days ORDER BY day DESC LIMIT 31').all(),
-    env.DB.prepare('SELECT at, kind, side, text, profit, symbol FROM ea_events ORDER BY id DESC LIMIT 30').all(),
-    env.DB.prepare(`SELECT COUNT(*) AS n, COALESCE(SUM(CASE WHEN profit>0 THEN 1 ELSE 0 END),0) AS wins, COALESCE(SUM(profit),0) AS profit,
-        COALESCE(AVG(duration),0) AS dur, COALESCE(MAX(positions),0) AS maxpos FROM ea_series WHERE closed_at >= ?`).bind(wibDayStart(t)).first(),
-    eaLiveSyms(env),
-    env.DB.prepare('SELECT * FROM ea_days_sym WHERE day >= ? ORDER BY day DESC, symbol').bind(wibDay(t - 30 * DAY)).all(),
-    env.DB.prepare(`SELECT symbol, COUNT(*) AS n, COALESCE(SUM(CASE WHEN profit>0 THEN 1 ELSE 0 END),0) AS wins, COALESCE(SUM(profit),0) AS profit,
-        COALESCE(AVG(duration),0) AS dur, COALESCE(MAX(positions),0) AS maxpos FROM ea_series WHERE closed_at >= ? GROUP BY symbol`).bind(wibDayStart(t)).all(),
+  const id = int(url.searchParams.get('setup')) || 0;
+  if (id) {
+    const r = await env.DB.prepare('SELECT * FROM ea_setups WHERE id=? AND visible=1').bind(id).first();
+    if (!r) fail(404, 'Setup tidak ditemukan');
+    const from = wibDay(r.since || 0);
+    const [series, days, events, stat] = await Promise.all([
+      env.DB.prepare('SELECT closed_at, side, positions, lots, profit, duration, currency FROM ea_series WHERE setup_id=? AND closed_at >= ? ORDER BY id DESC LIMIT 60').bind(r.id, r.since).all(),
+      env.DB.prepare('SELECT day, profit, series, wins, balance, equity, max_dd_pct, max_layers, min_float, currency FROM ea_setup_days WHERE setup_id=? AND day >= ? ORDER BY day DESC LIMIT 90').bind(r.id, from).all(),
+      env.DB.prepare('SELECT at, kind, side, text, profit FROM ea_events WHERE setup_id=? AND at >= ? ORDER BY id DESC LIMIT 40').bind(r.id, r.since).all(),
+      env.DB.prepare(`SELECT COUNT(*) AS n, COALESCE(SUM(CASE WHEN profit>0 THEN 1 ELSE 0 END),0) AS wins, COALESCE(AVG(duration),0) AS dur, COALESCE(MAX(positions),0) AS maxpos
+          FROM ea_series WHERE setup_id=? AND closed_at >= ?`).bind(r.id, r.since).first(),
+    ]);
+    const d = eaParse(r.data);
+    const snap = { buy: d.buy || { count: 0 }, sell: d.sell || { count: 0 }, pocket: d.pocket || {}, news: d.news || {}, spread: d.spread || 0, trend: d.trend || 0, trend_why: d.trend_why || '', trend_tf: d.trend_tf || '', margin_level: d.margin_level || 0 };
+    return json({ ok: true, configured: !!cfg.key, server_time: t, offline_min: cfg.offlineMin, setup: { ...eaSetupView(r, t, cfg), stats: stat, snapshot: snap },
+      series: series.results, days: days.results, events: events.results });
+  }
+  const { results: rows } = await env.DB.prepare('SELECT * FROM ea_setups WHERE visible=1').all();
+  rows.sort(EA_SETUP_ORDER);
+  const d30 = wibDay(t - 29 * DAY);
+  const [{ results: days }, { results: ser }] = await Promise.all([
+    env.DB.prepare('SELECT d.setup_id, d.day, d.profit FROM ea_setup_days d JOIN ea_setups s ON s.id=d.setup_id WHERE s.visible=1 AND d.day >= ? ORDER BY d.day').bind(d30).all(),
+    env.DB.prepare(`SELECT e.setup_id, COUNT(*) AS n, COALESCE(SUM(CASE WHEN e.profit>0 THEN 1 ELSE 0 END),0) AS wins FROM ea_series e JOIN ea_setups s ON s.id=e.setup_id
+        WHERE s.visible=1 AND e.closed_at >= s.since GROUP BY e.setup_id`).all(),
   ]);
-  const snap = { ...d };
-  delete snap.login;
-  delete snap.server;
-  const symbols = syms.map((x) => { const sd = { ...x.d }; delete sd.login; delete sd.server; return { symbol: x.symbol, at: x.at, online: t - x.at <= cfg.offlineMin * 60, snapshot: sd }; });
-  return json({ ok: true, configured: !!cfg.key, at, age: at ? t - at : null, online: !!at && t - at <= cfg.offlineMin * 60, offline_min: cfg.offlineMin,
-    snapshot: snap, symbols, today, today_sym: todaySym.results, series: series.results, days: days.results, days_sym: daysSym.results, events: events.results, server_time: t });
+  const setups = rows.map((r) => {
+    const v = eaSetupView(r, t, cfg);
+    const sr = ser.find((x) => x.setup_id === r.id) || { n: 0, wins: 0 };
+    const sinceDay = wibDay(r.since || 0);
+    return { ...v, series: sr.n, wins: sr.wins, spark: days.filter((x) => x.setup_id === r.id && x.day >= sinceDay).map((x) => [x.day, x.profit]) };
+  });
+  return json({ ok: true, configured: !!cfg.key, server_time: t, offline_min: cfg.offlineMin, setups });
+});
+
+// Admin: manage the setups (label, risk, visibility, order, start of the track record).
+route('GET', '/admin/ea/setups', 'admin', async ({ env }) => {
+  const s = await getSettings(env);
+  const cfg = eaCfg(s);
+  const t = now();
+  const { results } = await env.DB.prepare('SELECT * FROM ea_setups').all();
+  results.sort(EA_SETUP_ORDER);
+  return json({ setups: results.map((r) => ({ ...eaSetupView(r, t, cfg), login: r.login, server: r.server, magic: r.magic, ea_risk: r.ea_risk, risk_admin: r.risk,
+    label_admin: r.label, visible: r.visible, sort: r.sort, created_at: r.created_at })) });
+});
+route('PUT', '/admin/ea/setups/:id', 'admin', async ({ request, env, params }) => {
+  const b = await readJson(request);
+  const r = await env.DB.prepare('SELECT * FROM ea_setups WHERE id=?').bind(int(params.id)).first();
+  if (!r) fail(404, 'Setup tidak ditemukan');
+  const risk = ['', 'NONE', ...EA_RISKS].includes(String(b.risk || '')) ? String(b.risk || '') : r.risk;
+  let since = b.reset ? now() : (b.since != null && b.since !== '' ? int(b.since) : r.since);
+  if (!(since > 0) || since > now() + 60) fail(400, 'Tanggal mulai tidak valid');
+  const restart = since !== r.since;
+  await env.DB.prepare(`UPDATE ea_setups SET risk=?, label=?, visible=?, sort=?, since=?${restart ? ', total=0, acct_total=0, total_ok=0, max_dd_pct=0, min_float=0, max_layers=0' : ''} WHERE id=?`)
+    .bind(risk, str(b.label, 60), b.visible ? 1 : 0, int(b.sort) || 0, since, r.id).run();
+  if (restart) {
+    // deepest DD / floating / longest basket rebuilt from the daily rows inside the new period
+    const agg = await env.DB.prepare('SELECT COALESCE(MAX(max_dd_pct),0) AS dd, COALESCE(MIN(min_float),0) AS mf, COALESCE(MAX(max_layers),0) AS ml FROM ea_setup_days WHERE setup_id=? AND day >= ?')
+      .bind(r.id, wibDay(since)).first();
+    await env.DB.prepare('UPDATE ea_setups SET max_dd_pct=?, min_float=?, max_layers=? WHERE id=?').bind(agg.dd, agg.mf, agg.ml, r.id).run();
+  }
+  return json({ ok: true, restart });
+});
+route('DELETE', '/admin/ea/setups/:id', 'admin', async ({ env, params }) => {
+  const id = int(params.id);
+  await env.DB.batch([
+    env.DB.prepare('DELETE FROM ea_setup_days WHERE setup_id=?').bind(id),
+    env.DB.prepare('DELETE FROM ea_series WHERE setup_id=?').bind(id),
+    env.DB.prepare('DELETE FROM ea_events WHERE setup_id=?').bind(id),
+    env.DB.prepare('DELETE FROM ea_setups WHERE id=?').bind(id),
+  ]);
+  return json({ ok: true });
 });
 
 // ======================= AI SIGNALS (MASTER EA -> server -> CLIENT EAs) =======================
@@ -1280,6 +1378,7 @@ route('GET', '/admin/content/:id/video', 'admin', async ({ env, params }) => {
 route('GET', '/signal/:id/chart', 'public', async ({ env, params, url, user }) => {
   const id = int(params.id) || 0;
   const kind = url.searchParams.get('kind') === 'close' ? 'close' : 'open';
+  if ((await getSettings(env)).signals_public === '0' && !(user && user.role === 'admin')) fail(404, 'Sinyal tidak tersedia');
   const sig = await env.DB.prepare('SELECT status FROM signals WHERE id=?').bind(id).first();
   if (!sig) fail(404, 'Sinyal tidak ditemukan');
   if (isLive(sig.status) && !user) fail(403, 'Chart sinyal yang masih berjalan khusus member');
@@ -1291,6 +1390,9 @@ route('GET', '/signal/:id/chart', 'public', async ({ env, params, url, user }) =
 // Public page /sinyal: BUY/SELL signals with their outcome. Entry/SL/TP of a still-running signal are shown to
 // logged-in users only, so the page works as a track record without giving the live trade away.
 route('GET', '/signal/feed', 'public', async ({ env, url, user }) => {
+  // Garuda AI signals are archived: the public web shows the EA live reports instead (setting signals_public = '0')
+  if ((await getSettings(env)).signals_public === '0' && !(user && user.role === 'admin'))
+    return json({ off: true, signals: [], markets: [], market_stats: [], last_by_market: [], stats30: { wins: 0, losses: 0 } });
   const limit = Math.max(1, Math.min(int(url.searchParams.get('limit')) || 50, 200));
   const sym = url.searchParams.get('symbol') ? canonSymbol(url.searchParams.get('symbol')) : '';
   const w = sym ? ' AND symbol=?' : '';
@@ -1653,29 +1755,38 @@ async function boardRows(env, rate, { includeHidden = false } = {}) {
   const mode = s.board_name_mode || 'first_initial';
   return results.map((r) => {
     const idr = (v) => { const x = toIdr(v, r.currency, rate); return x == null ? null : Math.round(x); };
+    const usd = (v) => { if (v == null) return null; const x = toIdr(v, r.currency, rate); return x == null || !rate ? null : Math.round(x / rate * 100) / 100; };
     const pct = (p) => (r.balance - p) > 0 ? Math.round(p / (r.balance - p) * 10000) / 100 : null;
+    const total = r.total_ok ? r.total_profit : null;
+    const modal = total != null ? r.balance - total : null;           // start balance + deposits - withdrawals
+    const totalPct = total != null && modal > 0 ? Math.round(total / modal * 10000) / 100 : null;
     const row = {
       name: boardName(r.user_name, mode, r.board_hide_name), account: maskAccount(r.account_number), broker: r.broker, platform: r.platform,
       day_idr: idr(r.profit_day), week_idr: idr(r.profit_week), month_idr: idr(r.profit_month), balance_idr: idr(r.balance),
       day_pct: pct(r.profit_day), week_pct: pct(r.profit_week), month_pct: pct(r.profit_month), updated_at: r.updated_at,
+      day_usd: usd(r.profit_day), week_usd: usd(r.profit_week), month_usd: usd(r.profit_month), balance_usd: usd(r.balance),
+      since: r.started_at || 0, days: r.started_at ? Math.max(0, Math.floor((now() - r.started_at) / DAY)) : 0,
+      modal_usd: usd(modal), all_usd: usd(total), all_pct: totalPct,
     };
     if (includeHidden) Object.assign(row, { license_id: r.lid, user_name: r.user_name, user_email: r.user_email, account_number: r.account_number,
       product_name: r.product_name, status: r.status, currency: r.currency, balance: r.balance, equity: r.equity, positions: r.positions,
-      ea_version: r.ea_version, board_show: r.board_show, board_hide_name: r.board_hide_name, stale: r.updated_at <= stale });
+      ea_version: r.ea_version, board_show: r.board_show, board_hide_name: r.board_hide_name, stale: r.updated_at <= stale, started_at: r.started_at, total_ok: r.total_ok });
     return row;
-  }).filter((r) => includeHidden || r.month_idr != null);
+  }).filter((r) => includeHidden || r.month_idr != null || r.month_usd != null);
 }
 
 route('GET', '/board', 'public', async ({ env, url, waitUntil }) => {
   const s = await getSettings(env);
   if (s.board_enabled !== '1') return json({ enabled: false, rows: [] });
-  const period = ['day', 'week', 'month'].includes(url.searchParams.get('period')) ? url.searchParams.get('period') : 'month';
+  const period = ['day', 'week', 'month', 'all'].includes(url.searchParams.get('period')) ? url.searchParams.get('period') : 'all';
   const { rate, source } = await getUsdIdr(env, waitUntil);
-  const rows = (await boardRows(env, rate)).sort((a, b) => (b[period + '_idr'] || 0) - (a[period + '_idr'] || 0));
+  // ranked by % of capital, so small and large accounts compare fairly
+  const rows = (await boardRows(env, rate)).sort((a, b) => ((b[period + '_pct'] ?? -1e9) - (a[period + '_pct'] ?? -1e9)) || ((b[period + '_usd'] || 0) - (a[period + '_usd'] || 0)));
   const limit = Math.min(int(url.searchParams.get('limit')) || 500, 500);
   return new Response(JSON.stringify({
     enabled: true, period, usd_idr: rate, rate_source: source, generated_at: now(), landing_top: Number(s.board_landing_top || 10),
-    total_accounts: rows.length, total_idr: rows.reduce((a, r) => a + (r[period + '_idr'] || 0), 0), rows: rows.slice(0, limit),
+    total_accounts: rows.length, total_idr: rows.reduce((a, r) => a + (r[period + '_idr'] || 0), 0),
+    total_usd: Math.round(rows.reduce((a, r) => a + (r[period + '_usd'] || 0), 0) * 100) / 100, rows: rows.slice(0, limit),
   }), { headers: { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'public, max-age=60' } });
 });
 
@@ -1683,6 +1794,11 @@ route('GET', '/admin/board', 'admin', async ({ env, waitUntil }) => {
   const { rate } = await getUsdIdr(env, waitUntil);
   const rows = (await boardRows(env, rate, { includeHidden: true })).sort((a, b) => (b.month_idr || 0) - (a.month_idr || 0));
   return json({ usd_idr: rate, rows });
+});
+// Restart a member's track record (e.g. after the account was reused): lama trading, modal and total count from now.
+route('PUT', '/admin/licenses/:id/board-reset', 'admin', async ({ env, params }) => {
+  await env.DB.prepare('UPDATE ea_stats SET started_at=?, total_profit=0, total_ok=0 WHERE license_id=?').bind(now(), int(params.id)).run();
+  return json({ ok: true });
 });
 route('PUT', '/admin/licenses/:id/board', 'admin', async ({ request, env, params }) => {
   const b = await readJson(request);
@@ -1820,7 +1936,7 @@ async function licenseView(env, l, forAdmin) {
     vps_ip: l.managed_vps && !forAdmin ? '' : l.vps_ip, vps_user: l.managed_vps && !forAdmin ? '' : l.vps_user,
     vps_pass: l.managed_vps && !forAdmin ? '' : await decrypt(env, l.vps_pass_enc), vps_note: l.vps_note,
     build, build_pending: pending, created_at: l.created_at,
-    report: await env.DB.prepare('SELECT currency, balance, equity, profit_day, profit_week, profit_month, positions, updated_at FROM ea_stats WHERE license_id=?').bind(l.id).first(),
+    report: await env.DB.prepare('SELECT currency, balance, equity, profit_day, profit_week, profit_month, positions, updated_at, started_at, total_profit, total_ok FROM ea_stats WHERE license_id=?').bind(l.id).first(),
   };
   if (forAdmin) { out.board_show = l.board_show; out.board_hide_name = l.board_hide_name; }
   if (forAdmin) {

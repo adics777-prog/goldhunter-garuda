@@ -844,7 +844,7 @@
     const [{ rows, usd_idr }, s] = await Promise.all([api('/admin/board'), api('/admin/settings')]);
     const money = (n) => n == null ? '-' : (n < 0 ? '- ' : '') + rupiah(Math.abs(n));
     const cls = (n) => (n || 0) < 0 ? 'color:#ff8b95' : 'color:#6ee7a2';
-    view.innerHTML = `${title('📈 Papan Profit', '<a class="btn btn-ghost btn-sm" href="/#progress" target="_blank">Lihat di halaman utama ↗</a>')}
+    view.innerHTML = `${title('📈 Papan Profit', '<a class="btn btn-ghost btn-sm" href="/profit" target="_blank">Lihat papan publik ↗</a>')}
       <form class="card" id="bf" style="margin-bottom:18px"><div class="grid" style="grid-template-columns:repeat(auto-fit,minmax(min(200px,100%),1fr));gap:0 14px;align-items:end">
         <div class="field"><label>Papan profit publik</label><select name="board_enabled"><option value="1">Tampil</option><option value="0" ${s.board_enabled === '0' ? 'selected' : ''}>Disembunyikan</option></select></div>
         <div class="field"><label>Nama yang ditampilkan</label><select name="board_name_mode">
@@ -865,7 +865,9 @@
           <td class="right nowrap" style="${cls(r.day_idr)}">${money(r.day_idr)}</td>
           <td class="right nowrap" style="${cls(r.week_idr)}">${money(r.week_idr)}</td>
           <td class="right nowrap" style="${cls(r.month_idr)}">${money(r.month_idr)}</td>
-          <td class="small nowrap">${Number(r.balance).toLocaleString('id-ID')} ${esc(r.currency)}<div class="tiny muted">${r.positions} posisi</div></td>
+          <td class="small nowrap">${Number(r.balance).toLocaleString('id-ID')} ${esc(r.currency)}<div class="tiny muted">${r.positions} posisi</div>
+            <div class="tiny muted">sejak ${r.started_at ? fmtDate(r.started_at) : '-'} · ${r.all_usd == null ? 'total menghitung…' : 'total ' + (r.all_usd < 0 ? '-$' : '+$') + Math.abs(r.all_usd) + ' (' + r.all_pct + '%)'}</div>
+            <button type="button" class="btn btn-ghost btn-sm" data-reset="${r.license_id}" style="margin-top:4px;padding:3px 10px">Mulai ulang</button></td>
           <td class="tiny nowrap">${ago(r.updated_at)}${r.stale ? '<div><span class="badge b-orange">tidak lapor</span></div>' : ''}${r.status !== 'active' ? `<div>${licenseBadge(r.status)}</div>` : ''}</td>
           <td><input type="checkbox" data-show="${r.license_id}" ${r.board_show ? 'checked' : ''}></td>
           <td><input type="checkbox" data-hide="${r.license_id}" ${r.board_hide_name ? 'checked' : ''}></td></tr>`).join('')}</tbody></table></div>`
@@ -883,6 +885,10 @@
       await busy($('#bf button'), () => api('/admin/settings', { method: 'PUT', body: Object.fromEntries(new FormData(e.target)) }));
       toast('Pengaturan papan profit disimpan'); render();
     };
+    $$('[data-reset]').forEach((b) => b.onclick = async () => {
+      if (!confirm('Mulai ulang track record akun ini dari sekarang? Lama trading, modal dan profit total di papan publik dihitung dari nol.')) return;
+      try { await api(`/admin/licenses/${b.dataset.reset}/board-reset`, { method: 'PUT' }); toast('Track record dimulai ulang'); render(); } catch (err) { toast(err.message, 'err'); }
+    });
     $$('[data-show],[data-hide]').forEach((cb) => cb.onchange = async () => {
       const id = cb.dataset.show || cb.dataset.hide;
       const body = { board_show: $(`[data-show="${id}"]`).checked, board_hide_name: $(`[data-hide="${id}"]`).checked };
@@ -920,6 +926,50 @@
     };
     $('#np').onclick = () => edit(null);
     $$('[data-p]').forEach((b) => b.onclick = () => edit(products.find((x) => x.id == b.dataset.p)));
+  }
+
+  // ------------------------------------------------------------------ EA live setups (inside Pengaturan > EA Live)
+  async function eaSetupsBox() {
+    const box = $('#ea-setups');
+    if (!box) return;
+    let list = [];
+    try { list = (await api('/admin/ea/setups')).setups; } catch (err) { box.innerHTML = `<div class="small" style="color:#ff8b95">${esc(err.message)}</div>`; return; }
+    if (!list.length) { box.innerHTML = '<div class="small muted">Belum ada EA yang melapor. Pasang EA v2.51+ dengan input 13.2 = kunci di atas, lalu tunggu ±1 menit.</div>'; return; }
+    const pad = (n) => String(n).padStart(2, '0');
+    const local = (t) => { const d = new Date(t * 1000); return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`; };
+    const usd = (v) => v == null ? '-' : (v < 0 ? '-$' : '+$') + Math.abs(v).toLocaleString('id-ID', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    box.innerHTML = `<div class="table-wrap"><table><thead><tr><th>Setup</th><th>Label tampil</th><th>Risiko</th><th>Tampil</th><th>Urut</th><th>Mulai hitung</th><th class="right">Hasil</th><th></th></tr></thead><tbody>
+      ${list.map((x) => `<tr data-id="${x.id}" style="${x.visible ? '' : 'opacity:.55'}">
+        <td class="nowrap"><b>${esc(x.symbol)}</b> <span class="tiny muted">${esc(x.broker_symbol)}</span><div class="tiny muted">akun ${esc(x.login)} · magic ${x.magic} · EA ${esc(x.ea_risk || 'tanpa label')} · v${esc(x.version)}</div>
+          <div class="tiny">${x.online ? '<span style="color:#6ee7a2">● online</span>' : '<span style="color:#ff8b95">● offline</span>'} ${ago(x.at)}</div></td>
+        <td><input data-k="label" value="${esc(x.label_admin)}" placeholder="${esc(x.label)}" style="min-width:130px"></td>
+        <td><select data-k="risk" style="min-width:118px">${[['', 'Ikut EA'], ['LOW', 'LOW'], ['MEDIUM', 'MEDIUM'], ['HIGH', 'HIGH'], ['NONE', 'Tanpa label']].map(([v, l]) => `<option value="${v}" ${x.risk_admin === v ? 'selected' : ''}>${l}</option>`).join('')}</select></td>
+        <td><input type="checkbox" data-k="visible" ${x.visible ? 'checked' : ''}></td>
+        <td><input data-k="sort" type="number" value="${x.sort}" style="width:64px"></td>
+        <td><input data-k="since" type="datetime-local" value="${local(x.since)}"><div class="tiny muted">${x.days} hari</div></td>
+        <td class="right nowrap small">${usd(x.total_usd)}<div class="tiny muted">${x.total_pct == null ? 'menghitung…' : (x.total_pct > 0 ? '+' : '') + x.total_pct + '%'} · modal ${x.modal_usd == null ? '-' : '$' + x.modal_usd}</div><div class="tiny muted">DD -${x.max_dd_pct || 0}%</div></td>
+        <td class="nowrap"><button type="button" class="btn btn-gold btn-sm" data-act="save">Simpan</button> <button type="button" class="btn btn-ghost btn-sm" data-act="reset" title="Mulai hitung dari sekarang">Mulai ulang</button> <button type="button" class="btn btn-ghost btn-sm" data-act="del" title="Hapus setup &amp; riwayatnya">🗑</button></td></tr>`).join('')}
+      </tbody></table></div>`;
+    $$('#ea-setups tr[data-id]').forEach((tr) => {
+      const id = tr.dataset.id;
+      const val = (k) => $(`[data-k="${k}"]`, tr);
+      const body = (extra) => ({ label: val('label').value.trim(), risk: val('risk').value, visible: val('visible').checked, sort: Number(val('sort').value) || 0,
+        since: val('since').value ? Math.floor(new Date(val('since').value).getTime() / 1000) : '', ...extra });
+      $$('[data-act]', tr).forEach((b) => b.onclick = async () => {
+        try {
+          if (b.dataset.act === 'del') {
+            if (!confirm('Hapus setup ini beserta seluruh riwayat harian, seri dan kejadiannya? Bila EA-nya masih jalan, setup akan muncul lagi sebagai setup baru.')) return;
+            await api('/admin/ea/setups/' + id, { method: 'DELETE' });
+            toast('Setup dihapus');
+          } else {
+            if (b.dataset.act === 'reset' && !confirm('Mulai hitung ulang setup ini dari sekarang? Profit total, persen modal, lama berjalan dan DD terdalam mulai dari nol.')) return;
+            const r = await api('/admin/ea/setups/' + id, { method: 'PUT', body: body(b.dataset.act === 'reset' ? { reset: true } : {}) });
+            toast(r.restart ? 'Disimpan · hitungan dimulai ulang, EA mengirim total baru dalam ±1 menit' : 'Disimpan');
+          }
+          eaSetupsBox();
+        } catch (err) { toast(err.message, 'err'); }
+      });
+    });
   }
 
   // ------------------------------------------------------------------ settings
@@ -1013,8 +1063,9 @@
           <dt>Kunci enkripsi</dt><dd>${env.data_key_set ? '✔' : '<span class="badge b-red">belum diatur</span>'}</dd>
           <dt>Token builder</dt><dd>${env.builder_token_set ? '✔' : '<span class="badge b-red">belum diatur</span>'}</dd>
           <dt>Secret cron</dt><dd>${env.cron_secret_set ? '✔' : '<span class="badge b-red">belum diatur</span>'}</dd></dl></div>
-        <div class="card" style="grid-column:1/-1" data-tab="live"><h3>📡 EA GOLD HUNTER GARUDA Live (akun master)</h3>
-          <p class="help" style="margin-top:0">EA di akun master mengirim data tiap menit ke website: tampil di halaman publik <a href="/live" target="_blank" rel="noopener">/live</a>, dan Telegram menerima laporan harian + peringatan (bukan sinyal).
+        <div class="card" style="grid-column:1/-1" data-tab="live"><h3>📡 EA GOLD HUNTER GARUDA Live (akun master &amp; akun pantau)</h3>
+          <p class="help" style="margin-top:0">Setiap chart EA yang diisi kunci ini mengirim data tiap menit ke website. Satu akun + satu pair = satu <b>setup</b> (akun master 4 pair = 4 setup; akun pantau LOW / MEDIUM / HIGH = 1 setup per akun).
+            Tampil di halaman publik <a href="/live" target="_blank" rel="noopener">/live</a> dan di kartu penawaran halaman utama; Telegram menerima laporan harian + peringatan (bukan sinyal). Label risiko diambil dari input EA <b>13.6</b>.
             Isi kunci di bawah ke input EA <b>13.2 Kunci master</b>, dan izinkan <span class="mono">https://goldhuntergaruda.com</span> di MT5 → Tools → Options → Expert Advisors → Allow WebRequest.</p>
           <div class="grid c2" style="gap:0 14px;align-items:start">
             <div class="field"><label>Kunci master (sama dengan input EA 13.2)</label>
@@ -1027,9 +1078,13 @@
           </div>
           <label class="row small" style="color:var(--text)"><input type="checkbox" name="ea_tg_enabled" ${s.ea_tg_enabled !== '0' ? 'checked' : ''}> Kirim laporan &amp; peringatan EA ke Telegram (bot &amp; target diatur di <a href="#/sosmed">📣 Media Sosial</a>)</label>
           <p class="help">Isi Telegram: laporan harian (profit hari/minggu/bulan, seri selesai, equity, DD terdalam, kantong), seri selesai &ge; x posisi, peringatan floating rugi besar / basket panjang / kantong dipakai / pengaman equity / EA offline.</p></div>
+        <div class="card" style="grid-column:1/-1" data-tab="live"><h3>🎚️ Setup yang melapor</h3>
+          <p class="help" style="margin-top:0">Muncul otomatis begitu EA pertama kali mengirim data. <b>Mulai hitung</b> = awal track record (profit, persen modal, lama berjalan, DD terdalam dihitung sejak itu); ubah tanggalnya atau klik <b>Mulai ulang</b> bila akun dipakai ulang. Setup yang disembunyikan tidak tampil di web dan tidak memicu peringatan offline.</p>
+          <div id="ea-setups"><div class="small muted">Memuat…</div></div></div>
         <div class="save-bar" style="grid-column:1/-1"><button class="btn btn-gold" type="submit">Simpan Pengaturan</button><span class="tiny muted">Menyimpan semua tab sekaligus</span></div>
       </form>`;
     initTabs('settings');
+    eaSetupsBox();
     $('#ea-key-gen').onclick = () => { const a = new Uint8Array(16); crypto.getRandomValues(a); $('input[name=ea_master_key]').value = 'ghg-' + Array.from(a, (x) => x.toString(16).padStart(2, '0')).join(''); };
     $('#addib').onclick = () => $('#ibl').insertAdjacentHTML('beforeend', brokerRow());
     $('#addbk').onclick = () => $('#bkl').insertAdjacentHTML('beforeend', bankRow());
