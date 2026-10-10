@@ -190,7 +190,7 @@
       [T('Lot tiap layer', 'Lot per layer'), `×${num(v.lot_mult, 2)} · ${T('maks', 'max')} ${num(c.max_lot, 2)} lot`],
       [T('Jarak layer', 'Layer step'), `${money(v.dist_pts)} · ${T('melebar', 'widens')} ×${num(c.dist_mult, 2)} ${T('mulai layer', 'from layer')} ${c.dist_from || '-'}`],
       [T('Take profit bersama', 'Basket take profit'), `${money(v.tp_pts)} ${T('dari harga rata-rata', 'from the average price')} · ${esc(c.tp_mode || '')}${c.tp_net ? ' · ' + T('bersih swap', 'net of swap') : ''}`],
-      [T('Seri baru', 'New series'), `${NS[c.new_series] || '-'}${c.new_series === 2 ? ' ' + money(c.reentry_pts) : ''} · ${esc(v.mode)}`],
+      [T('Seri baru', 'New series'), `${NS[c.new_series] || '-'}${c.new_series === 2 ? ' ' + money(c.reentry_pts) + (c.reentry_bars > 0 ? ` ${T('maks', 'max')} ${c.reentry_bars} candle M1, ${T('lalu tetap buka', 'then opens anyway')}` : '') : ''} · ${esc(v.mode)}`],
       ['DD reduction', c.reduction ? `${T('mulai', 'from')} ${v.reduction_from} ${T('posisi', 'positions')}, ${T('untung terbaru ≥ rugi terlama', 'newest profit ≥ oldest loss')} +${num(c.reduction_pct)}%` : T('mati', 'off')],
       [T('Kantong profit', 'Profit pocket'), c.pocket ? `${num(v.pocket_pct)}% ${T('profit masuk kantong', 'of profit saved')}, ${T('dipakai saat basket', 'used when a basket has')} ≥ ${v.pocket_layers} ${T('layer', 'layers')}` : T('mati', 'off')],
       [T('Berita & spread', 'News & spread'), `${esc(c.news_mode || '')} · spread ${T('maks', 'max')} ${num(c.max_spread)} ${T('poin', 'pts')}${c.equity_stop ? ` · ${T('pengaman equity', 'equity guard')} ${num(c.equity_stop, 1)}%` : ''}`],
