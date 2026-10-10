@@ -10,6 +10,7 @@ import {
   usdtPay, TRC20_RE,
 } from '../../server/logic.js';
 import { layout, sendEmail } from '../../server/email.js';
+import { reportPng } from '../../server/report-image.js';
 
 const routes = [];
 const route = (method, path, auth, handler) => {
@@ -318,7 +319,7 @@ const wibDate = (t) => { const d = new Date((t + 7 * 3600) * 1000); const m = ['
 const eaMoney = (v, cur) => `${Number(v) > 0 ? '+' : (Number(v) < 0 ? '-' : '')}${Math.abs(Number(v) || 0).toLocaleString('id-ID', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}${cur ? ' ' + cur : ''}`;
 const eaPlain = (v) => Math.abs(Number(v) || 0).toLocaleString('id-ID', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 const eaDur = (sec) => { const m = Math.max(0, Math.round(sec / 60)); return m >= 1440 ? `${Math.floor(m / 1440)} hari ${Math.floor((m % 1440) / 60)} jam` : m >= 60 ? `${Math.floor(m / 60)} jam ${m % 60} mnt` : `${m} menit`; };
-const EA_LIVE_KEYS = ['ea_master_key', 'ea_report_hour', 'ea_tg_min_layers', 'ea_offline_min', 'ea_tg_enabled'];
+const EA_LIVE_KEYS = ['ea_master_key', 'ea_report_hour', 'ea_report_every', 'ea_tg_min_layers', 'ea_offline_min', 'ea_tg_enabled', 'ea_tg_events'];
 const eaSym = (v) => { const x = String(v || '').toUpperCase(); const m = x.match(/^([A-Z]{6})/); return m ? m[1] : x.slice(0, 12); };
 const EA_SYM_NAME = { XAUUSD: 'Emas', BTCUSD: 'Bitcoin', EURUSD: 'EURUSD', USDJPY: 'USDJPY' };
 const EA_SYM_ORDER = ['XAUUSD', 'BTCUSD', 'EURUSD', 'USDJPY'];
@@ -333,7 +334,9 @@ const eaLabel = (r) => r.label || `${r.symbol}${eaRisk(r) ? ' · ' + EA_RISK_NAM
 const eaUsd = (v, cur) => { if (v == null || !Number.isFinite(Number(v))) return null; const c = String(cur || '').toUpperCase(); if (c === 'USC' || c === 'USX' || c === 'UST') return Math.round(v) / 100; if (c === 'USD') return Math.round(v * 100) / 100; return null; };
 function eaCfg(s) {
   return { key: String(s.ea_master_key || '').trim(), hour: Number.isFinite(Number(s.ea_report_hour)) && s.ea_report_hour !== '' ? int(s.ea_report_hour) : 21,
-    minLayers: s.ea_tg_min_layers === '' || s.ea_tg_min_layers == null ? 4 : int(s.ea_tg_min_layers), offlineMin: int(s.ea_offline_min) || 5, tg: s.ea_tg_enabled !== '0' };
+    minLayers: s.ea_tg_min_layers === '' || s.ea_tg_min_layers == null ? 4 : int(s.ea_tg_min_layers), offlineMin: int(s.ea_offline_min) || 5, tg: s.ea_tg_enabled !== '0',
+    // Telegram = one picture with every setup's closed profit; text per event (series, warnings, offline) only when switched on
+    every: Math.max(0, Math.min(24, int(s.ea_report_every) || 0)), events: s.ea_tg_events === '1' };
 }
 async function eaTg(env, cfg, text, base, setupId) {
   if (!cfg.tg) return;
@@ -375,31 +378,51 @@ async function eaOfflineCheck(env, s, base) {
   const { results } = await env.DB.prepare('SELECT * FROM ea_setups WHERE visible=1 AND offline_state=0 AND updated_at > 0 AND updated_at < ?').bind(t - cfg.offlineMin * 60).all();
   if (!results.length) return;
   await env.DB.batch(results.map((r) => env.DB.prepare('UPDATE ea_setups SET offline_state=1 WHERE id=?').bind(r.id)));
+  if (!cfg.events) return;
   const lines = results.map((r) => `• ${esc(eaLabel(r))} (akun ${maskAccount(r.login)}): data terakhir ${wibClock(r.updated_at)}, ${eaDur(t - r.updated_at)} lalu`);
   await eaTg(env, cfg, [`🔴 <b>EA GOLD HUNTER GARUDA TIDAK MENGIRIM DATA</b>`, ...lines, 'Cek VPS / MT5 / koneksi internet.'].join('\n'), base);
 }
-async function eaDailyReport(env, s, cfg, t, base) {
-  const day = wibDay(t);
-  if (wibHour(t) < cfg.hour || s.ea_report_day === day) return;
-  await putSetting(env, 'ea_report_day', day);
-  const [{ results: rows }, { results: days }, { results: ser }] = await Promise.all([
+// Claim a once-only job across parallel heartbeats: only the request that changes the value sends.
+async function eaClaim(env, key, value) {
+  await env.DB.prepare('INSERT OR IGNORE INTO settings (key, value) VALUES (?, ?)').bind(key, '').run();
+  const r = await env.DB.prepare('UPDATE settings SET value=? WHERE key=? AND value IS NOT ?').bind(String(value), key, String(value)).run();
+  return (r.meta && r.meta.changes) === 1;
+}
+// Data of the picture: every visible setup, closed profit only (today, since start, % of capital).
+async function eaReportRows(env, t, cfg) {
+  const [{ results: rows }, { results: ser }] = await Promise.all([
     env.DB.prepare('SELECT * FROM ea_setups WHERE visible=1').all(),
-    env.DB.prepare('SELECT * FROM ea_setup_days WHERE day=?').bind(day).all(),
-    env.DB.prepare(`SELECT setup_id, COUNT(*) AS n, COALESCE(SUM(CASE WHEN profit>0 THEN 1 ELSE 0 END),0) AS wins, COALESCE(MAX(positions),0) AS maxpos
-        FROM ea_series WHERE closed_at >= ? GROUP BY setup_id`).bind(wibDayStart(t)).all(),
+    env.DB.prepare(`SELECT setup_id, COUNT(*) AS n, COALESCE(SUM(CASE WHEN profit>0 THEN 1 ELSE 0 END),0) AS wins FROM ea_series WHERE closed_at >= ? GROUP BY setup_id`).bind(wibDayStart(t)).all(),
   ]);
-  if (!rows.length) return;
   rows.sort(EA_SETUP_ORDER);
-  const lines = rows.map((r) => {
+  const out = rows.map((r) => {
     const v = eaSetupView(r, t, cfg);
-    const dd = days.find((x) => x.setup_id === r.id) || {};
-    const sr = ser.find((x) => x.setup_id === r.id) || { n: 0, wins: 0, maxpos: 0 };
-    const p = dd.profit != null ? dd.profit : v.day;
-    const pc = v.modal > 0 ? ` (${p >= 0 ? '+' : ''}${(p / v.modal * 100).toFixed(2)}%)` : '';
-    const tot = v.total != null && v.modal > 0 ? ` · total ${eaMoney(v.total, r.currency)} (${v.total_pct >= 0 ? '+' : ''}${v.total_pct}%) dalam ${v.days} hari` : '';
-    return `• <b>${esc(v.label)}</b>: ${eaMoney(p, r.currency)}${pc} · ${sr.n} seri (${sr.wins} profit) · basket terpanjang ${Math.max(sr.maxpos, dd.max_layers || 0)}${tot}${v.online ? '' : ' · 🔴 offline'}`;
+    const sr = ser.find((x) => x.setup_id === r.id) || { n: 0, wins: 0 };
+    return { symbol: v.symbol, risk: v.risk, label: v.label, online: v.online, day_usd: v.day_usd, day_pct: v.day_pct, total_usd: v.total_usd, total_pct: v.total_pct, running: v.running, series: sr.n, wins: sr.wins };
   });
-  await eaTg(env, cfg, [`📊 <b>LAPORAN HARIAN GOLD HUNTER GARUDA</b> · ${wibDate(t)}`, '', ...lines].join('\n'), base);
+  const sum = (k) => Math.round(out.reduce((a, x) => a + (x[k] || 0), 0) * 100) / 100;
+  return { rows: out, head: { date: wibDate(t), clock: wibClock(t), total_day_usd: sum('day_usd'), total_usd: sum('total_usd'), online: out.filter((x) => x.online).length, count: out.length } };
+}
+async function eaSendReport(env, t, cfg, base) {
+  const { rows, head } = await eaReportRows(env, t, cfg);
+  if (!rows.length) return { ok: false, error: 'Belum ada setup yang melapor' };
+  const png = await reportPng(rows, head);
+  const caption = [`📊 <b>GOLD HUNTER GARUDA</b> · ${head.date} ${head.clock}`,
+    `Profit hari ini ${eaMoney(head.total_day_usd)} USD · sejak mulai ${eaMoney(head.total_usd)} USD`,
+    base ? `📈 <a href="${base}/live">goldhuntergaruda.com/live</a>` : ''].filter(Boolean).join('\n');
+  const sent = await tgBroadcast(env, caption, { photo: b64(png) });
+  return { ok: !!sent && Object.keys(sent).length > 0, targets: sent ? Object.keys(sent).length : 0 };
+}
+// Picture report: once a day after ea_report_hour (WIB), plus every x hours when ea_report_every > 0.
+async function eaDailyReport(env, s, cfg, t, base) {
+  if (!cfg.tg) return;
+  const day = wibDay(t);
+  let due = wibHour(t) >= cfg.hour && s.ea_report_day !== day && await eaClaim(env, 'ea_report_day', day);
+  if (!due && cfg.every > 0) {
+    const slot = Math.floor(t / (cfg.every * 3600));
+    due = String(s.ea_report_slot || '') !== String(slot) && await eaClaim(env, 'ea_report_slot', slot);
+  }
+  if (due) await eaSendReport(env, t, cfg, base);
 }
 
 route('POST', '/ea/live', 'public', async ({ request, env, waitUntil, base }) => {
@@ -470,7 +493,7 @@ route('POST', '/ea/live', 'public', async ({ request, env, waitUntil, base }) =>
     }
   }
   if (row.offline_state === 1) msgs.push(`🟢 <b>${esc(label)} online kembali</b>`);
-  for (const m of msgs) waitUntil(eaTg(env, cfg, m, base, row.id));
+  if (cfg.events) for (const m of msgs) waitUntil(eaTg(env, cfg, m, base, row.id));
   waitUntil(eaDailyReport(env, s, cfg, t, base).catch((e) => console.error('ea daily', e)));
   return json({ ok: true, next: 60, since: row.since });
 });
@@ -513,6 +536,21 @@ route('GET', '/live', 'public', async ({ env, url, waitUntil, base }) => {
     return { ...v, series: sr.n, wins: sr.wins, spark: days.filter((x) => x.setup_id === r.id && x.day >= sinceDay).map((x) => [x.day, x.profit]) };
   });
   return json({ ok: true, configured: !!cfg.key, server_time: t, offline_min: cfg.offlineMin, setups });
+});
+
+// Admin: preview the Telegram picture / send it now.
+route('GET', '/admin/ea/report.png', 'admin', async ({ env }) => {
+  const s = await getSettings(env);
+  const t = now();
+  const { rows, head } = await eaReportRows(env, t, eaCfg(s));
+  return new Response(await reportPng(rows, head), { headers: { 'content-type': 'image/png', 'cache-control': 'no-store' } });
+});
+route('POST', '/admin/ea/report-send', 'admin', async ({ env, base }) => {
+  const s = await getSettings(env);
+  const cfg = eaCfg(s);
+  const r = await eaSendReport(env, now(), cfg, base);
+  if (!r.ok) fail(400, r.error || 'Telegram belum aktif atau belum ada target (Media Sosial > Telegram)');
+  return json(r);
 });
 
 // Admin: manage the setups (label, risk, visibility, order, start of the track record).
@@ -2359,7 +2397,7 @@ const EDITABLE_SETTINGS = ['durations', 'discounts', 'bank_list', 'admin_notify_
   'ib_brokers', 'auto_complete_ea', 'auto_process_paid', 'welcome_email_password', 'email_provider', 'email_from', 'email_from_name', 'vps_spec',
   'min_capital_usd', 'invoice_days_before', 'auto_rebuild_on_version', 'report_interval_min', 'board_enabled', 'board_name_mode', 'board_landing_top', 'board_stale_days', 'profit_est_enabled', 'profit_est_min_idr', 'profit_est_max_idr', 'profit_est_basis',
   'telegram_enabled', 'telegram_targets', 'telegram_wait', 'telegram_wait_hours', 'usdt_enabled', 'usdt_address',
-  'ea_master_key', 'ea_report_hour', 'ea_tg_min_layers', 'ea_offline_min', 'ea_tg_enabled'];
+  'ea_master_key', 'ea_report_hour', 'ea_report_every', 'ea_tg_min_layers', 'ea_offline_min', 'ea_tg_enabled', 'ea_tg_events'];
 route('GET', '/admin/settings', 'admin', async ({ env }) => {
   const s = await getSettings(env);
   const out = Object.fromEntries(EDITABLE_SETTINGS.map((k) => [k, s[k] ?? '']));
