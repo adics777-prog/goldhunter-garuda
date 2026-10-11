@@ -453,7 +453,8 @@ route('POST', '/ea/live', 'public', async ({ request, env, waitUntil, base }) =>
     tp_pts: int(b.tp_pts) || 0, lot_mult: eaNum(b.lot_mult), dist_pts: int(b.dist_pts) || 0, first_lot: eaNum(b.first_lot), reduction_from: int(b.reduction_from) || 0,
     pocket_pct: eaNum(b.pocket_pct), pocket_layers: int(b.pocket_layers) || 0,
     buy: side(b.buy), sell: side(b.sell), pocket: { saldo: eaNum(pk.saldo), in: eaNum(pk.in), out: eaNum(pk.out), cuts: int(pk.cuts) || 0 },
-    news: { name: str(nw.name, 80), time: int(nw.time) || 0, active: !!nw.active, mode: str(nw.mode, 8) }, cfg: cfgSnap };
+    news: { name: str(nw.name, 80), time: int(nw.time) || 0, active: !!nw.active, mode: str(nw.mode, 8) }, cfg: cfgSnap,
+    pause: { buy: !!(b.pause && b.pause.buy), sell: !!(b.pause && b.pause.sell) } };
   const sym = eaSym(snap.symbol);
   const budget = Math.max(0, eaNum(b.budget));
   const setupName = str(b.setup, 40);
@@ -485,7 +486,7 @@ route('POST', '/ea/live', 'public', async ({ request, env, waitUntil, base }) =>
   const label = eaLabel({ ...row, setup_name: setupName || row.setup_name, ea_risk: EA_RISKS.includes(snap.risk) ? snap.risk : row.ea_risk });
   const msgs = [];
   const evs = Array.isArray(b.events) ? b.events.slice(0, 50) : [];
-  const TITLE = { kantong: '🟡 KANTONG PROFIT', pengaman: '🛑 PENGAMAN EQUITY', dd: '⚠️ FLOATING RUGI BESAR', layer: '⚠️ BASKET PANJANG', reduction: '🔁 REDUCTION' };
+  const TITLE = { kantong: '🟡 KANTONG PROFIT', pengaman: '🛑 PENGAMAN EQUITY', dd: '⚠️ FLOATING RUGI BESAR', layer: '⚠️ BASKET PANJANG', reduction: '🔁 REDUCTION', pause: '⏸ PAUSE' };
   for (const e of evs) {
     const kind = str(e.kind, 12);
     if (!TITLE[kind] && kind !== 'seri') continue;
@@ -527,7 +528,7 @@ route('GET', '/live', 'public', async ({ env, url, waitUntil, base }) => {
           FROM ea_series WHERE setup_id=? AND closed_at >= ?`).bind(r.id, r.since).first(),
     ]);
     const d = eaParse(r.data);
-    const snap = { buy: d.buy || { count: 0 }, sell: d.sell || { count: 0 }, pocket: d.pocket || {}, news: d.news || {}, spread: d.spread || 0, trend: d.trend || 0, trend_why: d.trend_why || '', trend_tf: d.trend_tf || '', margin_level: d.margin_level || 0 };
+    const snap = { buy: d.buy || { count: 0 }, sell: d.sell || { count: 0 }, pocket: d.pocket || {}, news: d.news || {}, pause: d.pause || {}, spread: d.spread || 0, trend: d.trend || 0, trend_why: d.trend_why || '', trend_tf: d.trend_tf || '', margin_level: d.margin_level || 0 };
     return json({ ok: true, configured: !!cfg.key, server_time: t, offline_min: cfg.offlineMin, setup: { ...eaSetupView(r, t, cfg), stats: stat, snapshot: snap },
       series: series.results, days: days.results, events: events.results });
   }

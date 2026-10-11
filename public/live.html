@@ -119,7 +119,7 @@
 (() => {
   const { $, fmtDateTime, fmtDate, ago } = GHG;
   const { esc, toUsd, usd, num, pct, cls, days, riskBadge, NAME, ICON, PAIRS, card } = GHL;
-  const KIND = () => ({ kantong: ['🟡', T('Kantong profit', 'Profit pocket')], pengaman: ['🛑', T('Pengaman equity', 'Equity guard')], dd: ['⚠️', T('Floating rugi besar', 'Large floating loss')], layer: ['⚠️', T('Basket panjang', 'Long basket')], reduction: ['🔁', 'Reduction'] });
+  const KIND = () => ({ pause: ['⏸', 'Pause'], kantong: ['🟡', T('Kantong profit', 'Profit pocket')], pengaman: ['🛑', T('Pengaman equity', 'Equity guard')], dd: ['⚠️', T('Floating rugi besar', 'Large floating loss')], layer: ['⚠️', T('Basket panjang', 'Long basket')], reduction: ['🔁', 'Reduction'] });
   const q = new URLSearchParams(location.search);
   let setupId = Number(q.get('setup')) || 0;
   let pair = (q.get('pasar') || '').toUpperCase();
@@ -155,11 +155,12 @@
   }
 
   // ---------------------------------------------------------------- detail
-  const side = (name, x, dg, cur) => {
+  const side = (name, x, dg, cur, paused) => {
     const b = name === 'BUY';
-    if (!x || !x.count) return `<div class="seri ${b ? 'buy' : 'sell'}"><h3><span class="tag ${b ? 'buy' : 'sell'}">${name}</span> ${T('tidak ada posisi', 'no positions')}</h3><div class="small muted">${T('Seri baru dibuka sesuai aturan EA.', 'A new series opens by the EA rules.')}</div></div>`;
+    const pz = paused ? ` <span class="tag" style="color:#ff8b95;border-color:rgba(255,139,149,.5)">⏸ ${T('dipause', 'paused')}</span>` : '';
+    if (!x || !x.count) return `<div class="seri ${b ? 'buy' : 'sell'}"><h3><span class="tag ${b ? 'buy' : 'sell'}">${name}</span> ${T('tidak ada posisi', 'no positions')}${pz}</h3><div class="small muted">${paused ? T('Seri baru tidak dibuka sampai pause dilepas.', 'No new series until the pause is released.') : T('Seri baru dibuka sesuai aturan EA.', 'A new series opens by the EA rules.')}</div></div>`;
     const px = (v) => Number(v || 0).toFixed(dg);
-    return `<div class="seri ${b ? 'buy' : 'sell'}"><div class="row between" style="align-items:flex-start"><h3><span class="tag ${b ? 'buy' : 'sell'}">${name}</span> ${x.count} ${T('posisi', 'positions')} · ${Number(x.lots).toFixed(2)} lot</h3><span class="big ${cls(x.profit)}">${usd(toUsd(x.profit, cur))}</span></div>
+    return `<div class="seri ${b ? 'buy' : 'sell'}"><div class="row between" style="align-items:flex-start"><h3><span class="tag ${b ? 'buy' : 'sell'}">${name}</span> ${x.count} ${T('posisi', 'positions')} · ${Number(x.lots).toFixed(2)} lot${pz}</h3><span class="big ${cls(x.profit)}">${usd(toUsd(x.profit, cur))}</span></div>
       <dl class="kv"><dt>${T('Rata-rata', 'Average')}</dt><dd>${px(x.avg)}</dd><dt>${T('TP bersama', 'Basket TP')}</dt><dd class="pos">${px(x.tp)}</dd><dt>${T('Layer berikutnya', 'Next layer')}</dt><dd>${Number(x.next_lot).toFixed(2)} lot @ ${px(x.next_price)}</dd><dt>${T('Berjalan', 'Running')}</dt><dd>${x.since ? dur(DT.server_time - x.since) : '-'}</dd></dl></div>`;
   };
   function renderDetail() {
@@ -180,7 +181,7 @@
       <div class="tile"><div class="k">${T('Seri selesai', 'Closed series')}</div><div class="v">${num(st.n)}</div><div class="s">${num(st.wins)} ${T('profit', 'in profit')}${st.n ? ' · ' + T('rata-rata', 'avg') + ' ' + dur(st.dur) : ''} · ${T('basket terpanjang', 'longest')} ${num(Math.max(st.maxpos, v.max_layers))}</div></div>`;
     const nw = sn.news && sn.news.name ? `📰 ${esc(sn.news.name)} · ${esc(fmtDateTime(sn.news.time))} · ${sn.news.active ? T('sedang jendela berita', 'in the news window') : T('berikutnya', 'next')} · ${esc(sn.news.mode)}` : `📰 ${T('tidak ada berita penting 6 jam ke depan', 'no high-impact news in the next 6 hours')}`;
     const pk = sn.pocket || {};
-    $('#cards').innerHTML = side('BUY', sn.buy, dg, cur) + side('SELL', sn.sell, dg, cur) +
+    $('#cards').innerHTML = side('BUY', sn.buy, dg, cur, sn.pause && sn.pause.buy) + side('SELL', sn.sell, dg, cur, sn.pause && sn.pause.sell) +
       `<div class="small muted" style="grid-column:1/-1">${nw} · ${T('kantong', 'pocket')} ${usd(toUsd(pk.saldo, cur), false)} (${T('dipakai', 'used')} ${pk.cuts || 0}×) · spread ${num(sn.spread)}</div>`;
     const pt = Number(c.point) || 0;
     const money = (pts) => (['XAUUSD', 'BTCUSD'].includes(v.symbol) && pt ? `$${(pts * pt).toLocaleString(T('id-ID', 'en-US'), { maximumFractionDigits: 2 })}` : `${(pts / 10).toLocaleString(T('id-ID', 'en-US'), { maximumFractionDigits: 1 })} pip`);
