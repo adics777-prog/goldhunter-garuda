@@ -275,6 +275,13 @@ def read_text(path):
         return raw.decode('cp1252')
 
 
+def metaedit(p, target, logfile):
+    """MetaEditor needs /compile:"path" with the quote AFTER the colon; a Python argument list quotes the whole
+    argument ("/compile:C:\a b.mq5"), which MetaEditor rejects as soon as the path has a space."""
+    cmd = f'"{p["metaeditor"]}" /compile:"{target}" /inc:"{p["mql_dir"]}" /log:"{logfile}"'
+    subprocess.run(cmd, timeout=240)
+
+
 def build(cfg, job):
     platform = job['platform']
     p = cfg.get(platform) or {}
@@ -304,8 +311,7 @@ def build(cfg, job):
         f.write(licensed.replace('\r\n', '\n'))
 
     logfile = os.path.join(jobdir, 'compile.log')
-    cmd = [p['metaeditor'], f'/compile:{target}', f'/inc:{p["mql_dir"]}', f'/log:{logfile}']
-    subprocess.run(cmd, timeout=240)
+    metaedit(p, target, logfile)
     compile_log = read_text(logfile) if os.path.exists(logfile) else '(log compile tidak ada)'
     binary = os.path.join(jobdir, name + out_ext)
     m = re.search(r'(\d+)\s+errors?,\s*(\d+)\s+warnings?', compile_log)
@@ -417,7 +423,7 @@ def sync_vps_release(cfg, server):
         logfile = os.path.join(WORK, 'vps_compile.log')
         os.makedirs(WORK, exist_ok=True)
         log(f'VPS: versi baru v{version} terdeteksi, compile {name}.mq5 ...')
-        subprocess.run([p['metaeditor'], f'/compile:{src}', f'/inc:{p["mql_dir"]}', f'/log:{logfile}'], timeout=240)
+        metaedit(p, src, logfile)
         out = read_text(logfile) if os.path.exists(logfile) else ''
         mm = re.search(r'(\d+)\s+errors?,\s*(\d+)\s+warnings?', out)
         if not os.path.exists(ex5) or os.path.getmtime(ex5) < mt or (mm and int(mm.group(1)) > 0):
@@ -425,8 +431,20 @@ def sync_vps_release(cfg, server):
             log('VPS: compile GAGAL, rilis tidak diterbitkan:\n' + out[-1500:])
             return
         log(f'VPS: compile OK ({mm.group(0) if mm else "selesai"})')
+    # the 12 setup EAs (XAU/BTC/EUR/JPY 1-3) are rebuilt from this source whenever it is newer than them
+    try:
+        import ghg_variants
+        vs = ghg_variants.setup_ex5s(cfg)
+        if len(vs) < len(ghg_variants.variants()) or any(os.path.getmtime(v) < os.path.getmtime(ex5) for v in vs):
+            log(f'VPS: membuat ulang {len(ghg_variants.variants())} EA setup dari v{version} ...')
+            vs = ghg_variants.build_all(cfg, log=log)
+    except Exception as e:
+        VPS_STATE['failed_mtime'] = os.path.getmtime(src)
+        log(f'VPS: EA setup gagal dibuat, rilis tidak diterbitkan: {e}')
+        return
+    extras = [(os.path.basename(v), open(v, 'rb').read()) for v in sorted(vs)]
     data = open(ex5, 'rb').read()
-    sha_ex5 = hashlib.sha256(data).hexdigest()
+    sha_ex5 = hashlib.sha256(data + b''.join(n.encode('utf-8') + b'\0' + b for n, b in extras)).hexdigest()
     presets = [(os.path.basename(f), open(f, 'rb').read()) for f in sets]
     sha_p = hashlib.sha256(b''.join(n.encode('utf-8') + b'\0' + b for n, b in presets)).hexdigest()
     sha = hashlib.sha256(f'{version}|{sha_ex5}|{sha_p}'.encode()).hexdigest()
@@ -441,9 +459,10 @@ def sync_vps_release(cfg, server):
     api(cfg, '/api/builder/vps-release', {
         'version': version, 'sha': sha, 'sha_ex5': sha_ex5, 'sha_presets': sha_p, 'host': socket.gethostname(),
         'ex5_name': name + '.ex5', 'ex5_b64': base64.b64encode(data).decode(),
+        'extras': [{'name': n, 'b64': base64.b64encode(b).decode()} for n, b in extras],
         'presets': [{'name': n, 'b64': base64.b64encode(b).decode()} for n, b in presets]})
     VPS_STATE['warned'] = ''
-    log(f'VPS: rilis v{version} diterbitkan ({len(data):,} byte + {len(presets)} preset). Agen VPS memasangnya dalam ±1 menit.')
+    log(f'VPS: rilis v{version} diterbitkan ({len(data):,} byte + {len(extras)} EA setup + {len(presets)} preset). Agen VPS memasangnya dalam ±1 menit.')
 
 
 def sync_content(cfg):

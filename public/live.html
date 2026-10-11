@@ -114,7 +114,7 @@
 </main>
 <script src="/assets/i18n.js?v=489e4256"></script>
 <script src="/assets/common.js?v=aa4bb046"></script>
-<script src="/assets/ghlive.js?v=f68566d2"></script>
+<script src="/assets/ghlive.js?v=50580f53"></script>
 <script>
 (() => {
   const { $, fmtDateTime, fmtDate, ago } = GHG;
@@ -166,12 +166,12 @@
     const d = DT, v = d.setup, sn = v.snapshot || {}, c = v.cfg || {}, cur = v.currency;
     const dg = c.digits || (v.symbol === 'EURUSD' ? 5 : v.symbol === 'BTCUSD' ? 2 : 3);
     document.title = `${v.symbol} ${v.risk ? v.risk + ' ' : ''}· GOLD HUNTER GARUDA Live`;
-    $('#dhead').innerHTML = `<h1>${ICON[v.symbol] || '📈'} ${esc(v.symbol)} ${riskBadge(v.risk)}</h1><p class="muted small">${T('Akun', 'Account')} ${esc(v.account)} · ${esc(v.broker_symbol || v.symbol)} · ${T('mulai dihitung', 'counted from')} ${esc(fmtDate(v.since))} · EA v${esc(v.version)}</p>`;
+    $('#dhead').innerHTML = `<h1>${ICON[v.symbol] || '📈'} ${esc(v.setup_name ? 'GOLD HUNTER GARUDA ' + v.setup_name : v.symbol)} ${riskBadge(v.risk)}</h1><p class="muted small">${T('Akun', 'Account')} ${esc(v.account)} · ${esc(v.broker_symbol || v.symbol)} · ${T('mulai dihitung', 'counted from')} ${esc(fmtDate(v.since))} · EA v${esc(v.version)}</p>`;
     $('#dstatus').innerHTML = `<span><span class="live-dot ${v.online ? 'on' : ''}"></span><b>${v.online ? 'ONLINE' : T('TIDAK MENGIRIM DATA', 'NOT REPORTING')}</b> · ${esc(v.status || '')}</span><span class="small muted">${T('data terakhir', 'last data')} ${esc(ago(v.at))}</span>`;
     const st = v.stats || { n: 0, wins: 0, dur: 0, maxpos: 0 };
     $('#tiles').innerHTML = `
-      <div class="tile"><div class="k">${T('Profit sejak mulai', 'Profit since start')}</div><div class="v ${cls(v.total_usd)}">${v.total_usd == null ? T('menghitung…', 'counting…') : usd(v.total_usd)}</div><div class="s ${cls(v.total_pct)}">${v.total_pct == null ? '' : pct(v.total_pct) + ' ' + T('dari modal', 'of capital')}</div></div>
-      <div class="tile"><div class="k">${T('Modal', 'Capital')}</div><div class="v">${v.modal_usd == null ? '-' : usd(v.modal_usd, false)}</div><div class="s">${v.modal == null ? '' : num(v.modal, 2) + ' ' + esc(cur)} · ${T('balance', 'balance')} ${usd(v.balance_usd, false)}</div></div>
+      <div class="tile"><div class="k">${T('Profit sejak mulai', 'Profit since start')}</div><div class="v ${cls(v.total_usd)}">${v.total_usd == null ? T('menghitung…', 'counting…') : usd(v.total_usd)}</div><div class="s ${cls(v.total_pct)}">${v.total_pct == null ? '' : pct(v.total_pct) + ' ' + (v.budget > 0 ? T('dari anggaran', 'of the budget') : T('dari modal', 'of capital'))}</div></div>
+      <div class="tile"><div class="k">${v.budget > 0 ? T('Anggaran dana', 'Budget') : T('Modal', 'Capital')}</div><div class="v">${v.modal_usd == null ? '-' : usd(v.modal_usd, false)}</div><div class="s">${v.modal == null ? '' : num(v.modal, 0) + ' ' + esc(cur)}${v.budget > 0 ? ' · ' + T('dari akun bersama', 'on a shared account') : ' · ' + T('balance', 'balance') + ' ' + usd(v.balance_usd, false)}</div></div>
       <div class="tile"><div class="k">${T('Lama berjalan', 'Running for')}</div><div class="v">${days(v.running)}</div><div class="s">${T('sejak', 'since')} ${esc(fmtDate(v.since))}</div></div>
       <div class="tile"><div class="k">${T('DD terdalam', 'Deepest drawdown')}</div><div class="v ${v.max_dd_pct ? 'neg' : ''}">${v.max_dd_pct ? '-' + num(v.max_dd_pct, 2) + '%' : '0%'}</div><div class="s">${T('floating terdalam', 'deepest floating')} <span class="${cls(v.min_float)}">${usd(toUsd(v.min_float, cur))}</span></div></div>
       <div class="tile"><div class="k">${T('Hari ini', 'Today')}</div><div class="v ${cls(v.day)}">${usd(toUsd(v.day, cur))}</div><div class="s">${pct(v.day_pct)}</div></div>

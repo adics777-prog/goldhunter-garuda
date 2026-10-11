@@ -331,7 +331,7 @@ const eaSymTitle = (sym) => `${sym}${EA_SYM_NAME[sym] ? ` (${EA_SYM_NAME[sym]})`
 const eaParse = (txt) => { try { return JSON.parse(txt || '{}') || {}; } catch { return {}; } };
 // admin choice wins; '' = follow the EA's input 13.6; 'NONE' = no label
 const eaRisk = (r) => { const a = String(r.risk || ''); if (a === 'NONE') return ''; if (EA_RISKS.includes(a)) return a; return EA_RISKS.includes(r.ea_risk) ? r.ea_risk : ''; };
-const eaLabel = (r) => r.label || `${r.symbol}${eaRisk(r) ? ' · ' + EA_RISK_NAME[eaRisk(r)] : ''}`;
+const eaLabel = (r) => r.label || `${r.setup_name || r.symbol}${eaRisk(r) ? ' · ' + EA_RISK_NAME[eaRisk(r)] : ''}`;
 // account currency -> US dollar (cent accounts: 100 USC = $1)
 const eaUsd = (v, cur) => { if (v == null || !Number.isFinite(Number(v))) return null; const c = String(cur || '').toUpperCase(); if (c === 'USC' || c === 'USX' || c === 'UST') return Math.round(v) / 100; if (c === 'USD') return Math.round(v * 100) / 100; return null; };
 function eaCfg(s) {
@@ -350,12 +350,14 @@ function eaSetupView(r, t, cfg) {
   const d = eaParse(r.data);
   const risk = eaRisk(r);
   const total = r.total_ok ? r.total : null;
-  const modal = r.total_ok ? Math.round((r.balance - r.acct_total) * 100) / 100 : null;
+  // budget mode (EA input 4.0): the setup's own capital is its budget; otherwise the account capital since the start
+  const modal = r.budget > 0 ? r.budget : (r.total_ok ? Math.round((r.balance - r.acct_total) * 100) / 100 : null);
   const pctOf = (v) => (v != null && modal > 0 ? Math.round(v / modal * 10000) / 100 : null);
   const side = (x) => (x && x.count ? { count: x.count, lots: x.lots, profit: x.profit } : { count: 0 });
   const floating = ((d.buy && d.buy.profit) || 0) + ((d.sell && d.sell.profit) || 0);
   return {
-    id: r.id, symbol: r.symbol, broker_symbol: r.broker_symbol, risk, label: eaLabel(r), account: maskAccount(r.login), currency: r.currency,
+    id: r.id, symbol: r.symbol, broker_symbol: r.broker_symbol, risk, label: eaLabel(r), setup_name: r.setup_name || '', budget: r.budget || 0,
+    budget_usd: r.budget > 0 ? eaUsd(r.budget, r.currency) : null, magic: r.magic, account: maskAccount(r.login), currency: r.currency,
     since: r.since, days: r.since ? Math.max(0, Math.floor((t - r.since) / DAY)) : 0, running: r.since ? t - r.since : 0,
     online: !!r.updated_at && t - r.updated_at <= cfg.offlineMin * 60, at: r.updated_at,
     balance: r.balance, equity: r.equity, modal, total, total_pct: pctOf(total),
@@ -400,7 +402,7 @@ async function eaReportRows(env, t, cfg) {
   const out = rows.map((r) => {
     const v = eaSetupView(r, t, cfg);
     const sr = ser.find((x) => x.setup_id === r.id) || { n: 0, wins: 0 };
-    return { symbol: v.symbol, risk: v.risk, label: v.label, online: v.online, day_usd: v.day_usd, day_pct: v.day_pct, total_usd: v.total_usd, total_pct: v.total_pct, running: v.running, series: sr.n, wins: sr.wins };
+    return { symbol: v.symbol, name: v.setup_name || v.symbol, budget_usd: v.budget_usd, risk: v.risk, label: v.label, online: v.online, day_usd: v.day_usd, day_pct: v.day_pct, total_usd: v.total_usd, total_pct: v.total_pct, running: v.running, series: sr.n, wins: sr.wins };
   });
   const sum = (k) => Math.round(out.reduce((a, x) => a + (x[k] || 0), 0) * 100) / 100;
   return { rows: out, head: { date: wibDate(t), clock: wibClock(t), total_day_usd: sum('day_usd'), total_usd: sum('total_usd'), online: out.filter((x) => x.online).length, count: out.length } };
@@ -453,20 +455,26 @@ route('POST', '/ea/live', 'public', async ({ request, env, waitUntil, base }) =>
     buy: side(b.buy), sell: side(b.sell), pocket: { saldo: eaNum(pk.saldo), in: eaNum(pk.in), out: eaNum(pk.out), cuts: int(pk.cuts) || 0 },
     news: { name: str(nw.name, 80), time: int(nw.time) || 0, active: !!nw.active, mode: str(nw.mode, 8) }, cfg: cfgSnap };
   const sym = eaSym(snap.symbol);
-  await env.DB.prepare(`INSERT INTO ea_setups (login, symbol, broker_symbol, server, currency, magic, ea_risk, since, created_at, updated_at)
-      VALUES (?,?,?,?,?,?,?,?,?,0) ON CONFLICT(login, symbol) DO NOTHING`)
-    .bind(login, sym, snap.symbol, str(b.server, 60), snap.currency, snap.magic, EA_RISKS.includes(snap.risk) ? snap.risk : '', t, t).run();
-  const row = await env.DB.prepare('SELECT * FROM ea_setups WHERE login=? AND symbol=?').bind(login, sym).first();
+  const budget = Math.max(0, eaNum(b.budget));
+  const setupName = str(b.setup, 40);
+  snap.budget = budget;
+  snap.setup = setupName;
+  await env.DB.prepare(`INSERT INTO ea_setups (login, symbol, magic, broker_symbol, server, currency, setup_name, budget, ea_risk, since, created_at, updated_at)
+      VALUES (?,?,?,?,?,?,?,?,?,?,?,0) ON CONFLICT(login, symbol, magic) DO NOTHING`)
+    .bind(login, sym, snap.magic, snap.symbol, str(b.server, 60), snap.currency, setupName, budget, EA_RISKS.includes(snap.risk) ? snap.risk : '', t, t).run();
+  const row = await env.DB.prepare('SELECT * FROM ea_setups WHERE login=? AND symbol=? AND magic=?').bind(login, sym, snap.magic).first();
   const totalOk = row.since > 0 && int(b.since_used) === row.since ? 1 : 0;
   const day = wibDay(t);
   const symFloat = (snap.buy.profit || 0) + (snap.sell.profit || 0);
   const layers = Math.max(snap.buy.count || 0, snap.sell.count || 0);
-  const dd = snap.balance > 0 ? Math.round(Math.max(0, (snap.balance - snap.equity) / snap.balance * 100) * 100) / 100 : 0;
+  // drawdown: of the setup's own baskets vs its budget, or of the whole account vs the balance
+  const dd = budget > 0 ? Math.round(Math.max(0, -symFloat) / budget * 10000) / 100
+    : snap.balance > 0 ? Math.round(Math.max(0, (snap.balance - snap.equity) / snap.balance * 100) * 100) / 100 : 0;
   await env.DB.batch([
-    env.DB.prepare(`UPDATE ea_setups SET broker_symbol=?, server=?, currency=?, magic=?, ea_risk=?, balance=?, equity=?, updated_at=?, data=?, offline_state=0,
+    env.DB.prepare(`UPDATE ea_setups SET broker_symbol=?, server=?, currency=?, setup_name=?, budget=?, ea_risk=?, balance=?, equity=?, updated_at=?, data=?, offline_state=0,
         total=CASE WHEN ?=1 THEN ? ELSE total END, acct_total=CASE WHEN ?=1 THEN ? ELSE acct_total END, total_ok=CASE WHEN ?=1 THEN 1 ELSE total_ok END,
         max_dd_pct=MAX(max_dd_pct, ?), min_float=MIN(min_float, ?), max_layers=MAX(max_layers, ?) WHERE id=?`)
-      .bind(snap.symbol, str(b.server, 60), snap.currency, snap.magic, EA_RISKS.includes(snap.risk) ? snap.risk : '', snap.balance, snap.equity, t, JSON.stringify(snap),
+      .bind(snap.symbol, str(b.server, 60), snap.currency, setupName, budget, EA_RISKS.includes(snap.risk) ? snap.risk : '', snap.balance, snap.equity, t, JSON.stringify(snap),
         totalOk, eaNum(b.total), totalOk, eaNum(b.acct_total), totalOk, dd, symFloat, layers, row.id),
     env.DB.prepare(`INSERT INTO ea_setup_days (setup_id, day, profit, balance, equity, min_equity, max_dd_pct, max_layers, min_float, currency, updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?)
         ON CONFLICT(setup_id, day) DO UPDATE SET profit=excluded.profit, balance=excluded.balance, equity=excluded.equity,
@@ -474,7 +482,7 @@ route('POST', '/ea/live', 'public', async ({ request, env, waitUntil, base }) =>
         max_layers=MAX(max_layers, excluded.max_layers), min_float=MIN(min_float, excluded.min_float), currency=excluded.currency, updated_at=excluded.updated_at`)
       .bind(row.id, day, snap.day, snap.balance, snap.equity, snap.equity, dd, layers, Math.min(0, symFloat), snap.currency, t),
   ]);
-  const label = eaLabel({ ...row, ea_risk: EA_RISKS.includes(snap.risk) ? snap.risk : row.ea_risk });
+  const label = eaLabel({ ...row, setup_name: setupName || row.setup_name, ea_risk: EA_RISKS.includes(snap.risk) ? snap.risk : row.ea_risk });
   const msgs = [];
   const evs = Array.isArray(b.events) ? b.events.slice(0, 50) : [];
   const TITLE = { kantong: '🟡 KANTONG PROFIT', pengaman: '🛑 PENGAMAN EQUITY', dd: '⚠️ FLOATING RUGI BESAR', layer: '⚠️ BASKET PANJANG', reduction: '🔁 REDUCTION' };
@@ -1664,6 +1672,8 @@ function garudaEa(s, master = false) {
 // The builder on the owner's PC publishes a release when #property version changes (or the presets change);
 // the VPS agent (PowerShell) polls GET /vps/release with x-ea-key = ea_master_key, downloads, installs into every
 // MT5 data folder and restarts the terminals, then reports to POST /vps/status.
+// exact byte length of a base64 string (the '=' padding is not data)
+const b64Len = (v) => Math.floor(v.length * 3 / 4) - (v.endsWith('==') ? 2 : v.endsWith('=') ? 1 : 0);
 const vpsRelease = (s) => { try { const r = JSON.parse(s.vps_release || 'null'); return r && r.sha ? r : null; } catch { return null; } };
 async function vpsAuth(env, request) {
   const s = await getSettings(env);
@@ -1682,13 +1692,20 @@ route('POST', '/builder/vps-release', 'builder', async ({ request, env }) => {
   const name = str(b.ex5_name, 120).replace(/[\\/:*?"<>|]/g, '') || 'GOLD HUNTER GARUDA.ex5';
   const old = await env.DB.prepare("SELECT id FROM files WHERE kind IN ('vps_ex5','vps_preset')").all();
   const ins = (kind, nm, mime, data) => env.DB.prepare('INSERT INTO files (user_id, kind, name, mime, size, data_b64, created_at) VALUES (NULL, ?, ?, ?, ?, ?, ?)')
-    .bind(kind, nm, mime, Math.floor(data.length * 3 / 4), data, t);
+    .bind(kind, nm, mime, b64Len(data), data, t);
   const r1 = await ins('vps_ex5', name, 'application/octet-stream', ex5).run();
+  const extras = [];
+  for (const x of (Array.isArray(b.extras) ? b.extras : []).slice(0, 40)) {
+    const nm = str(x.name, 120).replace(/[\\/:*?"<>|]/g, ''), data = String(x.b64 || '');
+    if (!nm.toLowerCase().endsWith('.ex5') || !data || data.length > 2.6e6) continue;
+    const r = await ins('vps_ex5', nm, 'application/octet-stream', data).run();
+    extras.push({ id: r.meta.last_row_id, name: nm, size: b64Len(data) });
+  }
   const pres = [];
-  for (const p of presets) { const r = await ins('vps_preset', p.name, 'application/octet-stream', p.data).run(); pres.push({ id: r.meta.last_row_id, name: p.name, size: Math.floor(p.data.length * 3 / 4) }); }
+  for (const p of presets) { const r = await ins('vps_preset', p.name, 'application/octet-stream', p.data).run(); pres.push({ id: r.meta.last_row_id, name: p.name, size: b64Len(p.data) }); }
   if (old.results.length) await env.DB.batch(old.results.map((x) => env.DB.prepare('DELETE FROM files WHERE id=?').bind(x.id)));
   const rel = { version: str(b.version, 12), sha: str(b.sha, 80), sha_ex5: str(b.sha_ex5, 80), sha_presets: str(b.sha_presets, 80), at: t,
-    ex5: { id: r1.meta.last_row_id, name, size: Math.floor(ex5.length * 3 / 4) }, presets: pres, by: str(b.host, 60) };
+    ex5: { id: r1.meta.last_row_id, name, size: b64Len(ex5) }, extras, presets: pres, by: str(b.host, 60) };
   await putSetting(env, 'vps_release', JSON.stringify(rel));
   return json({ ok: true, sha: rel.sha });
 });

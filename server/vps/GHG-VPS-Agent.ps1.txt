@@ -100,6 +100,8 @@ function Install-Release($rel) {
   $ex5 = Join-Path $tmp $rel.ex5.name
   Get-File $rel.ex5.id $ex5
   if ((Get-Item $ex5).Length -ne [int64]$rel.ex5.size) { throw "Ukuran $($rel.ex5.name) tidak cocok (unduhan rusak)" }
+  $eas = @($ex5)
+  foreach ($x in @($rel.extras)) { if ($x -and $x.name) { $f = Join-Path $tmp $x.name; Get-File $x.id $f; if ((Get-Item $f).Length -ne [int64]$x.size) { throw "Ukuran $($x.name) tidak cocok (unduhan rusak)" }; $eas += $f } }
   $sets = @()
   foreach ($p in $rel.presets) { $f = Join-Path $tmp $p.name; Get-File $p.id $f; $sets += $f }
   $dirs = Get-DataDirs
@@ -107,12 +109,12 @@ function Install-Release($rel) {
   $origins = @()
   foreach ($d in $dirs) {
     $targets = @((Join-Path $d 'MQL5\Experts'), (Join-Path $d 'MQL5\Presets'), (Join-Path $d 'MQL5\Profiles\Tester'))
-    if ($DryRun) { Log ("  [uji] akan menyalin {0} + {1} preset ke {2}" -f $rel.ex5.name, $sets.Count, $d) }
+    if ($DryRun) { Log ("  [uji] akan menyalin {0} EA + {1} preset ke {2}" -f $eas.Count, $sets.Count, $d) }
     else {
       foreach ($t in $targets) { if (-not (Test-Path $t)) { New-Item -ItemType Directory -Path $t -Force | Out-Null } }
-      Copy-Item $ex5 (Join-Path $targets[0] $rel.ex5.name) -Force
+      foreach ($f in $eas) { Copy-Item $f $targets[0] -Force }
       foreach ($f in $sets) { Copy-Item $f $targets[1] -Force; Copy-Item $f $targets[2] -Force }
-      Log ("  {0} + {1} preset -> {2}" -f $rel.ex5.name, $sets.Count, $d)
+      Log ("  {0} EA + {1} preset -> {2}" -f $eas.Count, $sets.Count, $d)
     }
     $o = Get-Origin $d
     if ($o -and ($origins -notcontains $o)) { $origins += $o }
@@ -131,7 +133,7 @@ while ($true) {
     if ($rel.none) {
       if (((Get-Date) - $lastStatus).TotalMinutes -ge 5) { Send-Status $state.version $state.sha 'belum ada rilis di web' $false; $lastStatus = Get-Date }
     } elseif (-not $rel.same) {
-      Log ("Rilis baru v{0} ({1} preset) - memasang..." -f $rel.version, @($rel.presets).Count)
+      Log ("Rilis baru v{0} ({1} EA setup, {2} preset) - memasang..." -f $rel.version, @($rel.extras).Count, @($rel.presets).Count)
       Install-Release $rel
       if (-not $DryRun) { $state = [pscustomobject]@{ sha = $rel.sha; version = $rel.version }; Save-State $state }
       Log ("Rilis v{0} terpasang" -f $rel.version)

@@ -65,11 +65,11 @@ const GHL = (() => {
     const fl = toUsd(v.floating, cur);
     const pos = (x) => (x && x.count ? `${x.count} ${TT('posisi', 'pos')}` : '-');
     return `<a class="ghl-card ${v.online ? '' : 'off'}" href="/live?setup=${v.id}">
-      <div class="ghl-head"><span class="ghl-sym">${ICON[v.symbol] || '📈'} ${esc(v.symbol)}</span>${riskBadge(v.risk)}<span class="ghl-dot ${v.online ? 'on' : ''}" title="${v.online ? 'online' : 'offline'}"></span></div>
+      <div class="ghl-head"><span class="ghl-sym">${ICON[v.symbol] || '📈'} ${esc(v.setup_name || v.symbol)}</span>${riskBadge(v.risk)}<span class="ghl-dot ${v.online ? 'on' : ''}" title="${v.online ? 'online' : 'offline'}"></span></div>
       <div class="ghl-k">${TT('Profit sejak mulai', 'Profit since start')}</div>
       <div class="ghl-big"><span class="${cls(v.total_usd)}">${v.total_usd == null ? TT('menghitung…', 'counting…') : usd(v.total_usd)}</span>
         <span class="ghl-pct ${cls(v.total_pct)}">${v.total_pct == null ? '' : pct(v.total_pct)}</span></div>
-      <div class="ghl-sub">${TT('Modal', 'Capital')} ${v.modal_usd == null ? '-' : usd(v.modal_usd, false)} · ${run(v.running)}</div>
+      <div class="ghl-sub">${v.budget > 0 ? TT('Anggaran', 'Budget') : TT('Modal', 'Capital')} ${v.modal_usd == null ? '-' : usd(v.modal_usd, false)} · ${run(v.running)}</div>
       ${spark(v.spark, cur)}
       <div class="ghl-grid">
         <div><span>${TT('Hari ini', 'Today')}</span><b class="${cls(v.day)}">${usd(toUsd(v.day, cur))}</b></div>

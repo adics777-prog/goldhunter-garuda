@@ -65,8 +65,8 @@ export async function reportPng(rows, head) {
     const nameX = C.setup + 132;
     return `<rect x="${PAD}" y="${y}" width="${W - PAD * 2}" height="${RH - 8}" rx="14" fill="${i % 2 ? '#101016' : '#14141c'}"/>
       <circle cx="${PAD + 12}" cy="${y + (RH - 8) / 2}" r="5" fill="${r.online ? '#5ee39a' : '#ff7d89'}"/>
-      <text x="${C.setup}" y="${y + 30}" font-size="24" font-weight="700" fill="#ececf1">${X(r.symbol)}</text>
-      <text x="${C.setup}" y="${y + 54}" font-size="15" fill="#7c7c8c">${X(ICON[r.symbol] || '')}${r.series ? ` · ${r.series} seri hari ini` : ''}</text>
+      <text x="${C.setup}" y="${y + 30}" font-size="24" font-weight="700" fill="#ececf1">${X(r.name || r.symbol)}</text>
+      <text x="${C.setup}" y="${y + 54}" font-size="15" fill="#7c7c8c">${X(r.budget_usd ? 'anggaran $' + Math.round(r.budget_usd).toLocaleString('id-ID') : (ICON[r.symbol] || ''))}${r.series ? ` · ${r.series} seri hari ini` : ''}</text>
       <rect x="${nameX}" y="${y + 12}" width="${pillW}" height="28" rx="14" fill="${rc}" fill-opacity="0.14" stroke="${rc}" stroke-opacity="0.6"/>
       <text x="${nameX + pillW / 2}" y="${y + 32}" font-size="15" font-weight="700" fill="${rc}" text-anchor="middle">${X(rn)}</text>
       <text x="${C.day}" y="${y + 32}" font-size="24" font-weight="700" fill="${col(r.day_usd)}" text-anchor="end">${X(money(r.day_usd))}</text>
@@ -77,7 +77,7 @@ export async function reportPng(rows, head) {
   }).join('') : `<text x="${W / 2}" y="${TOP + 40}" font-size="22" fill="#a3a3b2" text-anchor="middle">Belum ada akun yang melapor.</text>`;
   const fy = TOP + Math.max(1, rows.length) * RH + 40;
   const foot = `<line x1="${PAD}" y1="${fy}" x2="${W - PAD}" y2="${fy}" stroke="#2a2a36"/>
-    <text x="${PAD}" y="${fy + 38}" font-size="17" fill="#7c7c8c">Profit tertutup saja (floating tidak dihitung) · modal = saldo awal + deposit − penarikan · 100 USC = $1</text>
+    <text x="${PAD}" y="${fy + 38}" font-size="17" fill="#7c7c8c">Profit tertutup saja (floating tidak dihitung) · % dari anggaran setup (atau modal akun) · 100 USC = $1</text>
     <text x="${PAD}" y="${fy + 70}" font-size="17" fill="#7c7c8c">Hasil masa lalu bukan jaminan. Trading berisiko tinggi.</text>
     <text x="${W - PAD}" y="${fy + 70}" font-size="20" font-weight="700" fill="#f5c542" text-anchor="end">goldhuntergaruda.com/live</text>`;
   const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${W}" height="${H}" viewBox="0 0 ${W} ${H}" font-family="Plus Jakarta Sans">${bg}${title}${tiles}${th}${body}${foot}</svg>`;

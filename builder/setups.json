@@ -1,0 +1,9 @@
+{
+  "_note": "12 EA setup GOLD HUNTER GARUDA (1 = LOW, 2 = MEDIUM, 3 = HIGH). Satu anggaran per pair; tingkat dibedakan lot: 1x / 2x / 4x. Nilai = default input EA (tanpa preset). Poin = poin broker Exness cent (XAU 3 digit, BTC 2, EUR 5, JPY 3).",
+  "pairs": {
+    "XAU": { "symbol": "XAUUSD", "budget": 40000, "caps": [40000, 20000, 10000], "magic": 130910, "dist": 1000, "tp": 1500, "back": 500, "spread": 600, "unit": "$", "point": 0.001 },
+    "BTC": { "symbol": "BTCUSD", "budget": 16000, "caps": [16000, 8000, 4000], "magic": 130920, "dist": 3500, "tp": 5000, "back": 1750, "spread": 1600, "unit": "$", "point": 0.01 },
+    "EUR": { "symbol": "EURUSD", "budget": 12800, "caps": [12800, 6400, 3200], "magic": 130930, "dist": 30, "tp": 40, "back": 15, "spread": 20, "unit": "pip", "point": 0.00001 },
+    "JPY": { "symbol": "USDJPY", "budget": 8000, "caps": [8000, 4000, 2000], "magic": 130940, "dist": 30, "tp": 40, "back": 15, "spread": 25, "unit": "pip", "point": 0.001 }
+  }
+}
