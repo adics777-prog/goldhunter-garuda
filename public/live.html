@@ -189,7 +189,7 @@
     const P = [
       [T('Lot pertama', 'First lot'), `${num(v.first_lot, 2)} lot${c.auto_lot ? ` · ${T('0,01 per', '0.01 per')} ${num(c.lot_capital)} ${esc(cur)} ${T('(ikut balance)', '(grows with balance)')}` : ''}`],
       [T('Lot tiap layer', 'Lot per layer'), `×${num(v.lot_mult, 2)} · ${T('maks', 'max')} ${num(c.max_lot, 2)} lot`],
-      [T('Jarak layer', 'Layer step'), `${money(v.dist_pts)} · ${T('melebar', 'widens')} ×${num(c.dist_mult, 2)} ${T('mulai layer', 'from layer')} ${c.dist_from || '-'}`],
+      [T('Jarak layer', 'Layer step'), `${money(v.dist_pts)} · ${T('melebar', 'widens')} ×${num(c.dist_mult, 2)} ${T('sesudah layer', 'after layer')} ${c.dist_from || '-'}`],
       [T('Take profit bersama', 'Basket take profit'), `${money(v.tp_pts)} ${T('dari harga rata-rata', 'from the average price')} · ${esc(c.tp_mode || '')}${c.tp_net ? ' · ' + T('bersih swap', 'net of swap') : ''}`],
       [T('Seri baru', 'New series'), `${NS[c.new_series] || '-'}${c.new_series === 2 ? ' ' + money(c.reentry_pts) + (c.reentry_bars > 0 ? ` ${T('maks', 'max')} ${c.reentry_bars} candle M1, ${T('lalu tetap buka', 'then opens anyway')}` : '') : ''} · ${esc(v.mode)}`],
       ['DD reduction', c.reduction ? `${T('mulai', 'from')} ${v.reduction_from} ${T('posisi', 'positions')}, ${T('untung terbaru ≥ rugi terlama', 'newest profit ≥ oldest loss')} +${num(c.reduction_pct)}%` : T('mati', 'off')],
