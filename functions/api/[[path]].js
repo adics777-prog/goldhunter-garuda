@@ -438,7 +438,7 @@ route('POST', '/ea/live', 'public', async ({ request, env, waitUntil, base }) =>
   const login = str(b.login, 20);
   if (!login) fail(400, 'Nomor akun kosong');
   const side = (x) => x && typeof x === 'object' && int(x.count) > 0
-    ? { count: int(x.count), lots: eaNum(x.lots), avg: eaPx(x.avg), tp: eaPx(x.tp), profit: eaNum(x.profit), next_lot: eaNum(x.next_lot), next_price: eaPx(x.next_price), since: int(x.since) || 0 }
+    ? { count: int(x.count), lots: eaNum(x.lots), avg: eaPx(x.avg), tp: eaPx(x.tp), profit: eaNum(x.profit), next_lot: eaNum(x.next_lot), next_price: eaPx(x.next_price), since: int(x.since) || 0, red_px: eaPx(x.red_px) }
     : { count: 0 };
   const pk = b.pocket && typeof b.pocket === 'object' ? b.pocket : {};
   const nw = b.news && typeof b.news === 'object' ? b.news : {};
