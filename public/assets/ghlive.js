@@ -34,12 +34,12 @@ const GHL = (() => {
   // The 12 monitoring-account presets: first lot 0.01 per `caps` USC (LOW / MEDIUM / HIGH), lot follows the balance.
   // Minimum account capital = capital per 0.01 lot (below it the broker minimum 0.01 is used, i.e. more risk).
   // Tester 1 Jan - 10 Oct 2026 gold 0.01 per 10,000 (= HIGH): deepest floating of one side -41% (29 Jan, 48 positions).
-  // hold = adverse move without any pause at -10% / -30% / -50% floating.
+  // hold = adverse move without any pause at -10% / -30% / -50% floating (lot x1.15 per layer, step x1.1 from layer 4).
   const PRESET = {
-    XAUUSD: { caps: [40000, 20000, 10000], dist: '$1', tp: '$1,50', back: '$0,50', hold: [['$80', '$138', '$178'], ['$56', '$97', '$126'], ['$40', '$69', '$89']] },
-    BTCUSD: { caps: [16000, 8000, 4000], dist: '$35', tp: '$50', back: '$17,50', hold: [['$2.977', '$5.153', '$6.653'], ['$2.110', '$3.643', '$4.705'], ['$1.498', '$2.583', '$3.327']] },
-    EURUSD: { caps: [12800, 6400, 3200], dist: '3 pip', tp: '4 pip', back: '1,5 pip', hold: [['247 pip', '427 pip', '551 pip'], ['175 pip', '302 pip', '389 pip'], ['124 pip', '214 pip', '276 pip']] },
-    USDJPY: { caps: [8000, 4000, 2000], dist: '3 pip', tp: '4 pip', back: '1,5 pip', hold: [['246 pip', '424 pip', '548 pip'], ['174 pip', '301 pip', '387 pip'], ['123 pip', '213 pip', '274 pip']] },
+    XAUUSD: { caps: [40000, 20000, 10000], dist: '$1', tp: '$1,50', back: '$0,50', hold: [['$61', '$97', '$120'], ['$45', '$72', '$90'], ['$33', '$53', '$67']] },
+    BTCUSD: { caps: [16000, 8000, 4000], dist: '$35', tp: '$50', back: '$17,50', hold: [['$2.245', '$3.593', '$4.456'], ['$1.660', '$2.673', '$3.323'], ['$1.218', '$1.981', '$2.472']] },
+    EURUSD: { caps: [12800, 6400, 3200], dist: '3 pip', tp: '4 pip', back: '1,5 pip', hold: [['187 pip', '299 pip', '371 pip'], ['138 pip', '223 pip', '277 pip'], ['101 pip', '165 pip', '206 pip']] },
+    USDJPY: { caps: [8000, 4000, 2000], dist: '3 pip', tp: '4 pip', back: '1,5 pip', hold: [['186 pip', '298 pip', '370 pip'], ['137 pip', '222 pip', '276 pip'], ['101 pip', '164 pip', '205 pip']] },
   };
   const RISKS = ['LOW', 'MEDIUM', 'HIGH'];
   const enNum = (s) => (TT('id', 'en') === 'en' ? String(s).replace(/\./g, '#').replace(/,/g, '.').replace(/#/g, ',') : s);
