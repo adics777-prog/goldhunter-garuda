@@ -35,7 +35,7 @@ enum ENUM_POSITION_TYPE { POSITION_TYPE_BUY = 0, POSITION_TYPE_SELL = 1 };
 enum ENUM_POSITION_PROPERTY_INTEGER { POSITION_TICKET, POSITION_TIME, POSITION_TIME_MSC, POSITION_TYPE, POSITION_MAGIC, POSITION_IDENTIFIER };
 enum ENUM_POSITION_PROPERTY_DOUBLE { POSITION_VOLUME, POSITION_PRICE_OPEN, POSITION_SL, POSITION_TP, POSITION_PRICE_CURRENT, POSITION_SWAP, POSITION_PROFIT };
 enum ENUM_POSITION_PROPERTY_STRING { POSITION_SYMBOL, POSITION_COMMENT };
-enum ENUM_DEAL_TYPE { DEAL_TYPE_BUY = 0, DEAL_TYPE_SELL = 1 };
+enum ENUM_DEAL_TYPE { DEAL_TYPE_BUY = 0, DEAL_TYPE_SELL = 1, DEAL_TYPE_BALANCE = 2, DEAL_TYPE_CREDIT = 3, DEAL_TYPE_CHARGE = 4, DEAL_TYPE_CORRECTION = 5, DEAL_TYPE_BONUS = 6 };
 enum ENUM_DEAL_ENTRY { DEAL_ENTRY_IN = 0, DEAL_ENTRY_OUT = 1, DEAL_ENTRY_INOUT = 2, DEAL_ENTRY_OUT_BY = 3 };
 enum ENUM_DEAL_PROPERTY_INTEGER { DEAL_TICKET, DEAL_ORDER, DEAL_TIME, DEAL_TIME_MSC, DEAL_TYPE, DEAL_ENTRY, DEAL_MAGIC, DEAL_POSITION_ID };
 enum ENUM_DEAL_PROPERTY_DOUBLE { DEAL_VOLUME, DEAL_PRICE, DEAL_COMMISSION, DEAL_SWAP, DEAL_PROFIT, DEAL_FEE };
@@ -208,7 +208,33 @@ bool C4DealLoad(const ulong d)
       return true;
    int t = (int)(d / 2);
    bool out = (d % 2) == 1;
-   if(!OrderSelect(t, SELECT_BY_TICKET) || OrderType() > OP_SELL)
+   if(!OrderSelect(t, SELECT_BY_TICKET))
+      return false;
+   if(OrderType() == 6 || OrderType() == 7)
+     {
+      //--- deposit / penarikan (6) atau kredit (7): satu deal, tanpa posisi
+      if(out)
+         return false;
+      g_c4DI[DEAL_TICKET] = (long)d;
+      g_c4DI[DEAL_ORDER] = t;
+      g_c4DI[DEAL_TIME] = (long)OrderOpenTime();
+      g_c4DI[DEAL_TIME_MSC] = g_c4DI[DEAL_TIME] * 1000;
+      g_c4DI[DEAL_TYPE] = OrderType() == 6 ? DEAL_TYPE_BALANCE : DEAL_TYPE_CREDIT;
+      g_c4DI[DEAL_ENTRY] = DEAL_ENTRY_IN;
+      g_c4DI[DEAL_MAGIC] = 0;
+      g_c4DI[DEAL_POSITION_ID] = 0;
+      g_c4DD[DEAL_VOLUME] = 0.0;
+      g_c4DD[DEAL_PRICE] = 0.0;
+      g_c4DD[DEAL_COMMISSION] = 0.0;
+      g_c4DD[DEAL_SWAP] = 0.0;
+      g_c4DD[DEAL_PROFIT] = OrderProfit();
+      g_c4DD[DEAL_FEE] = 0.0;
+      g_c4DS[DEAL_SYMBOL] = "";
+      g_c4DS[DEAL_COMMENT] = OrderComment();
+      g_c4DT = d;
+      return true;
+     }
+   if(OrderType() > OP_SELL)
       return false;
    if(out && OrderCloseTime() == 0)
       return false;                                // posisi masih terbuka: belum ada deal keluar
@@ -258,7 +284,19 @@ bool HistorySelect(const datetime from, const datetime to)
         }
    for(int i = 0; i < nh; i++)
      {
-      if(!OrderSelect(i, SELECT_BY_POS, MODE_HISTORY) || OrderType() > OP_SELL)
+      if(!OrderSelect(i, SELECT_BY_POS, MODE_HISTORY))
+         continue;
+      if(OrderType() == 6 || OrderType() == 7)
+        {
+         if(OrderOpenTime() >= from && OrderOpenTime() <= to)
+           {
+            tk[n] = (ulong)OrderTicket() * 2;          // deposit / kredit
+            key[n] = (long)OrderOpenTime() * 4194304 + n;
+            n++;
+           }
+         continue;
+        }
+      if(OrderType() > OP_SELL)
          continue;
       if(OrderOpenTime() >= from && OrderOpenTime() <= to)
         {
