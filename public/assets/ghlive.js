@@ -41,26 +41,33 @@ const GHL = (() => {
     return `<svg class="ghl-spark" viewBox="0 0 100 56" preserveAspectRatio="none" aria-hidden="true"><line x1="0" y1="28" x2="100" y2="28" stroke="rgba(255,255,255,.18)" stroke-width="0.4"/>${bars}</svg>`;
   }
 
-  // one EA instance (chart) on the overview / landing / member home
+  // one EA instance (chart) on the overview / landing / member home: closed results first, floating only on the detail page
   function card(v, opts = {}) {
     const cur = v.currency;
-    const fl = toUsd(v.floating, cur);
-    const pos = (x) => (x && x.count ? `${x.count} ${TT('posisi', 'pos')}` : '-');
+    const fresh = v.total_usd == null;
+    const tile = (k, val, c) => `<div class="ghl-tile"><span>${k}</span><b class="${c}">${val}</b></div>`;
+    const dd = v.max_dd_pct ? '-' + num(v.max_dd_pct, 2) + '%' : '0%';
     return `<a class="ghl-card ${v.online ? '' : 'off'}" href="/live?setup=${v.id}">
-      <div class="ghl-head"><span class="ghl-sym">${ICON[v.symbol] || '📈'} ${esc(v.label || v.symbol)}</span>${v.label && v.label !== v.symbol ? `<span class="badge b-blue">${esc(v.symbol)}</span>` : ''}<span class="ghl-dot ${v.online ? 'on' : ''}" title="${v.online ? 'online' : 'offline'}"></span></div>
-      <div class="ghl-k">${TT('Profit sejak mulai', 'Profit since start')}</div>
-      <div class="ghl-big"><span class="${cls(v.total_usd)}">${v.total_usd == null ? TT('menghitung…', 'counting…') : usd(v.total_usd)}</span>
-        <span class="ghl-pct ${cls(v.total_pct)}">${v.total_pct == null ? '' : pct(v.total_pct)}</span></div>
-      <div class="ghl-sub">${v.budget > 0 ? TT('Anggaran', 'Budget') : TT('Modal', 'Capital')} ${v.modal_usd == null ? '-' : usd(v.modal_usd, false)} · ${run(v.running)}</div>
-      ${spark(v.spark, cur)}
-      <div class="ghl-grid">
-        <div><span>${TT('Hari ini', 'Today')}</span><b class="${cls(v.day)}">${usd(toUsd(v.day, cur))}</b></div>
-        <div><span>${TT('DD terdalam', 'Max DD')}</span><b class="${v.max_dd_pct ? 'neg' : ''}">${v.max_dd_pct ? '-' + num(v.max_dd_pct, 2) + '%' : '0%'}</b></div>
-        <div><span>${TT('Seri selesai', 'Closed series')}</span><b>${num(v.series || 0)}</b></div>
-        <div><span>${TT('Basket terpanjang', 'Longest basket')}</span><b>${num(v.max_layers || 0)}</b></div>
+      <div class="ghl-head">
+        <span class="ghl-ico">${ICON[v.symbol] || '📈'}</span>
+        <span class="ghl-id"><b class="ghl-sym">${esc(v.label || v.symbol)}</b><small>${esc((NAME()[v.symbol] || v.symbol) + (v.account ? ' · ' + v.account : ''))}</small></span>
+        <span class="ghl-live ${v.online ? 'on' : ''}"><i></i>${v.online ? 'LIVE' : 'OFFLINE'}</span>
       </div>
-      <div class="ghl-foot"><span>BUY ${pos(v.buy)} · SELL ${pos(v.sell)}</span><span class="${cls(fl)}">${TT('floating', 'floating')} ${usd(fl)}</span></div>
-      ${opts.cta === false ? '' : `<span class="ghl-cta">${TT('Lihat laporan live →', 'Open live report →')}</span>`}
+      <div class="ghl-hero">
+        <div class="ghl-k">${TT('Profit tertutup sejak mulai', 'Closed profit since start')}</div>
+        <div class="ghl-big"><span class="${fresh ? 'ghl-wait' : cls(v.total_usd)}">${fresh ? TT('menunggu data…', 'waiting for data…') : usd(v.total_usd)}</span>
+          ${v.total_pct == null ? '' : `<span class="ghl-pill ${cls(v.total_pct)}">${pct(v.total_pct)}</span>`}</div>
+        <div class="ghl-sub">${v.budget > 0 ? TT('Anggaran', 'Budget') : TT('Modal', 'Capital')} <b>${v.modal_usd == null ? '-' : usd(v.modal_usd, false)}</b> · ${run(v.running)}</div>
+      </div>
+      ${spark(v.spark, cur)}
+      <div class="ghl-tiles">
+        ${tile(TT('Hari ini', 'Today'), usd(toUsd(v.day, cur)), cls(v.day))}
+        ${tile(TT('Bulan ini', 'This month'), usd(v.month_usd != null ? v.month_usd : toUsd(v.month, cur)), cls(v.month))}
+        ${tile(TT('DD terdalam', 'Max DD'), dd, v.max_dd_pct ? 'neg' : '')}
+        ${tile(TT('Seri selesai', 'Closed series'), num(v.series || 0), '')}
+      </div>
+      <div class="ghl-meta"><span>${TT('Basket terpanjang', 'Longest basket')} <b>${num(v.max_layers || 0)} layer</b></span><span>${TT('Laporan tiap menit', 'Reported every minute')}</span></div>
+      ${opts.cta === false ? '' : `<span class="ghl-cta">${TT('Lihat laporan live', 'Open live report')} <span aria-hidden="true">→</span></span>`}
     </a>`;
   }
 
@@ -75,23 +82,39 @@ const GHL = (() => {
 
   const CSS = `
   .ghl-cards{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:12px}
-  .ghl-card{display:block;border:1px solid var(--line);border-radius:16px;background:var(--card);padding:14px 16px;color:var(--text);text-decoration:none;min-width:0;transition:border-color .15s,transform .15s}
-  .ghl-card:hover{border-color:var(--gold);transform:translateY(-2px)}
-  .ghl-card.off{opacity:.8}
-  .ghl-head{display:flex;align-items:center;gap:8px;margin-bottom:8px}
-  .ghl-sym{font-weight:800;letter-spacing:.3px}
-  .ghl-dot{display:inline-block;width:8px;height:8px;border-radius:50%;background:#ff8b95;margin-left:auto;flex:none}
-  .ghl-dot.on{background:#6ee7a2;box-shadow:0 0 0 3px rgba(110,231,162,.18)}
-  .ghl-k{color:var(--muted);font-size:.72rem;text-transform:uppercase;letter-spacing:.4px}
-  .ghl-big{display:flex;align-items:baseline;gap:8px;flex-wrap:wrap;font-size:1.45rem;font-weight:800;line-height:1.25}
-  .ghl-pct{font-size:.95rem;font-weight:700}
-  .ghl-sub{color:var(--muted);font-size:.8rem;margin-top:2px}
-  .ghl-spark{display:block;width:100%;height:34px;margin:8px 0 4px}
-  .ghl-grid{display:grid;grid-template-columns:1fr 1fr;gap:6px 12px;margin-top:6px;font-size:.8rem}
-  .ghl-grid span{display:block;color:var(--muted);font-size:.7rem}
-  .ghl-grid b{font-weight:700}
-  .ghl-foot{display:flex;justify-content:space-between;gap:8px;flex-wrap:wrap;border-top:1px solid var(--line);margin-top:10px;padding-top:8px;font-size:.78rem;color:var(--muted)}
-  .ghl-cta{display:block;margin-top:8px;color:var(--gold);font-weight:700;font-size:.82rem}
+  .ghl-card{position:relative;display:flex;flex-direction:column;gap:10px;border:1px solid var(--line);border-radius:18px;padding:16px 16px 14px;color:var(--text);text-decoration:none;min-width:0;overflow:hidden;
+    background:radial-gradient(120% 70% at 100% 0%,rgba(245,197,66,.10),transparent 60%),linear-gradient(180deg,rgba(255,255,255,.025),transparent 40%),var(--card);
+    box-shadow:0 10px 30px rgba(0,0,0,.25);transition:border-color .2s,transform .2s,box-shadow .2s}
+  .ghl-card::before{content:"";position:absolute;inset:0 0 auto 0;height:3px;background:linear-gradient(90deg,#b8860b,#f5c542,#fff1b8,#f5c542,#b8860b)}
+  .ghl-card:hover{border-color:rgba(245,197,66,.6);transform:translateY(-3px);box-shadow:0 16px 38px rgba(0,0,0,.35)}
+  .ghl-card.off{opacity:.82}
+  .ghl-head{display:flex;align-items:center;gap:10px;min-width:0}
+  .ghl-ico{flex:none;display:grid;place-items:center;width:38px;height:38px;border-radius:50%;font-size:1.15rem;background:radial-gradient(circle at 30% 30%,rgba(245,197,66,.35),rgba(245,197,66,.08));border:1px solid rgba(245,197,66,.45)}
+  .ghl-id{display:flex;flex-direction:column;min-width:0;line-height:1.2}
+  .ghl-sym{font-weight:800;letter-spacing:.4px;font-size:1.02rem}
+  .ghl-id small{color:var(--muted);font-size:.74rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .ghl-live{margin-left:auto;flex:none;display:inline-flex;align-items:center;gap:6px;padding:4px 9px;border-radius:30px;font-size:.66rem;font-weight:800;letter-spacing:.8px;color:#ff8b95;background:rgba(255,139,149,.1);border:1px solid rgba(255,139,149,.3)}
+  .ghl-live i{width:7px;height:7px;border-radius:50%;background:currentColor}
+  .ghl-live.on{color:#6ee7a2;background:rgba(110,231,162,.1);border-color:rgba(110,231,162,.35)}
+  .ghl-live.on i{animation:ghlPulse 1.8s ease-out infinite}
+  @keyframes ghlPulse{0%{box-shadow:0 0 0 0 rgba(110,231,162,.6)}100%{box-shadow:0 0 0 7px rgba(110,231,162,0)}}
+  .ghl-hero{padding:2px 0}
+  .ghl-k{color:var(--muted);font-size:.68rem;text-transform:uppercase;letter-spacing:.6px}
+  .ghl-big{display:flex;align-items:center;gap:8px;flex-wrap:wrap;font-size:1.7rem;font-weight:800;line-height:1.2;margin-top:2px}
+  .ghl-wait{font-size:1.05rem;color:var(--muted);font-weight:700}
+  .ghl-pill{font-size:.78rem;font-weight:800;padding:3px 8px;border-radius:30px;background:rgba(255,255,255,.06)}
+  .ghl-pill.pos{background:rgba(110,231,162,.12)} .ghl-pill.neg{background:rgba(255,139,149,.12)}
+  .ghl-sub{color:var(--muted);font-size:.78rem;margin-top:3px}
+  .ghl-sub b{color:var(--text);font-weight:700}
+  .ghl-spark{display:block;width:100%;height:38px;border-radius:8px;background:rgba(255,255,255,.02)}
+  .ghl-tiles{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}
+  .ghl-tile{border:1px solid var(--line);border-radius:12px;padding:8px 9px;background:rgba(255,255,255,.025);min-width:0}
+  .ghl-tile span{display:block;color:var(--muted);font-size:.64rem;text-transform:uppercase;letter-spacing:.4px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .ghl-tile b{display:block;font-size:.95rem;font-weight:800;margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .ghl-meta{display:flex;justify-content:space-between;gap:8px;flex-wrap:wrap;font-size:.76rem;color:var(--muted)}
+  .ghl-meta b{color:var(--text)}
+  .ghl-cta{display:flex;align-items:center;justify-content:center;gap:6px;margin-top:2px;padding:9px 12px;border-radius:12px;font-weight:800;font-size:.84rem;color:#1a1306;background:linear-gradient(90deg,#d4a017,#f5c542);transition:filter .2s}
+  .ghl-card:hover .ghl-cta{filter:brightness(1.08)}
   .ghl-tabs{display:flex;gap:8px;flex-wrap:wrap;justify-content:center;margin-bottom:16px}
   .ghl-tabs button{border:1px solid var(--line);background:var(--bg-2);color:var(--text);border-radius:30px;padding:8px 14px;font-weight:700;font-size:.85rem;cursor:pointer}
   .ghl-tabs button.active{border-color:var(--gold);color:var(--gold);background:rgba(245,197,66,.08)}
