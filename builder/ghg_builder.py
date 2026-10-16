@@ -431,17 +431,33 @@ def sync_vps_release(cfg, server):
             log('VPS: compile GAGAL, rilis tidak diterbitkan:\n' + out[-1500:])
             return
         log(f'VPS: compile OK ({mm.group(0) if mm else "selesai"})')
-    # the 12 setup EAs (XAU/BTC/EUR/JPY 1-3) are rebuilt from this source whenever it is newer than them
+    # the 12 setup EAs (XAU/BTC/EUR/JPY 1-3) are rebuilt from this source whenever it is newer than them;
+    # config.json "vps": {"setups": false} = only the main EA is published (user 2026-10-16: 1 EA on every chart)
+    vs = []
     try:
         import ghg_variants
+        if (cfg.get('vps') or {}).get('setups', True) is False:
+            raise StopIteration
         vs = ghg_variants.setup_ex5s(cfg)
         if len(vs) < len(ghg_variants.variants()) or any(os.path.getmtime(v) < os.path.getmtime(ex5) for v in vs):
             log(f'VPS: membuat ulang {len(ghg_variants.variants())} EA setup dari v{version} ...')
             vs = ghg_variants.build_all(cfg, log=log)
+    except StopIteration:
+        vs = []
     except Exception as e:
         VPS_STATE['failed_mtime'] = os.path.getmtime(src)
         log(f'VPS: EA setup gagal dibuat, rilis tidak diterbitkan: {e}')
         return
+    # MT4 version (Robot Trading\MT4) follows every MT5 build; a failure never blocks the MT5 release
+    try:
+        import ghg_mt4
+        if not os.path.exists(ghg_mt4.OUT_EX4) or os.path.getmtime(ghg_mt4.OUT_EX4) < os.path.getmtime(ex5):
+            ghg_mt4.generate()
+            ghg_mt4.make_presets()
+            res = ghg_mt4.compile_mt4()
+            log(f'MT4: v{version} dibuat ulang ({res[-1].strip() if res else "compile selesai"})')
+    except Exception as e:
+        log(f'MT4: versi MT4 gagal dibuat: {e}')
     extras = [(os.path.basename(v), open(v, 'rb').read()) for v in sorted(vs)]
     data = open(ex5, 'rb').read()
     sha_ex5 = hashlib.sha256(data + b''.join(n.encode('utf-8') + b'\0' + b for n, b in extras)).hexdigest()
