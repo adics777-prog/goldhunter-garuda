@@ -36,10 +36,6 @@ export async function onRequest(context) {
         if (!env.BUILDER_TOKEN || request.headers.get('x-builder-token') !== env.BUILDER_TOKEN) fail(401, 'Token builder salah');
       } else if (r.auth === 'cron') {
         if (!env.CRON_SECRET || request.headers.get('x-cron-secret') !== env.CRON_SECRET) fail(401, 'Secret cron salah');
-      } else if (r.auth === 'signal_pub') {
-        if (!env.SIGNAL_SECRET || request.headers.get('x-signal-secret') !== env.SIGNAL_SECRET) fail(401, 'Secret sinyal salah');
-      } else if (r.auth === 'signal_read') {
-        if (!env.SIGNAL_KEY || request.headers.get('x-signal-key') !== env.SIGNAL_KEY) fail(401, 'Kunci sinyal salah');
       } else {
         const sess = await sessionUser(env, request);
         ctx.user = sess.user;
@@ -74,21 +70,21 @@ const clientIp = (request) => request.headers.get('cf-connecting-ip') || 'local'
 // ---- Risk warning the member agrees to when signing up. The exact text of every version is archived in
 // legal_texts and each acceptance in consents (time, IP, country, browser, language, text hash), so an admin can
 // print the signed statement later. Change RISK_VERSION whenever the wording changes.
-const RISK_VERSION = 'RW-2026-10-05';
+const RISK_VERSION = 'RW-2026-10-16';
 const RISK_TEXT = {
   id: [
     'Saya memahami bahwa trading forex, emas (XAUUSD) dan kripto dengan leverage berisiko sangat tinggi dan dapat menyebabkan kehilangan sebagian atau SELURUH modal saya.',
-    'Sinyal dan EA Garuda AI / GoldHunter Garuda adalah alat bantu trading, bukan nasihat investasi, bukan produk investasi, bukan pengelolaan dana, dan TIDAK menjamin profit.',
-    'Analisis AI bisa salah. Win rate, hasil dan contoh perhitungan yang ditampilkan adalah catatan masa lalu atau ilustrasi dan tidak menjamin hasil di masa depan.',
-    'Keputusan memakai sinyal atau EA, besar modal, setting, dan seluruh risiko yang timbul sepenuhnya menjadi tanggung jawab saya. GoldHunter Garuda dan admin tidak bertanggung jawab atas kerugian akibat kondisi pasar, broker, VPS, koneksi, maupun penggunaan sinyal / EA.',
+    'EA GOLD HUNTER GARUDA adalah alat bantu trading otomatis, bukan nasihat investasi, bukan produk investasi, bukan pengelolaan dana, dan TIDAK menjamin profit.',
+    'EA bisa mengalami rugi dan drawdown besar. Hasil live, hasil backtest dan contoh perhitungan yang ditampilkan adalah catatan masa lalu atau ilustrasi dan tidak menjamin hasil di masa depan.',
+    'Keputusan memakai EA, besar modal, setting, dan seluruh risiko yang timbul sepenuhnya menjadi tanggung jawab saya. GoldHunter Garuda dan admin tidak bertanggung jawab atas kerugian akibat kondisi pasar, broker, VPS, koneksi, maupun penggunaan EA.',
     'GoldHunter Garuda bukan broker dan tidak menerima, menyimpan atau mengelola dana trading saya. Dana saya berada di akun broker atas nama saya sendiri.',
     'Saya hanya memakai dana yang siap saya tanggung risikonya, dan saya menyetujui peringatan risiko ini dengan sadar, tanpa paksaan.',
   ],
   en: [
     'I understand that trading forex, gold (XAUUSD) and crypto with leverage carries a very high risk and can lead to the loss of part or ALL of my capital.',
-    'Garuda AI / GoldHunter Garuda signals and EAs are a trading tool, not investment advice, not an investment product, not fund management, and they do NOT guarantee profit.',
-    'AI analysis can be wrong. The win rate, results and examples shown are past records or illustrations and do not guarantee future results.',
-    'The decision to use the signals or the EA, the capital, the settings and all resulting risk are entirely my own responsibility. GoldHunter Garuda and its admin are not liable for losses caused by market conditions, brokers, VPS, connections or the use of the signals / EA.',
+    'The GOLD HUNTER GARUDA EA is an automated trading tool, not investment advice, not an investment product, not fund management, and it does NOT guarantee profit.',
+    'The EA can make losses and deep drawdowns. The live results, backtest results and examples shown are past records or illustrations and do not guarantee future results.',
+    'The decision to use the EA, the capital, the settings and all resulting risk are entirely my own responsibility. GoldHunter Garuda and its admin are not liable for losses caused by market conditions, brokers, VPS, connections or the use of the EA.',
     'GoldHunter Garuda is not a broker and does not accept, hold or manage my trading funds. My funds stay in a broker account in my own name.',
     'I only use money I can afford to lose, and I accept this risk warning knowingly and without pressure.',
   ],
@@ -121,7 +117,7 @@ route('POST', '/auth/register', 'public', async ({ request, env, base }) => {
     .bind(email, name, phone, address, hash, salt, role, now()).run();
   const userId = r.meta.last_row_id;
   await recordConsent(env, request, userId, str(b.lang, 4));
-  await notify(env, userId, 'Selamat datang di Garuda AI!', 'Pantau sinyal AI di Beranda, ikuti channel Telegram, dan lihat paket di menu Order.', '#/');
+  await notify(env, userId, 'Selamat datang di GOLD HUNTER GARUDA!', 'Pantau hasil live EA GOLD HUNTER GARUDA di halaman /live, ikuti channel Telegram, dan lihat paket di menu Order.', '#/');
   const s = await getSettings(env);
   const pwRow = (pw) => `<tr><td style="padding:6px 0;color:#a3a3b2">Password</td><td style="padding:6px 0"><b style="font-family:monospace;font-size:16px">${pw}</b></td></tr>`;
   const welcome = (pw) => layout(env, 'Pendaftaran berhasil 🎉', `<p>Halo <b>${esc(name)}</b>,</p>
@@ -304,13 +300,12 @@ route('POST', '/ea/report', 'public', async ({ request, env }) => {
   return json({ ok: true, next, since });
 });
 
-// ======================= GOLD HUNTER GARUDA LIVE (setup per chart -> website & Telegram) =======================
-// Every chart running the EA with input 13.2 = ea_master_key is one SETUP, keyed by account login + pair: the master
-// account (4 pairs on one account) is 4 setups, each monitoring account (pair x LOW / MEDIUM / HIGH) is one setup.
-// The EA posts a snapshot every minute plus the events since the last post. The reply carries `since` (start of the
-// setup's track record, editable by the admin); the EA answers with the closed profit since then, so
-// modal = balance - closed profit of the account since `since` (deposits count as capital). Telegram gets reports
-// and warnings (never "signals").
+// ======================= GOLD HUNTER GARUDA LIVE (one row per EA chart -> website & Telegram) =======================
+// Every chart running the EA with input 13.2 = ea_master_key is one EA instance (table ea_setups), keyed by
+// account login + pair + magic number. The EA posts a snapshot every minute plus the events since the last post.
+// The reply carries `since` (start of the instance's track record, editable by the admin); the EA answers with the
+// closed profit since then, so modal = balance - closed profit of the account since `since` (deposits count as
+// capital), or the EA's budget (input 4.0) when set. Telegram gets reports and warnings.
 const eaNum = (v) => { const n = Number(v); return Number.isFinite(n) ? Math.round(n * 100) / 100 : 0; };
 const eaPx = (v) => { const n = Number(v); return Number.isFinite(n) ? Math.round(n * 100000) / 100000 : 0; };
 const wibDay = (t) => new Date((t + 7 * 3600) * 1000).toISOString().slice(0, 10);
@@ -325,19 +320,16 @@ const EA_LIVE_KEYS = ['ea_master_key', 'ea_report_hour', 'ea_report_every', 'ea_
 const eaSym = (v) => { const x = String(v || '').toUpperCase(); const m = x.match(/^([A-Z]{6})/); return m ? m[1] : x.slice(0, 12); };
 const EA_SYM_NAME = { XAUUSD: 'Emas', BTCUSD: 'Bitcoin', EURUSD: 'EURUSD', USDJPY: 'USDJPY' };
 const EA_SYM_ORDER = ['XAUUSD', 'BTCUSD', 'EURUSD', 'USDJPY'];
-const EA_RISKS = ['LOW', 'MEDIUM', 'HIGH'];
-const EA_RISK_NAME = { LOW: 'Low', MEDIUM: 'Medium', HIGH: 'High' };
 const eaSymTitle = (sym) => `${sym}${EA_SYM_NAME[sym] ? ` (${EA_SYM_NAME[sym]})` : ''}`;
 const eaParse = (txt) => { try { return JSON.parse(txt || '{}') || {}; } catch { return {}; } };
-// admin choice wins; '' = follow the EA's input 13.6; 'NONE' = no label
-const eaRisk = (r) => { const a = String(r.risk || ''); if (a === 'NONE') return ''; if (EA_RISKS.includes(a)) return a; return EA_RISKS.includes(r.ea_risk) ? r.ea_risk : ''; };
-const eaLabel = (r) => r.label || `${r.setup_name || r.symbol}${eaRisk(r) ? ' · ' + EA_RISK_NAME[eaRisk(r)] : ''}`;
+// admin label wins, then the EA's own name (input), then the pair
+const eaLabel = (r) => r.label || r.setup_name || r.symbol;
 // account currency -> US dollar (cent accounts: 100 USC = $1)
 const eaUsd = (v, cur) => { if (v == null || !Number.isFinite(Number(v))) return null; const c = String(cur || '').toUpperCase(); if (c === 'USC' || c === 'USX' || c === 'UST') return Math.round(v) / 100; if (c === 'USD') return Math.round(v * 100) / 100; return null; };
 function eaCfg(s) {
   return { key: String(s.ea_master_key || '').trim(), hour: Number.isFinite(Number(s.ea_report_hour)) && s.ea_report_hour !== '' ? int(s.ea_report_hour) : 21,
     minLayers: s.ea_tg_min_layers === '' || s.ea_tg_min_layers == null ? 4 : int(s.ea_tg_min_layers), offlineMin: int(s.ea_offline_min) || 5, tg: s.ea_tg_enabled !== '0',
-    // Telegram = one picture with every setup's closed profit; text per event (series, warnings, offline) only when switched on
+    // Telegram = one picture with every EA's closed profit; text per event (series, warnings, offline) only when switched on
     every: Math.max(0, Math.min(24, int(s.ea_report_every) || 0)), events: s.ea_tg_events === '1' };
 }
 async function eaTg(env, cfg, text, base, setupId) {
@@ -345,18 +337,17 @@ async function eaTg(env, cfg, text, base, setupId) {
   const link = base ? `\n📈 <a href="${base}/live${setupId ? '?setup=' + setupId : ''}">goldhuntergaruda.com/live</a>` : '';
   try { await tgBroadcast(env, text + link); } catch (e) { console.error('ea telegram', e); }
 }
-// Public view of one setup (no login, no server name).
+// Public view of one EA instance (no login, no server name).
 function eaSetupView(r, t, cfg) {
   const d = eaParse(r.data);
-  const risk = eaRisk(r);
   const total = r.total_ok ? r.total : null;
-  // budget mode (EA input 4.0): the setup's own capital is its budget; otherwise the account capital since the start
+  // budget mode (EA input 4.0): the EA's own capital is its budget; otherwise the account capital since the start
   const modal = r.budget > 0 ? r.budget : (r.total_ok ? Math.round((r.balance - r.acct_total) * 100) / 100 : null);
   const pctOf = (v) => (v != null && modal > 0 ? Math.round(v / modal * 10000) / 100 : null);
   const side = (x) => (x && x.count ? { count: x.count, lots: x.lots, profit: x.profit } : { count: 0 });
   const floating = ((d.buy && d.buy.profit) || 0) + ((d.sell && d.sell.profit) || 0);
   return {
-    id: r.id, symbol: r.symbol, broker_symbol: r.broker_symbol, risk, label: eaLabel(r), setup_name: r.setup_name || '', budget: r.budget || 0,
+    id: r.id, symbol: r.symbol, broker_symbol: r.broker_symbol, label: eaLabel(r), setup_name: r.setup_name || '', budget: r.budget || 0,
     budget_usd: r.budget > 0 ? eaUsd(r.budget, r.currency) : null, magic: r.magic, account: maskAccount(r.login), currency: r.currency,
     since: r.since, days: r.since ? Math.max(0, Math.floor((t - r.since) / DAY)) : 0, running: r.since ? t - r.since : 0,
     online: !!r.updated_at && t - r.updated_at <= cfg.offlineMin * 60, at: r.updated_at,
@@ -371,9 +362,9 @@ function eaSetupView(r, t, cfg) {
   };
 }
 const eaSymIdx = (sym) => { const i = EA_SYM_ORDER.indexOf(sym); return i < 0 ? 99 : i; };
-// admin order first, then pair (gold, bitcoin, EUR, JPY), then unlabelled (master) before LOW, MEDIUM, HIGH
-const EA_SETUP_ORDER = (a, b) => (a.sort - b.sort) || (eaSymIdx(a.symbol) - eaSymIdx(b.symbol)) || (EA_RISKS.indexOf(eaRisk(a)) - EA_RISKS.indexOf(eaRisk(b))) || (a.id - b.id);
-// No heartbeat for more than x minutes -> one warning per setup; the next heartbeat sends "online again".
+// admin order first, then pair (gold, bitcoin, EUR, JPY), then account login
+const EA_SETUP_ORDER = (a, b) => (a.sort - b.sort) || (eaSymIdx(a.symbol) - eaSymIdx(b.symbol)) || String(a.login).localeCompare(String(b.login)) || (a.id - b.id);
+// No heartbeat for more than x minutes -> one warning per EA; the next heartbeat sends "online again".
 // Checked by the public page and the builder poll.
 async function eaOfflineCheck(env, s, base) {
   const cfg = eaCfg(s);
@@ -392,7 +383,7 @@ async function eaClaim(env, key, value) {
   const r = await env.DB.prepare('UPDATE settings SET value=? WHERE key=? AND value IS NOT ?').bind(String(value), key, String(value)).run();
   return (r.meta && r.meta.changes) === 1;
 }
-// Data of the picture: every visible setup, closed profit only (today, since start, % of capital).
+// Data of the picture: every visible EA, closed profit only (today, since start, % of capital).
 async function eaReportRows(env, t, cfg) {
   const [{ results: rows }, { results: ser }] = await Promise.all([
     env.DB.prepare('SELECT * FROM ea_setups WHERE visible=1').all(),
@@ -402,14 +393,14 @@ async function eaReportRows(env, t, cfg) {
   const out = rows.map((r) => {
     const v = eaSetupView(r, t, cfg);
     const sr = ser.find((x) => x.setup_id === r.id) || { n: 0, wins: 0 };
-    return { symbol: v.symbol, name: v.setup_name || v.symbol, budget_usd: v.budget_usd, risk: v.risk, label: v.label, online: v.online, day_usd: v.day_usd, day_pct: v.day_pct, total_usd: v.total_usd, total_pct: v.total_pct, running: v.running, series: sr.n, wins: sr.wins };
+    return { symbol: v.symbol, name: v.setup_name || v.symbol, budget_usd: v.budget_usd, account: v.account, label: v.label, online: v.online, day_usd: v.day_usd, day_pct: v.day_pct, total_usd: v.total_usd, total_pct: v.total_pct, running: v.running, series: sr.n, wins: sr.wins };
   });
   const sum = (k) => Math.round(out.reduce((a, x) => a + (x[k] || 0), 0) * 100) / 100;
   return { rows: out, head: { date: wibDate(t), clock: wibClock(t), total_day_usd: sum('day_usd'), total_usd: sum('total_usd'), online: out.filter((x) => x.online).length, count: out.length } };
 }
 async function eaSendReport(env, t, cfg, base) {
   const { rows, head } = await eaReportRows(env, t, cfg);
-  if (!rows.length) return { ok: false, error: 'Belum ada setup yang melapor' };
+  if (!rows.length) return { ok: false, error: 'Belum ada EA yang melapor' };
   const png = await reportPng(rows, head);
   const caption = [`📊 <b>GOLD HUNTER GARUDA</b> · ${head.date} ${head.clock}`,
     `Profit hari ini ${eaMoney(head.total_day_usd)} USD · sejak mulai ${eaMoney(head.total_usd)} USD`,
@@ -447,7 +438,7 @@ route('POST', '/ea/live', 'public', async ({ request, env, waitUntil, base }) =>
     dist_mult: eaNum(c.dist_mult), reentry_pts: int(c.reentry_pts) || 0, new_series: int(c.new_series) || 0, tp_mode: str(c.tp_mode, 8), tp_net: !!c.tp_net,
     reduction: !!c.reduction, reduction_pct: eaNum(c.reduction_pct), pocket: !!c.pocket, pocket_min_loss: eaNum(c.pocket_min_loss), news_mode: str(c.news_mode, 8),
     max_spread: int(c.max_spread) || 0, equity_stop: eaNum(c.equity_stop), point: Number(c.point) || 0, digits: int(c.digits) || 0 };
-  const snap = { currency: str(b.currency, 8).toUpperCase(), version: str(b.version, 12), symbol: str(b.symbol, 16), magic: int(b.magic) || 0, risk: str(b.risk, 8).toUpperCase(),
+  const snap = { currency: str(b.currency, 8).toUpperCase(), version: str(b.version, 12), symbol: str(b.symbol, 16), magic: int(b.magic) || 0,
     balance: eaNum(b.balance), equity: eaNum(b.equity), floating: eaNum(b.floating), day: eaNum(b.day), week: eaNum(b.week), month: eaNum(b.month),
     spread: int(b.spread) || 0, margin_level: eaNum(b.margin_level), status: str(b.status, 200), mode: str(b.mode, 12), trend_tf: str(b.trend_tf, 6), trend: int(b.trend) || 0, trend_why: str(b.trend_why, 120),
     tp_pts: int(b.tp_pts) || 0, lot_mult: eaNum(b.lot_mult), dist_pts: int(b.dist_pts) || 0, first_lot: eaNum(b.first_lot), reduction_from: int(b.reduction_from) || 0,
@@ -460,22 +451,22 @@ route('POST', '/ea/live', 'public', async ({ request, env, waitUntil, base }) =>
   const setupName = str(b.setup, 40);
   snap.budget = budget;
   snap.setup = setupName;
-  await env.DB.prepare(`INSERT INTO ea_setups (login, symbol, magic, broker_symbol, server, currency, setup_name, budget, ea_risk, since, created_at, updated_at)
-      VALUES (?,?,?,?,?,?,?,?,?,?,?,0) ON CONFLICT(login, symbol, magic) DO NOTHING`)
-    .bind(login, sym, snap.magic, snap.symbol, str(b.server, 60), snap.currency, setupName, budget, EA_RISKS.includes(snap.risk) ? snap.risk : '', t, t).run();
+  await env.DB.prepare(`INSERT INTO ea_setups (login, symbol, magic, broker_symbol, server, currency, setup_name, budget, since, created_at, updated_at)
+      VALUES (?,?,?,?,?,?,?,?,?,?,0) ON CONFLICT(login, symbol, magic) DO NOTHING`)
+    .bind(login, sym, snap.magic, snap.symbol, str(b.server, 60), snap.currency, setupName, budget, t, t).run();
   const row = await env.DB.prepare('SELECT * FROM ea_setups WHERE login=? AND symbol=? AND magic=?').bind(login, sym, snap.magic).first();
   const totalOk = row.since > 0 && int(b.since_used) === row.since ? 1 : 0;
   const day = wibDay(t);
   const symFloat = (snap.buy.profit || 0) + (snap.sell.profit || 0);
   const layers = Math.max(snap.buy.count || 0, snap.sell.count || 0);
-  // drawdown: of the setup's own baskets vs its budget, or of the whole account vs the balance
+  // drawdown: of the EA's own baskets vs its budget, or of the whole account vs the balance
   const dd = budget > 0 ? Math.round(Math.max(0, -symFloat) / budget * 10000) / 100
     : snap.balance > 0 ? Math.round(Math.max(0, (snap.balance - snap.equity) / snap.balance * 100) * 100) / 100 : 0;
   await env.DB.batch([
-    env.DB.prepare(`UPDATE ea_setups SET broker_symbol=?, server=?, currency=?, setup_name=?, budget=?, ea_risk=?, balance=?, equity=?, updated_at=?, data=?, offline_state=0,
+    env.DB.prepare(`UPDATE ea_setups SET broker_symbol=?, server=?, currency=?, setup_name=?, budget=?, balance=?, equity=?, updated_at=?, data=?, offline_state=0,
         total=CASE WHEN ?=1 THEN ? ELSE total END, acct_total=CASE WHEN ?=1 THEN ? ELSE acct_total END, total_ok=CASE WHEN ?=1 THEN 1 ELSE total_ok END,
         max_dd_pct=MAX(max_dd_pct, ?), min_float=MIN(min_float, ?), max_layers=MAX(max_layers, ?) WHERE id=?`)
-      .bind(snap.symbol, str(b.server, 60), snap.currency, setupName, budget, EA_RISKS.includes(snap.risk) ? snap.risk : '', snap.balance, snap.equity, t, JSON.stringify(snap),
+      .bind(snap.symbol, str(b.server, 60), snap.currency, setupName, budget, snap.balance, snap.equity, t, JSON.stringify(snap),
         totalOk, eaNum(b.total), totalOk, eaNum(b.acct_total), totalOk, dd, symFloat, layers, row.id),
     env.DB.prepare(`INSERT INTO ea_setup_days (setup_id, day, profit, balance, equity, min_equity, max_dd_pct, max_layers, min_float, currency, updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?)
         ON CONFLICT(setup_id, day) DO UPDATE SET profit=excluded.profit, balance=excluded.balance, equity=excluded.equity,
@@ -483,7 +474,7 @@ route('POST', '/ea/live', 'public', async ({ request, env, waitUntil, base }) =>
         max_layers=MAX(max_layers, excluded.max_layers), min_float=MIN(min_float, excluded.min_float), currency=excluded.currency, updated_at=excluded.updated_at`)
       .bind(row.id, day, snap.day, snap.balance, snap.equity, snap.equity, dd, layers, Math.min(0, symFloat), snap.currency, t),
   ]);
-  const label = eaLabel({ ...row, setup_name: setupName || row.setup_name, ea_risk: EA_RISKS.includes(snap.risk) ? snap.risk : row.ea_risk });
+  const label = eaLabel({ ...row, setup_name: setupName || row.setup_name });
   const msgs = [];
   const evs = Array.isArray(b.events) ? b.events.slice(0, 50) : [];
   const TITLE = { kantong: '🟡 KANTONG PROFIT', pengaman: '🛑 PENGAMAN EQUITY', dd: '⚠️ FLOATING RUGI BESAR', layer: '⚠️ BASKET PANJANG', reduction: '🔁 REDUCTION', pause: '⏸ PAUSE' };
@@ -509,7 +500,7 @@ route('POST', '/ea/live', 'public', async ({ request, env, waitUntil, base }) =>
   return json({ ok: true, next: 60, since: row.since });
 });
 
-// Public: all visible setups (overview), or ?setup=id with series, days and events since the setup's start.
+// Public: all visible EA instances (overview), or ?setup=id with series, days and events since its start.
 route('GET', '/live', 'public', async ({ env, url, waitUntil, base }) => {
   const s = await getSettings(env);
   const cfg = eaCfg(s);
@@ -518,7 +509,7 @@ route('GET', '/live', 'public', async ({ env, url, waitUntil, base }) => {
   const id = int(url.searchParams.get('setup')) || 0;
   if (id) {
     const r = await env.DB.prepare('SELECT * FROM ea_setups WHERE id=? AND visible=1').bind(id).first();
-    if (!r) fail(404, 'Setup tidak ditemukan');
+    if (!r) fail(404, 'EA tidak ditemukan');
     const from = wibDay(r.since || 0);
     const [series, days, events, stat] = await Promise.all([
       env.DB.prepare('SELECT closed_at, side, positions, lots, profit, duration, currency FROM ea_series WHERE setup_id=? AND closed_at >= ? ORDER BY id DESC LIMIT 60').bind(r.id, r.since).all(),
@@ -564,26 +555,25 @@ route('POST', '/admin/ea/report-send', 'admin', async ({ env, base }) => {
   return json(r);
 });
 
-// Admin: manage the setups (label, risk, visibility, order, start of the track record).
+// Admin: manage the EA instances (label, visibility, order, start of the track record).
 route('GET', '/admin/ea/setups', 'admin', async ({ env }) => {
   const s = await getSettings(env);
   const cfg = eaCfg(s);
   const t = now();
   const { results } = await env.DB.prepare('SELECT * FROM ea_setups').all();
   results.sort(EA_SETUP_ORDER);
-  return json({ setups: results.map((r) => ({ ...eaSetupView(r, t, cfg), login: r.login, server: r.server, magic: r.magic, ea_risk: r.ea_risk, risk_admin: r.risk,
+  return json({ setups: results.map((r) => ({ ...eaSetupView(r, t, cfg), login: r.login, server: r.server, magic: r.magic,
     label_admin: r.label, visible: r.visible, sort: r.sort, created_at: r.created_at })) });
 });
 route('PUT', '/admin/ea/setups/:id', 'admin', async ({ request, env, params }) => {
   const b = await readJson(request);
   const r = await env.DB.prepare('SELECT * FROM ea_setups WHERE id=?').bind(int(params.id)).first();
-  if (!r) fail(404, 'Setup tidak ditemukan');
-  const risk = ['', 'NONE', ...EA_RISKS].includes(String(b.risk || '')) ? String(b.risk || '') : r.risk;
+  if (!r) fail(404, 'EA tidak ditemukan');
   let since = b.reset ? now() : (b.since != null && b.since !== '' ? int(b.since) : r.since);
   if (!(since > 0) || since > now() + 60) fail(400, 'Tanggal mulai tidak valid');
   const restart = since !== r.since;
-  await env.DB.prepare(`UPDATE ea_setups SET risk=?, label=?, visible=?, sort=?, since=?${restart ? ', total=0, acct_total=0, total_ok=0, max_dd_pct=0, min_float=0, max_layers=0' : ''} WHERE id=?`)
-    .bind(risk, str(b.label, 60), b.visible ? 1 : 0, int(b.sort) || 0, since, r.id).run();
+  await env.DB.prepare(`UPDATE ea_setups SET label=?, visible=?, sort=?, since=?${restart ? ', total=0, acct_total=0, total_ok=0, max_dd_pct=0, min_float=0, max_layers=0' : ''} WHERE id=?`)
+    .bind(str(b.label, 60), b.visible ? 1 : 0, int(b.sort) || 0, since, r.id).run();
   if (restart) {
     // deepest DD / floating / longest basket rebuilt from the daily rows inside the new period
     const agg = await env.DB.prepare('SELECT COALESCE(MAX(max_dd_pct),0) AS dd, COALESCE(MIN(min_float),0) AS mf, COALESCE(MAX(max_layers),0) AS ml FROM ea_setup_days WHERE setup_id=? AND day >= ?')
@@ -603,34 +593,8 @@ route('DELETE', '/admin/ea/setups/:id', 'admin', async ({ env, params }) => {
   return json({ ok: true });
 });
 
-// ======================= AI SIGNALS (MASTER EA -> server -> CLIENT EAs) =======================
-const signalView = (r) => r && ({
-  id: r.id, symbol: r.symbol, bar_time: r.bar_time, created_at: r.created_at, valid_until: r.valid_until,
-  decision: r.decision, confidence: r.confidence, price: r.price, sl: r.sl, tp: r.tp,
-  trend_h4: r.trend_h4, trend_h1: r.trend_h1, reason: r.reason, news: r.news || '', reason_en: r.reason_en || '', news_en: r.news_en || '', model: r.model,
-  status: r.status, close_price: r.close_price, closed_at: r.closed_at, pips: r.pips,
-  order_type: r.order_type || 'MARKET', filled_at: r.filled_at || 0, cancel_reason: r.cancel_reason || '',
-  risk_pct: r.risk_pct || 1, tag: r.tag || '', sl_now: r.sl_now || 0, be_at: r.be_at || 0, mgmt_note: r.mgmt_note || '',
-});
-// signals that finished with a result (pending, cancelled and running ones are not part of any statistic)
-const DONE_SQL = "status IN ('TP','SL','BE','CLOSE')";
-const isLive = (st) => st === 'open' || st === 'pending';
-// Markets: canonical symbol (broker suffix removed) and its pip size / decimals from table ai_symbols
-const canonSymbol = (v) => { const x = str(v, 20).toUpperCase(); const m = x.match(/^([A-Z]{6})/); return m ? m[1] : x; };
-const SYM_DEFAULT = { symbol: '', enabled: 0, pip: 0.1, digits: 2, pip_label: 'pips', session_start: 7, session_end: 20, weekend: 0, min_sl: 30, max_sl: 200 };
-async function getSymbol(env, symbol) {
-  const r = await env.DB.prepare('SELECT * FROM ai_symbols WHERE symbol=?').bind(symbol).first();
-  return r || { ...SYM_DEFAULT, symbol };
-}
-async function allSymbols(env) {
-  const { results } = await env.DB.prepare('SELECT * FROM ai_symbols ORDER BY sort, symbol').all();
-  return results;
-}
-const symView = (m) => ({ symbol: m.symbol, enabled: !!m.enabled, pip: m.pip, digits: m.digits, pip_label: m.pip_label,
-  session_start: m.session_start, session_end: m.session_end, weekend: !!m.weekend, min_sl: m.min_sl, max_sl: m.max_sl, profile: m.profile || '', scalp: !!m.scalp });
-
-// ---- Telegram: the server posts every BUY/SELL signal (with the chart picture) and its result as a reply ----
-// Configured in Admin > Pengaturan: bot token (stored encrypted) and any number of target channels / groups.
+// ======================= TELEGRAM (EA live reports, content videos, admin tests) =======================
+// Configured in Admin > Media Sosial > Telegram: bot token (stored encrypted) and any number of target channels / groups.
 async function tgConfig(env) {
   const s = await getSettings(env);
   const token = s.telegram_bot_token_enc ? await decrypt(env, s.telegram_bot_token_enc) : '';
@@ -671,7 +635,7 @@ async function tgSend(token, chatId, text, { photo, replyTo } = {}) {
   }
 }
 
-// Send to every active target; replyTo is the {chat_id: message_id} map of the original signal post
+// Send to every active target; replyTo is the {chat_id: message_id} map of the original post
 async function tgBroadcast(env, text, { photo, replyTo } = {}) {
   const c = await tgConfig(env);
   if (!c.on) return null;
@@ -684,329 +648,40 @@ async function tgBroadcast(env, text, { photo, replyTo } = {}) {
   return out;
 }
 
-const fx = (n, d) => Number(n).toFixed(d);
-// pips (gold 0.10, FX 0.0001 / JPY 0.01) with points = 1/10 pip; BTC is counted in whole-dollar "poin"
-const pipTxt = (p, m) => m.pip_label === 'pips'
-  ? `${p > 0 ? '+' : ''}${Number(p).toFixed(1)} pips (${p > 0 ? '+' : ''}${Math.round(p * 10).toLocaleString('id-ID')} point)`
-  : `${p > 0 ? '+' : ''}${Math.round(p).toLocaleString('id-ID')} ${m.pip_label}`;
-const SIDE_TXT = { BUY: '🟢 BUY', SELL: '🔴 SELL' };
-const MK_NAME = { XAUUSD: 'Emas', BTCUSD: 'Bitcoin', EURUSD: 'Euro / Dolar', USDJPY: 'Dolar / Yen' };
-const mkTitle = (sym) => `${esc(sym)}${MK_NAME[sym] ? ` (${MK_NAME[sym]})` : ''}`;
-const trendTxt = (t) => t === 'UP' ? '▲ naik' : t === 'DOWN' ? '▼ turun' : '◆ sideways';
-const durTxt = (sec) => { const m = Math.max(0, Math.round(sec / 60)); return m >= 60 ? `${Math.floor(m / 60)}j ${m % 60}m` : `${m}m`; };
-// Claude writes the reason as "why ... Tunggu / Saya menunggu ..." -> split into why and what it waits for
-function splitWait(reason) {
-  const r = String(reason || '').trim();
-  const i = r.search(/(?:^|[.;]\s+)(Tunggu|Menunggu|Saya menunggu|Kita tunggu)\b/);
-  if (i <= 0) return [r, ''];
-  const j = r.slice(i).search(/[A-Z]/);
-  return [r.slice(0, i + 1).trim(), r.slice(i + Math.max(0, j)).trim()];
-}
-// Analysis without an entry (TUNGGU): education for followers, why the AI stays out and what it waits for
-function tgWaitText(r, base, m) {
-  const [why, wait] = splitWait(r.reason);
-  return [
-    `🦅 <b>GARUDA AI · ANALISIS ${mkTitle(r.symbol)}</b>`,
-    `⏸ <b>Keputusan: TUNGGU</b>, belum ada entry`,
-    `📊 Tren H4 ${trendTxt(r.trend_h4)} · H1 ${trendTxt(r.trend_h1)} · harga ${fx(r.price, m.digits)}`,
-    '',
-    '🧠 <b>Kenapa AI belum masuk?</b>',
-    esc(why),
-    ...(wait ? ['', '🎯 <b>Yang ditunggu AI</b>', esc(wait)] : []),
-    ...(r.news ? ['', '📰 <b>Fundamental</b>', esc(r.news)] : []),
-    '',
-    '💡 <i>Tidak entry juga keputusan. Menunggu setup yang jelas menjaga modal tetap aman.</i>',
-    `🔎 Sinyal &amp; track record: <a href="${base}/sinyal">goldhuntergaruda.com/sinyal</a>`,
-    '<i>Edukasi, bukan saran investasi.</i>',
-  ].join('\n');
-}
-const MAX_CHART_B64 = 1_800_000;              // about 1.3 MB PNG
-const chartB64 = (v) => { const x = typeof v === 'string' ? v.replace(/\s/g, '') : ''; return x && x.length <= MAX_CHART_B64 && /^[A-Za-z0-9+/=]+$/.test(x) ? x : ''; };
-async function saveChart(env, id, kind, data) {
-  if (!data) return;
-  await env.DB.prepare(`INSERT INTO signal_charts (signal_id, kind, mime, data, created_at) VALUES (?,?,?,?,?)
-      ON CONFLICT(signal_id, kind) DO UPDATE SET data=excluded.data, created_at=excluded.created_at`).bind(id, kind, 'image/png', data, now()).run();
-}
-
-function tgOpenText(r, base, m) {
-  const slP = Math.abs(r.price - r.sl) / m.pip, tpP = Math.abs(r.tp - r.price) / m.pip;
-  const rr = slP > 0 ? tpP / slP : 0;
-  const pend = r.order_type === 'LIMIT' || r.order_type === 'STOP';
-  const until = new Date((r.valid_until + 7 * 3600) * 1000);
-  const untilTxt = `${String(until.getUTCHours()).padStart(2, '0')}:${String(until.getUTCMinutes()).padStart(2, '0')} WIB`;
-  return [
-    (r.tag === 'NEWS' ? '📰 <b>NEWS</b> · ' : r.tag === 'SCALP' ? '⚡ <b>SCALP</b> · ' : '') + (pend ? `⏳ <b>GARUDA AI · PENDING ${SIDE_TXT[r.decision]} ${r.order_type} ${mkTitle(r.symbol)}</b>` : `🦅 <b>GARUDA AI · SINYAL ${SIDE_TXT[r.decision]} ${mkTitle(r.symbol)}</b>`),
-    '',
-    pend ? `📌 Harga pending: <b>${fx(r.price, m.digits)}</b> (${r.order_type === 'LIMIT' ? 'menunggu harga kembali ke area ini' : 'masuk saat harga menembus level ini'})` : `▶️ Entry: <b>${fx(r.price, m.digits)}</b>`,
-    `🛑 Stop loss: <b>${fx(r.sl, m.digits)}</b>  (−${slP.toFixed(0)} ${m.pip_label})`,
-    `🎯 Take profit: <b>${fx(r.tp, m.digits)}</b>  (+${tpP.toFixed(0)} ${m.pip_label})`,
-    `⚖️ Risk : reward 1 : ${rr.toFixed(2)} · keyakinan AI ${r.confidence}%`,
-    `🎚 Risiko pilihan AI: ${Number(r.risk_pct || 1).toFixed(2).replace(/\.?0+$/, '')}% saldo (lot dihitung otomatis dari modal tiap akun)`,
-    `📊 Tren H4 ${trendTxt(r.trend_h4)} · H1 ${trendTxt(r.trend_h1)}`,
-    '',
-    '🧠 <b>Alasan AI</b>',
-    esc(r.reason),
-    ...(r.news ? ['', '📰 <b>Fundamental</b>', esc(r.news)] : []),
-    '',
-    pend ? `⏳ Berlaku sampai ${untilTxt}. Otomatis dibatalkan jika harga tidak tercapai atau setup gagal · #S${r.id}`
-      : `⏱ Entry maksimal ${Math.round((r.valid_until - r.created_at) / 60)} menit setelah sinyal · #S${r.id}`,
-    `🔎 Track record: <a href="${base}/sinyal?s=${r.id}">goldhuntergaruda.com/sinyal</a>`,
-    '<i>Risiko ±1% per sinyal. Bukan saran investasi, trading berisiko tinggi.</i>',
-  ].join('\n');
-}
-
-function tgCloseText(r, result, close, pips, m) {
-  const head = { TP: '✅ <b>TARGET TERCAPAI (TP)</b>', SL: '❌ <b>STOP LOSS (SL)</b>', BE: '⚖️ <b>BREAK EVEN</b>', CLOSE: r.mgmt_note ? '🔒 <b>DITUTUP OLEH AI</b>' : '🔒 <b>DITUTUP</b>' }[result];
-  const note = { TP: '🎉 Rencana berjalan sesuai analisis.', SL: '🛡️ Rugi terukur sesuai rencana (risiko ±1%). Disiplin SL menjaga modal untuk peluang berikutnya.',
-    BE: '🛡️ SL sudah digeser ke harga masuk, posisi keluar tanpa rugi.', CLOSE: 'Posisi ditutup sebelum akhir pekan.' }[result];
-  return [
-    `${head}`,
-    `${SIDE_TXT[r.decision]} ${mkTitle(r.symbol)} · #S${r.id}`,
-    '',
-    `Entry ${fx(r.price, m.digits)} → ${fx(close, m.digits)}`,
-    `💰 Hasil: <b>${pipTxt(pips, m)}</b>`,
-    ...(r.created_at ? [`⏱ Lama posisi: ${durTxt(now() - r.created_at)}`] : []),
-    '',
-    result === 'CLOSE' && r.mgmt_note ? `🧠 ${esc(r.mgmt_note)}` : note,
-  ].join('\n');
-}
-
-// When a client should ask again: signals arrive a few minutes after each H1 close, so clients come back
-// ~2.5 minutes after the next hour (plus a short retry window while this hour's signal is still missing).
-// Keeps Functions/D1 traffic to a few requests per client per hour.
-// When a CLIENT EA should ask again: often right after each analysis slot (Admin: every 60 / 30 / 15 min),
-// and at most every 2 minutes when quick re-analysis on Claude's levels is on (it can come at any time)
-function nextSignalCheck(t, latest, s = {}) {
-  const slot = (Number(s.ai_interval_min) || 60) * 60;
-  const slotStart = t - (t % slot);
-  const toNext = slotStart + slot + 150 - t;
-  const fresh = latest && latest.created_at >= slotStart;
-  if (!fresh && t - slotStart < Math.min(15 * 60, slot / 2)) return 45;
-  const n = Math.max(30, Math.min(toNext, 3600));
-  return s.ai_level_trigger === '1' || s.ai_momentum === '1' ? Math.min(n, 120) : n;
-}
-
-route('POST', '/signal/publish', 'signal_pub', async ({ request, env, base, waitUntil }) => {
-  const b = await readJson(request);
-  const decision = str(b.decision, 8).toUpperCase();
-  if (!['BUY', 'SELL', 'WAIT'].includes(decision)) fail(400, 'decision harus BUY, SELL atau WAIT');
-  const symbol = canonSymbol(b.symbol);
-  if (!symbol) fail(400, 'symbol kosong');
-  const num = (v) => { const n = Number(v); return Number.isFinite(n) ? n : 0; };
-  const t = now();
-  const orderType = decision !== 'WAIT' && ['LIMIT', 'STOP'].includes(str(b.order_type, 8).toUpperCase()) ? str(b.order_type, 8).toUpperCase() : 'MARKET';
-  const pending = orderType !== 'MARKET';
-  const validMin = Math.max(1, Math.min(int(b.valid_min) || 10, pending ? 480 : 60));
-  const riskPct = Math.max(0.25, Math.min(Number(b.risk_pct) || 1, 1));
-  const tag = ['NEWS', 'SCALP'].includes(str(b.tag, 8).toUpperCase()) ? str(b.tag, 8).toUpperCase() : '';
-  const r = await env.DB.prepare(`INSERT INTO signals (symbol, bar_time, created_at, valid_until, decision, confidence, price, sl, tp, trend_h4, trend_h1, reason, model, cost_usd, tokens_in, tokens_out, status, news, reason_en, news_en, order_type, risk_pct, tag)
-      VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`)
-    .bind(symbol, int(b.bar_time) || 0, t, t + validMin * 60, decision, Math.max(0, Math.min(int(b.confidence) || 0, 100)),
-      num(b.price), num(b.sl), num(b.tp), str(b.trend_h4, 8), str(b.trend_h1, 8), str(b.reason, 600), str(b.model, 40),
-      num(b.cost_usd), int(b.tokens_in) || 0, int(b.tokens_out) || 0, decision === 'WAIT' ? 'wait' : (pending ? 'pending' : 'open'), str(b.news, 400), str(b.reason_en, 600), str(b.news_en, 400),
-      orderType, riskPct, tag)
-    .run();
-  const id = r.meta.last_row_id;
-  const chart = chartB64(b.chart_png);
-  await saveChart(env, id, 'open', chart);
-  if (decision === 'WAIT' && chart) {
-    // analysis picture of a WAIT: shown on /sinyal and posted to Telegram as education (the EA sends one every x hours)
-    waitUntil((async () => {
-      await env.DB.prepare(`DELETE FROM signal_charts WHERE signal_id IN (SELECT id FROM signals WHERE decision='WAIT' AND created_at < ?)`).bind(t - 7 * DAY).run();
-      const s = await getSettings(env);
-      const key = 'tg_wait_last_' + symbol;
-      const hrs = Math.max(1, Math.min(Number(s.telegram_wait_hours) || 3, 24));
-      if (s.telegram_wait !== '1' || t - (Number(s[key]) || 0) < hrs * 3600 - 900) return;
-      const row = await env.DB.prepare('SELECT * FROM signals WHERE id=?').bind(id).first();
-      const msgs = await tgBroadcast(env, tgWaitText(row, base, await getSymbol(env, symbol)), { photo: chart });
-      if (msgs && Object.keys(msgs).length) await putSetting(env, key, String(t));
-    })());
-  }
-  if (decision !== 'WAIT') {
-    // post to Telegram in the background so the EA gets its answer at once
-    waitUntil((async () => {
-      const row = await env.DB.prepare('SELECT * FROM signals WHERE id=?').bind(id).first();
-      const msgs = await tgBroadcast(env, tgOpenText(row, base, await getSymbol(env, symbol)), { photo: chart });
-      if (msgs && Object.keys(msgs).length) await env.DB.prepare('UPDATE signals SET tg_msgs=? WHERE id=?').bind(JSON.stringify(msgs), id).run();
-    })());
-  }
-  return json({ ok: true, id, valid_until: t + validMin * 60 });
-});
-
-// The master moved the stop to the entry (break even at +1R): the position can no longer lose
-route('POST', '/signal/update', 'signal_pub', async ({ request, env, waitUntil }) => {
-  const b = await readJson(request);
-  const row = await env.DB.prepare('SELECT * FROM signals WHERE id=?').bind(int(b.id) || 0).first();
-  if (!row) fail(404, 'Sinyal tidak ditemukan');
-  if (row.status !== 'open') fail(409, 'Sinyal tidak berjalan');
-  const sl = Number(b.sl);
-  if (!(sl > 0)) fail(400, 'sl tidak valid');
-  const ai = str(b.event, 8).toUpperCase() === 'SL';
-  if (!ai && row.be_at) return json({ ok: true, already: true });
-  const note = str(b.note, 300);
-  if (ai) await env.DB.prepare('UPDATE signals SET sl_now=?, mgmt_note=? WHERE id=?').bind(sl, note, row.id).run();
-  else await env.DB.prepare('UPDATE signals SET sl_now=?, be_at=? WHERE id=?').bind(sl, now(), row.id).run();
-  const mk = await getSymbol(env, row.symbol);
-  let replyTo = null;
-  try { replyTo = row.tg_msgs ? JSON.parse(row.tg_msgs) : null; } catch { replyTo = null; }
-  const lockPips = Math.round(((row.decision === 'BUY' ? sl - row.price : row.price - sl) / mk.pip) * 10) / 10;
-  waitUntil(tgBroadcast(env, ai
-    ? [`🔧 <b>AI MENGGESER SL</b> · ${SIDE_TXT[row.decision]} ${mkTitle(row.symbol)} · #S${row.id}`, '',
-      `SL sekarang <b>${fx(sl, mk.digits)}</b>${lockPips > 0 ? ` (profit terkunci ${pipTxt(lockPips, mk)})` : ''}, TP tetap ${fx(row.tp, mk.digits)}.`,
-      ...(note ? [`🧠 ${esc(note)}`] : [])].join('\n')
-    : [`🛡️ <b>BREAK EVEN</b> · ${SIDE_TXT[row.decision]} ${mkTitle(row.symbol)} · #S${row.id}`, '',
-      `Harga sudah bergerak +1R sesuai arah. SL dipindah dari ${fx(row.sl, mk.digits)} ke harga masuk <b>${fx(sl, mk.digits)}</b>.`,
-      'Posisi sekarang aman: paling buruk keluar tanpa rugi, target TP tetap ' + fx(row.tp, mk.digits) + '.'].join('\n'), { replyTo }));
-  return json({ ok: true });
-});
-
-// A pending signal was filled (price reached the pending level) or cancelled (not reached in time / setup failed)
-route('POST', '/signal/fill', 'signal_pub', async ({ request, env, waitUntil }) => {
-  const b = await readJson(request);
-  const row = await env.DB.prepare('SELECT * FROM signals WHERE id=?').bind(int(b.id) || 0).first();
-  if (!row) fail(404, 'Sinyal tidak ditemukan');
-  if (row.status !== 'pending') fail(409, 'Sinyal bukan pending');
-  const price = Number(b.price) > 0 ? Number(b.price) : row.price;
-  const t = now();
-  await env.DB.prepare("UPDATE signals SET status='open', price=?, filled_at=?, valid_until=? WHERE id=?").bind(price, t, t + 120, row.id).run();
-  const mk = await getSymbol(env, row.symbol);
-  let replyTo = null;
-  try { replyTo = row.tg_msgs ? JSON.parse(row.tg_msgs) : null; } catch { replyTo = null; }
-  waitUntil(tgBroadcast(env, [`✅ <b>PENDING TERISI</b> · ${SIDE_TXT[row.decision]} ${mkTitle(row.symbol)} · #S${row.id}`, '',
-    `Masuk di <b>${fx(price, mk.digits)}</b> · SL ${fx(row.sl, mk.digits)} · TP ${fx(row.tp, mk.digits)}`, 'Posisi sekarang berjalan, hasilnya dikirim saat TP / SL.'].join('\n'), { replyTo }));
-  return json({ ok: true });
-});
-route('POST', '/signal/cancel', 'signal_pub', async ({ request, env, waitUntil }) => {
-  const b = await readJson(request);
-  const row = await env.DB.prepare('SELECT * FROM signals WHERE id=?').bind(int(b.id) || 0).first();
-  if (!row) fail(404, 'Sinyal tidak ditemukan');
-  if (row.status !== 'pending') fail(409, 'Sinyal bukan pending');
-  const why = str(b.reason, 200) || 'harga tidak tercapai';
-  await env.DB.prepare("UPDATE signals SET status='cancel', closed_at=?, cancel_reason=? WHERE id=?").bind(now(), why, row.id).run();
-  let replyTo = null;
-  try { replyTo = row.tg_msgs ? JSON.parse(row.tg_msgs) : null; } catch { replyTo = null; }
-  waitUntil(tgBroadcast(env, [`🚫 <b>PENDING DIBATALKAN</b> · ${SIDE_TXT[row.decision]} ${mkTitle(row.symbol)} · #S${row.id}`, '',
-    `Alasan: ${esc(why)}`, 'Order belum pernah terisi, jadi tidak ada untung / rugi. Tidak dihitung di win rate.'].join('\n'), { replyTo }));
-  return json({ ok: true });
-});
-
-// The AI planned a pending order but the EA could not place it (filters / broker): clear reason on Telegram and on the live card
-route('POST', '/signal/pending-fail', 'signal_pub', async ({ request, env, waitUntil }) => {
-  const b = await readJson(request);
-  const symbol = canonSymbol(str(b.symbol, 20));
-  const mk = await getSymbol(env, symbol);
-  if (!mk) fail(404, 'Pasar tidak dikenal');
-  const dec = str(b.decision, 4).toUpperCase() === 'BUY' ? 'BUY' : 'SELL';
-  const type = str(b.order_type, 8).toUpperCase() === 'STOP' ? 'STOP' : 'LIMIT';
-  const price = Number(b.price) || 0, sl = Number(b.sl) || 0, tp = Number(b.tp) || 0;
-  const why = str(b.reason, 400) || 'tidak lolos saringan EA';
-  const text = `Rencana ${dec} ${type} ${fx(price, mk.digits)} tidak dipasang: ${why}`;
-  await env.DB.prepare("UPDATE signals SET pend_fail=? WHERE id = (SELECT MAX(id) FROM signals WHERE symbol=? AND decision='WAIT' AND created_at > ?)")
-    .bind(text, symbol, now() - 15 * 60).run();
-  waitUntil(tgBroadcast(env, [`⚠️ <b>PENDING TIDAK DIPASANG</b> · ${SIDE_TXT[dec]} ${type} ${mkTitle(symbol)}`, '',
-    `Rencana AI: ${dec} ${type} <b>${fx(price, mk.digits)}</b>${sl ? ` · SL ${fx(sl, mk.digits)}` : ''}${tp ? ` · TP ${fx(tp, mk.digits)}` : ''}${int(b.confidence) ? ` · keyakinan ${int(b.confidence)}%` : ''}`,
-    `❗ Alasan: ${esc(why)}`, '',
-    'Tidak ada order dan tidak ada posisi. AI terus memantau; pending baru bisa dipasang di analisis berikutnya.'].join('\n')));
-  return json({ ok: true });
-});
-
-// A waiting pending order revised by the AI (same direction, new levels): same signal number, clients re-place their order
-route('POST', '/signal/modify', 'signal_pub', async ({ request, env, waitUntil }) => {
-  const b = await readJson(request);
-  const row = await env.DB.prepare('SELECT * FROM signals WHERE id=?').bind(int(b.id) || 0).first();
-  if (!row) fail(404, 'Sinyal tidak ditemukan');
-  if (row.status !== 'pending') fail(409, 'Sinyal bukan pending');
-  const type = ['LIMIT', 'STOP'].includes(str(b.order_type, 8).toUpperCase()) ? str(b.order_type, 8).toUpperCase() : row.order_type;
-  const price = Number(b.price), sl = Number(b.sl), tp = Number(b.tp);
-  if (!(price > 0 && sl > 0 && tp > 0)) fail(400, 'price / sl / tp tidak valid');
-  const buy = row.decision === 'BUY';
-  if (buy ? !(sl < price && tp > price) : !(sl > price && tp < price)) fail(400, 'SL / TP di sisi yang salah');
-  const until = now() + Math.max(1, Math.min(int(b.valid_min) || 60, 24 * 60)) * 60;
-  const conf = Math.max(0, Math.min(100, int(b.confidence) || row.confidence));
-  const why = str(b.reason, 2000);
-  const risk = Number(b.risk_pct) > 0 ? Math.max(0.25, Math.min(1, Number(b.risk_pct))) : row.risk_pct;
-  await env.DB.prepare('UPDATE signals SET order_type=?, price=?, sl=?, tp=?, valid_until=?, confidence=?, risk_pct=? WHERE id=?').bind(type, price, sl, tp, until, conf, risk, row.id).run();
-  const mk = await getSymbol(env, row.symbol);
-  let replyTo = null;
-  try { replyTo = row.tg_msgs ? JSON.parse(row.tg_msgs) : null; } catch { replyTo = null; }
-  const u = new Date((until + 7 * 3600) * 1000);
-  const slP = Math.abs(price - sl) / mk.pip, tpP = Math.abs(tp - price) / mk.pip;
-  waitUntil(tgBroadcast(env, [`✏️ <b>PENDING DIUBAH AI</b> · ${SIDE_TXT[row.decision]} ${type} ${mkTitle(row.symbol)} · #S${row.id}`, '',
-    `📌 Harga pending: ${fx(row.price, mk.digits)} → <b>${fx(price, mk.digits)}</b>`,
-    `🛑 SL: ${fx(row.sl, mk.digits)} → <b>${fx(sl, mk.digits)}</b> (−${slP.toFixed(0)} ${mk.pip_label})`,
-    `🎯 TP: ${fx(row.tp, mk.digits)} → <b>${fx(tp, mk.digits)}</b> (+${tpP.toFixed(0)} ${mk.pip_label})`,
-    `⏳ Berlaku sampai ${String(u.getUTCHours()).padStart(2, '0')}:${String(u.getUTCMinutes()).padStart(2, '0')} WIB · keyakinan AI ${conf}%`,
-    ...(why ? ['', `🧠 ${esc(why)}`] : []),
-    '', 'Belum ada posisi: order lama diganti order baru di level ini (lot dihitung ulang dari jarak SL).'].join('\n'), { replyTo }));
-  return json({ ok: true });
-});
-
-// The MASTER EA follows every BUY/SELL signal and reports how it ended; pips are computed here from the entry
-route('POST', '/signal/close', 'signal_pub', async ({ request, env, waitUntil }) => {
-  const b = await readJson(request);
-  const result = str(b.result, 8).toUpperCase();
-  if (!['TP', 'SL', 'BE', 'CLOSE'].includes(result)) fail(400, 'result harus TP, SL, BE atau CLOSE');
-  const row = await env.DB.prepare('SELECT id, symbol, decision, price, status, tg_msgs, created_at FROM signals WHERE id=?').bind(int(b.id) || 0).first();
-  if (!row) fail(404, 'Sinyal tidak ditemukan');
-  if (row.status !== 'open') fail(409, 'Sinyal sudah ditutup');
-  const close = Number(b.close_price);
-  if (!Number.isFinite(close) || close <= 0) fail(400, 'close_price tidak valid');
-  const mk = await getSymbol(env, row.symbol);
-  const pips = Math.round(((row.decision === 'BUY' ? close - row.price : row.price - close) / mk.pip) * 10) / 10;
-  const t = now();
-  const note = str(b.note, 300);
-  await env.DB.prepare('UPDATE signals SET status=?, close_price=?, closed_at=?, pips=?, mgmt_note=CASE WHEN ?<>\'\' THEN ? ELSE mgmt_note END WHERE id=?')
-    .bind(result, close, t, pips, note, note, row.id).run();
-  row.mgmt_note = note;
-  const chart = chartB64(b.chart_png);
-  await saveChart(env, row.id, 'close', chart);
-  let replyTo = null;
-  try { replyTo = row.tg_msgs ? JSON.parse(row.tg_msgs) : null; } catch { replyTo = null; }
-  waitUntil(tgBroadcast(env, tgCloseText(row, result, close, pips, mk), { photo: chart, replyTo }));
-  waitUntil(queueContent(env, 'signal', row.id));
-  return json({ ok: true, pips });
-});
-
 // ---- Promo videos (TikTok / Reels / Shorts, 9:16). The website queues a job, the builder on the admin PC asks for it,
-// gets the data + a script written by Claude, renders the MP4 locally and sends it back to Telegram through here.
-async function queueContent(env, kind, refId = 0) {
-  const s = await getSettings(env);
-  if (s.content_enabled !== '1' || (kind === 'signal' && s.content_on_signal !== '1')) return;
-  const dup = await env.DB.prepare('SELECT 1 FROM content_jobs WHERE kind=? AND ref_id=?').bind(kind, refId).first();
-  if (kind === 'signal' && dup) return;
-  await env.DB.prepare('INSERT INTO content_jobs (created_at, kind, ref_id, lang) VALUES (?,?,?,?)').bind(now(), kind, refId, s.content_lang === 'en' ? 'en' : 'id').run();
-}
+// gets the topic + a script written by the content AI, renders the MP4 locally and sends it back to Telegram / social
+// networks through here. For now only educational / introduction videos about GOLD HUNTER GARUDA are made
+// (kind 'edu'); the content system will be rewritten later for the EA's live results.
 // Rotating topics for the scheduled videos (admin can add more in Admin > Konten Video)
 const CONTENT_TOPICS = [
-  'Perkenalan: apa itu Garuda AI dan bagaimana cara kerjanya dari analisis sampai sinyal',
-  'Kelebihan AI: bagaimana Claude menggabungkan analisis teknikal dan fundamental dalam satu keputusan',
-  'Edukasi: apa itu stop loss dan kenapa setiap sinyal wajib punya stop loss',
-  'Kelebihan AI: momentum dipantau tiap 5 menit, lalu dinilai AI dulu, layak entry atau jebakan',
-  'Edukasi: arti reward : risk 1 : 1,5 dan kenapa itu penting',
-  'Transparansi: kenapa semua sinyal dicatat terbuka, termasuk yang rugi',
-  'Edukasi: kenapa risiko 1% per trade membuat akun bertahan lama',
-  'Edukasi: cara membaca EMA 20, 50 dan 200 untuk melihat tren',
-  'Kelebihan AI: AI mencari dan membaca berita sendiri sebelum menganalisis',
-  'Edukasi: apa itu support dan resistance',
-  'Edukasi: bahaya martingale dan averaging untuk akun trading',
-  'Edukasi: apa itu zona demand dan supply',
-  'Kelebihan AI: kenapa AI berani bilang TUNGGU dan tidak mengejar harga',
-  'Edukasi: false breakout dan sapuan likuiditas, jebakan yang sering terjadi',
-  'Edukasi: sesi Asia, London dan New York, kapan emas paling aktif',
+  'Perkenalan: apa itu EA GOLD HUNTER GARUDA dan cara kerjanya di MetaTrader 5 / 4',
+  'Cara kerja: seri BUY dan SELL berjalan bersamaan di mode BARBAR',
+  'Cara kerja: apa itu basket dan TP bersama dari harga rata-rata',
+  'Cara kerja: DD reduction, posisi terbaru yang untung membayar posisi terlama yang rugi',
+  'Cara kerja: kantong profit, sebagian profit disisihkan untuk melunasi posisi rugi',
+  'Cara kerja: kenapa jarak layer melebar sesudah layer 4',
+  'Cara kerja: kenapa seri baru menunggu harga mundur dulu sesudah TP',
+  'Transparansi: kenapa hasil EA dilaporkan live tiap menit, termasuk saat rugi',
+  'Jujur soal risiko: kelemahan EA martingale / averaging tanpa stop loss',
+  'Edukasi: apa itu floating dan drawdown, dan kenapa harus dipantau',
+  'Edukasi: kenapa akun cent cocok untuk modal kecil ($100 = 10.000 USC)',
+  'Edukasi: lot ikut balance (autocompound), lot membesar saat akun tumbuh',
+  'Edukasi: kenapa profit sebaiknya ditarik secara berkala',
+  'Edukasi: pengaman equity, batas rugi yang Anda pilih sendiri',
   'Edukasi: kenapa data CPI, NFP dan FOMC bisa membuat emas bergerak kencang',
+  'Edukasi: spread melebar saat berita dan kenapa EA menunggu',
+  'Edukasi: sesi Asia, London dan New York, kapan emas paling aktif',
   'Edukasi: hubungan dolar AS dan harga emas',
-  'Kelebihan AI: AI memahami karakter tiap pasar, emas berbeda dengan Bitcoin',
-  'Edukasi: kenapa RSI terlalu tinggi bukan saat yang tepat untuk mengejar BUY',
-  'Psikologi trading: jangan balas dendam setelah loss',
-  'Panduan: cara membaca chart analisis Garuda AI (zona, level, skenario)',
-  'Edukasi: trading santai dengan risiko terukur, tanpa harus memantau chart seharian',
+  'Psikologi trading: jangan menaikkan lot karena panik atau serakah',
+  'Panduan: cara membaca laporan live di goldhuntergaruda.com/live',
+  'Panduan: cara membaca panel EA di chart (rata-rata, TP basket, layer berikutnya)',
+  'Edukasi: kenapa EA butuh VPS supaya berjalan 24 jam',
 ];
 function contentTopics(s) {
   const extra = String(s.content_topics || '').split(/\r?\n/).map((x) => x.trim()).filter(Boolean);
   return [...CONTENT_TOPICS, ...extra];
 }
-
-// Script writer for videos: a cheap OpenAI-compatible model (Qwen on Alibaba Cloud Model Studio, or DeepSeek) so Claude credit is kept for trading
+// Script writer for videos: a cheap OpenAI-compatible model (Qwen on Alibaba Cloud Model Studio, or DeepSeek)
 const aiName = (s) => /deepseek/i.test(s.qwen_base || '') ? 'DeepSeek' : 'Qwen';
 async function qwenJson(env, s, system, user) {
   const key = await decrypt(env, s.qwen_key_enc);
@@ -1020,61 +695,32 @@ async function qwenJson(env, s, system, user) {
   return JSON.parse(txt.replace(/^```(?:json)?\s*|\s*```$/g, ''));
 }
 
-async function contentStats(env, days) {
-  const t = now();
-  const { results } = await env.DB.prepare(`SELECT symbol, COALESCE(SUM(CASE WHEN pips > 0 THEN 1 ELSE 0 END),0) AS wins, COALESCE(SUM(CASE WHEN pips < 0 THEN 1 ELSE 0 END),0) AS losses,
-      COALESCE(SUM(pips),0) AS pips FROM signals WHERE decision IN ('BUY','SELL') AND ${DONE_SQL} AND closed_at > ? GROUP BY symbol`).bind(t - days * DAY).all();
-  const markets = await allSymbols(env);
-  const w = results.reduce((a, r) => a + r.wins, 0), l = results.reduce((a, r) => a + r.losses, 0);
-  return { wr: w + l ? Math.round((w / (w + l)) * 100) : null, tp: w, sl: l,
-    markets: results.map((r) => ({ symbol: r.symbol, pips: Math.round(r.pips * 10) / 10, wins: r.wins, losses: r.losses,
-      pip_label: (markets.find((m) => m.symbol === r.symbol) || {}).pip_label || 'pips' })) };
-}
-// One JSON call for a feature: 'claude' uses the Claude key (Sonnet, low effort), anything else the cheap model (DeepSeek / Qwen)
-async function aiJson(env, s, use, system, user) {
-  if (use !== 'claude') return qwenJson(env, s, system, user);
-  if (!s.ai_claude_key_enc) fail(400, 'API key Claude belum diatur');
-  const key = await decrypt(env, s.ai_claude_key_enc);
-  const r = await fetch('https://api.anthropic.com/v1/messages', { method: 'POST',
-    headers: { 'content-type': 'application/json', 'x-api-key': key, 'anthropic-version': '2023-06-01' },
-    body: JSON.stringify({ model: 'claude-sonnet-5-5', max_tokens: 3000, system, output_config: { effort: 'low' },
-      messages: [{ role: 'user', content: user }] }) });
-  const j = await r.json();
-  if (!r.ok) fail(502, 'Claude: ' + ((j.error && j.error.message) || r.status));
-  const txt = (j.content || []).filter((c) => c.type === 'text').map((c) => c.text).join('');
-  return JSON.parse(txt.slice(txt.indexOf('{'), txt.lastIndexOf('}') + 1));
-}
-async function contentScript(env, kind, lang, data) {
-  const s = await getSettings(env);
-  if (kind === 'edu') return eduScript(env, s, lang, data);
-  const L = lang === 'en' ? 'English' : 'Bahasa Indonesia (santai tapi sopan, gaya TikTok)';
-  const scenes = kind === 'weekly' ? 'hook, stats, cta' : 'hook, signal, result, stats, cta';
-  return aiJson(env, s, s.content_ai, `You write short vertical promo videos (TikTok / Reels / Shorts, about 25 seconds) for Garuda AI, an AI trading-signal service (analysis by Claude AI) at goldhuntergaruda.com. Write in ${L}.
-Rules: use only the facts in the data, never invent numbers. Never promise or imply guaranteed profit, never say "pasti untung", "passive income" or similar. Style: friendly, confident, short punchy sentences; the hook creates curiosity about the result; say briefly WHY the AI took the trade (from the reason in the data). Losses are shown honestly: for a stop loss say the loss was limited by the stop loss (risk about 1%) and that every signal is published, wins and losses. Hook max 8 words that make people stop scrolling, total narration about 55-70 words. The cta scene invites people to check every signal and result themselves at goldhuntergaruda.com.
-Return JSON only: {"hook": "max 8 words", "scenes": [{"id": "hook|signal|result|stats|cta", "say": "narration, numbers as digits, website spoken as goldhunter garuda dot com", "text": "subtitle, website written goldhuntergaruda.com"}], "caption": "2-4 short lines ending with goldhuntergaruda.com/sinyal and a one-line risk note", "hashtags": "5-8 hashtags"}`,
-    `Video type: ${kind}. Scenes in this order: ${scenes}.\nData:\n${JSON.stringify(data)}`);
-}
-// Educational / introduction video: 3 points about one topic, Garuda AI facts given so nothing is invented
+// Educational / introduction video: 3 points about one topic, GOLD HUNTER GARUDA facts given so nothing is invented
 async function eduScript(env, s, lang, data) {
   const L = lang === 'en' ? 'English' : 'Bahasa Indonesia (santai, jelas, gaya TikTok edukatif)';
-  return aiJson(env, s, s.content_ai, `You write short educational vertical videos (25-35 seconds, TikTok / Reels / Shorts) for Garuda AI (goldhuntergaruda.com), an AI trading-signal service for gold, Bitcoin and forex. Write in ${L}.
-Teach one topic clearly and correctly for beginners. Use only the Garuda AI facts given; never invent results or numbers. Never promise profit, never say "pasti untung" or "passive income". Mention Garuda AI naturally (mostly in the last point and the cta).
-Style: the hook must stop the scroll in 2 seconds (pick one: a sharp question, a common mistake, a surprising fact, or "stop doing X"). Speak like a friendly mentor, short punchy sentences, explain every term with an everyday analogy, give one concrete example (e.g. gold at 4,150 bouncing from support). Each point adds something new, no filler, no repeated words. Titles are catchy and readable in one glance.
-Return JSON only: {"hook": "max 8 words that stop the scroll", "scenes": [{"id": "hook", "say": "...", "text": "..."}, {"id": "point", "icon": "one emoji", "title": "2-5 words", "say": "1-2 short sentences", "text": "short subtitle"} x3, ${data.chart ? '{"id": "chart", "title": "2-5 words", "say": "1-2 sentences about how the AI chart shows zones / levels", "text": "..."}, ' : ''}{"id": "cta", "say": "invite to follow the channel and check goldhunter garuda dot com", "text": "..."}], "caption": "3-4 short lines ending with goldhuntergaruda.com and a one-line risk note", "hashtags": "5-8 hashtags"}
+  return qwenJson(env, s, `You write short educational vertical videos (25-35 seconds, TikTok / Reels / Shorts) for GOLD HUNTER GARUDA (goldhuntergaruda.com), an Expert Advisor (trading robot) for MetaTrader 5 / 4, mainly for gold. Write in ${L}.
+Teach one topic clearly and correctly for beginners. Use only the GOLD HUNTER GARUDA facts given; never invent results or numbers. Never promise profit, never say "pasti untung" or "passive income"; be honest that the EA has no stop loss per position and that drawdown can be deep. Mention GOLD HUNTER GARUDA naturally (mostly in the last point and the cta).
+Style: the hook must stop the scroll in 2 seconds (pick one: a sharp question, a common mistake, a surprising fact, or "stop doing X"). Speak like a friendly mentor, short punchy sentences, explain every term with an everyday analogy, give one concrete example (e.g. a gold basket of 5 layers closing together at its average price plus the target). Each point adds something new, no filler, no repeated words. Titles are catchy and readable in one glance.
+Return JSON only: {"hook": "max 8 words that stop the scroll", "scenes": [{"id": "hook", "say": "...", "text": "..."}, {"id": "point", "icon": "one emoji", "title": "2-5 words", "say": "1-2 short sentences", "text": "short subtitle"} x3, {"id": "cta", "say": "invite to follow the channel and check the live results at goldhunter garuda dot com", "text": "..."}], "caption": "3-4 short lines ending with goldhuntergaruda.com/live and a one-line risk note", "hashtags": "5-8 hashtags"}
 "say" is read by a voice (website as "goldhunter garuda dot com"), "text" is the subtitle (website written goldhuntergaruda.com). Total narration 70-90 words.`,
-    `Topic: ${data.topic}\nGaruda AI facts: ${JSON.stringify(data.facts)}`);
+    `Topic: ${data.topic}\nGOLD HUNTER GARUDA facts: ${JSON.stringify(data.facts)}`);
 }
-const GARUDA_FACTS = ['analysis by Claude AI combining technical (H4/H1/M15 chart, EMA 20/50/200, RSI, ATR, structure) and fundamental (news searched on the web, economic calendar, dollar strength)',
-  'markets: gold XAUUSD, Bitcoin BTCUSD, EURUSD, USDJPY', 'routine analysis every hour in active hours + momentum checked every 5 minutes and judged by the AI before any entry',
-  'every signal has entry, stop loss and take profit; reward:risk at least 1:1.5; about 1% risk per signal; max 1 position per market; stops for the day at 3% loss; no martingale',
-  'every signal and its result (wins and losses) is published at goldhuntergaruda.com/sinyal and on Telegram', 'the AI can answer WAIT when the setup is not clear'];
+const GARUDA_FACTS = ['GOLD HUNTER GARUDA is an Expert Advisor (trading robot) for MetaTrader 5 and MetaTrader 4, mainly for gold XAUUSD (it also runs on Bitcoin, EURUSD and USDJPY); a cent account suits small capital',
+  'marty basket (martingale / averaging): when price moves against a side the EA adds a layer, the lot grows x1.15 per layer and the step widens x1.1 after layer 4',
+  'all positions of one side close together at the average price plus the target (one shared take profit, swap included)',
+  'BARBAR mode: BUY and SELL series run at the same time, so one side keeps closing baskets while the other waits; otherwise an EMA trend filter picks the direction',
+  'DD reduction from 6 positions: the newest position in profit pays for the oldest losing one, which is closed only after the profit is received, so the basket shrinks without a loss',
+  'profit pocket: part of every closed profit is saved and later pays off the oldest losing position of a long basket',
+  'after a take profit the next series waits for a small pullback; high-impact news from the MT5 calendar can hold new series; orders wait while the spread is too wide',
+  'the first lot follows the balance (auto-compound); an optional equity guard closes everything at a loss limit the user chooses',
+  'there is no stop loss per position: a long one-way trend can make the floating loss and the drawdown deep, and the EA does not guarantee profit',
+  'every EA instance reports from a real account to goldhuntergaruda.com/live every minute, losses included; Telegram gets a picture report'];
 
 route('POST', '/builder/content/claim', 'builder', async ({ env }) => {
   const s = await getSettings(env);
   if (s.content_enabled !== '1') return json({ job: null });
-  // the script writer must be configured (Qwen by default): jobs simply wait until then, no Claude credit is used
-  if (s.content_ai !== 'claude' && !s.qwen_key_enc) return json({ job: null, waiting: 'API key AI konten belum diatur' });
-  if (s.content_ai === 'claude' && !s.ai_claude_key_enc) return json({ job: null, waiting: 'API key Claude belum diatur' });
+  // the script writer (cheap OpenAI-compatible model) must be configured: jobs simply wait until then
+  if (!s.qwen_key_enc) return json({ job: null, waiting: 'API key AI konten belum diatur' });
   // scheduled educational videos: at each time of day (WIB) in content_times, the next topic in the rotation
   if (s.content_edu === '1') {
     const dayStart = now() - ((now() + 7 * 3600) % DAY);
@@ -1090,47 +736,17 @@ route('POST', '/builder/content/claim', 'builder', async ({ env }) => {
       await putSetting(env, 'content_topic_idx', String(idx + 1));
     }
   }
-  // weekly recap: Saturday from 10:00 WIB, once per week
-  const wib = new Date((now() + 7 * 3600) * 1000);
-  if (s.content_weekly === '1' && wib.getUTCDay() === 6 && wib.getUTCHours() >= 10) {
-    const last = await env.DB.prepare("SELECT MAX(created_at) AS t FROM content_jobs WHERE kind='weekly'").first();
-    if (!last.t || now() - last.t > 5 * DAY) await queueContent(env, 'weekly', 0);
-  }
   await env.DB.prepare("UPDATE content_jobs SET status='queued' WHERE status='rendering' AND created_at < ?").bind(now() - 3600).run();
-  const job = await env.DB.prepare("SELECT * FROM content_jobs WHERE status='queued' ORDER BY id LIMIT 1").first();
+  const job = await env.DB.prepare("SELECT * FROM content_jobs WHERE status='queued' AND kind='edu' ORDER BY id LIMIT 1").first();
   if (!job) return json({ job: null });
   await env.DB.prepare("UPDATE content_jobs SET status='rendering' WHERE id=?").bind(job.id).run();
   try {
     const out = { id: job.id, kind: job.kind, lang: job.lang, voice: job.lang === 'en' ? 'en-US-AndrewNeural' : (s.content_voice || 'id-ID-ArdiNeural'),
-      send_telegram: s.content_tg === '1', send_social: Object.entries(socialReady(s)).filter(([k, ok]) => ok && s['content_' + k] === '1').map(([k]) => k) };
-    const st30 = await contentStats(env, 30);
-    const data = { stats_30_days: st30 };
-    if (job.kind === 'edu') {
-      delete data.stats_30_days;
-      data.topic = job.topic;
-      data.facts = GARUDA_FACTS;
-      const pic = await env.DB.prepare(`SELECT c.data FROM signal_charts c JOIN signals s ON s.id = c.signal_id WHERE c.kind='open' AND s.created_at > ? ORDER BY s.id DESC LIMIT 1`)
-        .bind(now() - 3 * DAY).first();
-      if (pic) { out.chart_open = pic.data; data.chart = true; }
-    } else if (job.kind === 'signal') {
-      const r = await env.DB.prepare('SELECT * FROM signals WHERE id=?').bind(job.ref_id).first();
-      if (!r || !['TP', 'SL', 'BE', 'CLOSE'].includes(r.status)) fail(404, 'Sinyal belum selesai');
-      const m = await getSymbol(env, r.symbol);
-      out.signal = { id: r.id, symbol: r.symbol, decision: r.decision, entry: r.price, sl: r.sl, tp: r.tp, close: r.close_price, pips: r.pips,
-        pip_label: m.pip_label, digits: m.digits, result: r.status, created_at: r.created_at, closed_at: r.closed_at, confidence: r.confidence };
-      const charts = await env.DB.prepare('SELECT kind, data FROM signal_charts WHERE signal_id=?').bind(r.id).all();
-      for (const c of charts.results) out['chart_' + c.kind] = c.data;
-      data.signal = { ...out.signal, reason: job.lang === 'en' ? (r.reason_en || r.reason) : r.reason, minutes_open: Math.round((r.closed_at - r.created_at) / 60) };
-    } else {
-      data.stats_7_days = await contentStats(env, 7);
-    }
-    const st = job.kind === 'weekly' ? data.stats_7_days : st30;
-    out.topic = job.topic || '';
-    out.stats = { title: job.kind === 'weekly' ? (job.lang === 'en' ? 'THIS WEEK' : 'HASIL MINGGU INI') : (job.lang === 'en' ? '30-DAY TRACK RECORD' : 'TRACK RECORD 30 HARI'),
-      wr30: st.wr, tp30: st.tp, sl30: st.sl, markets: st.markets.map((x) => ({ symbol: x.symbol, pips30: x.pips, pip_label: x.pip_label })) };
+      send_telegram: s.content_tg === '1', send_social: Object.entries(socialReady(s)).filter(([k, ok]) => ok && s['content_' + k] === '1').map(([k]) => k),
+      topic: job.topic || '' };
     let script = job.script ? JSON.parse(job.script) : null;
     if (!script) {
-      script = await contentScript(env, job.kind, job.lang, data);
+      script = await eduScript(env, s, job.lang, { topic: job.topic, facts: GARUDA_FACTS });
       const caption = `${script.caption}\n\n${script.hashtags}`;
       await env.DB.prepare('UPDATE content_jobs SET script=?, caption=? WHERE id=?').bind(JSON.stringify(script), caption, job.id).run();
     }
@@ -1168,7 +784,7 @@ route('POST', '/builder/content/:id/telegram', 'builder', async ({ request, env,
     fd.append('width', '1080');
     fd.append('height', '1920');
     if (job.duration) fd.append('duration', String(Math.round(job.duration)));
-    fd.append('video', new Blob([buf], { type: 'video/mp4' }), job.file_name || 'garuda-ai.mp4');
+    fd.append('video', new Blob([buf], { type: 'video/mp4' }), job.file_name || 'goldhunter-garuda.mp4');
     const r = await (await fetch(`https://api.telegram.org/bot${c.token}/sendVideo`, { method: 'POST', body: fd })).json().catch(() => ({}));
     if (r.ok) fileId = fileId || (r.result.video && r.result.video.file_id) || '';
     else errs.push(`${t.name || t.chat_id}: ${r.description || 'gagal'}`);
@@ -1359,16 +975,13 @@ route('GET', '/tiktok/callback', 'public', async ({ env, url, base }) => {
 });
 route('GET', '/admin/content', 'admin', async ({ env }) => {
   const s = await getSettings(env);
-  const { results } = await env.DB.prepare(`SELECT c.id, c.created_at, c.kind, c.ref_id, c.lang, c.status, c.caption, c.error, c.file_name, c.duration, c.size, c.rendered_at, c.topic,
-      c.tg_file_id <> '' AS on_telegram, c.social, s.symbol, s.decision, s.pips, s.status AS result FROM content_jobs c LEFT JOIN signals s ON s.id = c.ref_id AND c.kind = 'signal'
-      ORDER BY c.id DESC LIMIT 60`).all();
-  const { results: closed } = await env.DB.prepare(`SELECT id, symbol, decision, pips, status, closed_at FROM signals WHERE decision IN ('BUY','SELL') AND ${DONE_SQL}
-      ORDER BY id DESC LIMIT 20`).all();
+  const { results } = await env.DB.prepare(`SELECT id, created_at, kind, ref_id, lang, status, caption, error, file_name, duration, size, rendered_at, topic,
+      tg_file_id <> '' AS on_telegram, social FROM content_jobs ORDER BY id DESC LIMIT 60`).all();
   const bs = (() => { try { return JSON.parse(s.builder_seen || '{}'); } catch { return {}; } })();
-  return json({ jobs: results, closed, builder_seen: bs.at || 0,
-    settings: { content_enabled: s.content_enabled, content_on_signal: s.content_on_signal, content_weekly: s.content_weekly, content_lang: s.content_lang,
+  return json({ jobs: results, builder_seen: bs.at || 0,
+    settings: { content_enabled: s.content_enabled, content_lang: s.content_lang,
       content_voice: s.content_voice, content_tg: s.content_tg, content_edu: s.content_edu, content_times: s.content_times || '', content_topics: s.content_topics || '',
-      content_ai: s.content_ai || 'qwen', qwen_base: s.qwen_base || '', qwen_model: s.qwen_model || 'qwen-plus', qwen_key_set: !!s.qwen_key_enc },
+      qwen_base: s.qwen_base || '', qwen_model: s.qwen_model || 'qwen-plus', qwen_key_set: !!s.qwen_key_enc },
     topics: contentTopics(s), next_topic: (Number(s.content_topic_idx) || 0) % contentTopics(s).length });
 });
 // Test the Qwen connection with the saved key / model
@@ -1376,7 +989,7 @@ route('POST', '/admin/content/qwen-test', 'admin', async ({ env }) => {
   const s = await getSettings(env);
   if (!s.qwen_key_enc) fail(400, 'API key ' + aiName(s) + ' belum disimpan');
   const t0 = Date.now();
-  const j = await qwenJson(env, s, 'Return JSON only.', 'Return {"ok": true, "text": "Garuda AI siap"}');
+  const j = await qwenJson(env, s, 'Return JSON only.', 'Return {"ok": true, "text": "GOLD HUNTER GARUDA siap"}');
   return json({ ok: true, ms: Date.now() - t0, text: j.text || JSON.stringify(j), model: s.qwen_model || 'qwen-plus', provider: aiName(s) });
 });
 route('POST', '/admin/content', 'admin', async ({ request, env }) => {
@@ -1389,22 +1002,19 @@ route('POST', '/admin/content', 'admin', async ({ request, env }) => {
     if (!b.topic) await putSetting(env, 'content_topic_idx', String((Number(s.content_topic_idx) || 0) + 1));
     return json({ ok: true });
   }
-  if (b.kind === 'weekly') await env.DB.prepare('INSERT INTO content_jobs (created_at, kind, ref_id, lang) VALUES (?,?,0,?)').bind(now(), 'weekly', b.lang === 'en' ? 'en' : 'id').run();
-  else if (b.kind === 'signal' && int(b.ref_id)) await env.DB.prepare('INSERT INTO content_jobs (created_at, kind, ref_id, lang) VALUES (?,?,?,?)').bind(now(), 'signal', int(b.ref_id), b.lang === 'en' ? 'en' : 'id').run();
-  else if (b.retry && int(b.retry)) await env.DB.prepare("UPDATE content_jobs SET status='queued', error='' WHERE id=?").bind(int(b.retry)).run();
+  if (b.retry && int(b.retry)) await env.DB.prepare("UPDATE content_jobs SET status='queued', error='' WHERE id=?").bind(int(b.retry)).run();
   else fail(400, 'Permintaan tidak dikenal');
   return json({ ok: true });
 });
 route('PUT', '/admin/content/settings', 'admin', async ({ request, env }) => {
   const b = await readJson(request);
-  for (const k of ['content_enabled', 'content_on_signal', 'content_weekly', 'content_tg', 'content_edu']) if (b[k] !== undefined) await putSetting(env, k, b[k] ? '1' : '0');
+  for (const k of ['content_enabled', 'content_tg', 'content_edu']) if (b[k] !== undefined) await putSetting(env, k, b[k] ? '1' : '0');
   if (b.content_times !== undefined) {
     const t = String(b.content_times).split(/[,\s]+/).filter(Boolean);
     if (t.some((x) => !/^([01]?\d|2[0-3]):[0-5]\d$/.test(x))) fail(400, 'Jam harus format HH:MM, pisahkan koma (contoh 12:00, 19:00)');
     await putSetting(env, 'content_times', t.join(', '));
   }
   if (b.content_topics !== undefined) await putSetting(env, 'content_topics', str(b.content_topics, 6000));
-  if (b.content_ai) await putSetting(env, 'content_ai', b.content_ai === 'claude' ? 'claude' : 'qwen');
   if (b.qwen_model) await putSetting(env, 'qwen_model', str(b.qwen_model, 60));
   if (b.qwen_base) { if (!/^https:\/\/[a-z0-9.-]+(\/[\w/.-]*)?$/i.test(b.qwen_base)) fail(400, 'Alamat API tidak valid'); await putSetting(env, 'qwen_base', str(b.qwen_base, 200)); }
   if (typeof b.qwen_key === 'string' && b.qwen_key.trim()) await putSetting(env, 'qwen_key_enc', await encrypt(env, b.qwen_key.trim()));
@@ -1420,255 +1030,9 @@ route('GET', '/admin/content/:id/video', 'admin', async ({ env, params }) => {
   const f = await (await fetch(`https://api.telegram.org/bot${c.token}/getFile?file_id=${encodeURIComponent(job.tg_file_id)}`)).json();
   if (!f.ok) fail(502, 'Telegram: ' + (f.description || 'gagal'));
   const v = await fetch(`https://api.telegram.org/file/bot${c.token}/${f.result.file_path}`);
-  return new Response(v.body, { headers: { 'content-type': 'video/mp4', 'content-disposition': `attachment; filename="${job.file_name || 'garuda-ai.mp4'}"`, 'cache-control': 'private, no-store' } });
+  return new Response(v.body, { headers: { 'content-type': 'video/mp4', 'content-disposition': `attachment; filename="${job.file_name || 'goldhunter-garuda.mp4'}"`, 'cache-control': 'private, no-store' } });
 });
 
-// Chart picture of a signal. While the signal is still running only logged-in users may see it (it shows the levels).
-route('GET', '/signal/:id/chart', 'public', async ({ env, params, url, user }) => {
-  const id = int(params.id) || 0;
-  const kind = url.searchParams.get('kind') === 'close' ? 'close' : 'open';
-  if ((await getSettings(env)).signals_public === '0' && !(user && user.role === 'admin')) fail(404, 'Sinyal tidak tersedia');
-  const sig = await env.DB.prepare('SELECT status FROM signals WHERE id=?').bind(id).first();
-  if (!sig) fail(404, 'Sinyal tidak ditemukan');
-  if (isLive(sig.status) && !user) fail(403, 'Chart sinyal yang masih berjalan khusus member');
-  const c = await env.DB.prepare('SELECT mime, data FROM signal_charts WHERE signal_id=? AND kind=?').bind(id, kind).first();
-  if (!c) fail(404, 'Chart tidak ada');
-  return new Response(unb64(c.data), { headers: { 'content-type': c.mime, 'cache-control': isLive(sig.status) ? 'private, max-age=60' : 'public, max-age=86400' } });
-});
-
-// Public page /sinyal: BUY/SELL signals with their outcome. Entry/SL/TP of a still-running signal are shown to
-// logged-in users only, so the page works as a track record without giving the live trade away.
-route('GET', '/signal/feed', 'public', async ({ env, url, user }) => {
-  // Garuda AI signals are archived: the public web shows the EA live reports instead (setting signals_public = '0')
-  if ((await getSettings(env)).signals_public === '0' && !(user && user.role === 'admin'))
-    return json({ off: true, signals: [], markets: [], market_stats: [], last_by_market: [], stats30: { wins: 0, losses: 0 } });
-  const limit = Math.max(1, Math.min(int(url.searchParams.get('limit')) || 50, 200));
-  const sym = url.searchParams.get('symbol') ? canonSymbol(url.searchParams.get('symbol')) : '';
-  const w = sym ? ' AND symbol=?' : '';
-  const a = sym ? [sym] : [];
-  const t = now();
-  const [{ results }, last, stat, markets] = await Promise.all([
-    env.DB.prepare(`SELECT s.*, (SELECT COUNT(*) FROM signal_charts c WHERE c.signal_id=s.id AND c.kind='open') AS has_chart,
-        (SELECT COUNT(*) FROM signal_charts c WHERE c.signal_id=s.id AND c.kind='close') AS has_close_chart
-        FROM signals s WHERE decision IN ('BUY','SELL')${w} ORDER BY id DESC LIMIT ?`).bind(...a, limit).all(),
-    env.DB.prepare(`SELECT id, symbol, decision, created_at, reason, news, reason_en, news_en, trend_h4, trend_h1, confidence, price, status FROM signals WHERE 1=1${w} ORDER BY id DESC LIMIT 1`).bind(...a).first(),
-    env.DB.prepare(`SELECT COUNT(*) AS closed, COALESCE(SUM(CASE WHEN pips > 0 THEN 1 ELSE 0 END),0) AS wins,
-        COALESCE(SUM(CASE WHEN pips < 0 THEN 1 ELSE 0 END),0) AS losses, COALESCE(SUM(pips),0) AS pips
-        FROM signals WHERE decision IN ('BUY','SELL') AND ${DONE_SQL} AND closed_at > ?${w}`).bind(t - 30 * DAY, ...a).first(),
-    allSymbols(env),
-  ]);
-  // win rate per market: last 30 days and all time (closed BUY/SELL signals only)
-  const { results: perMk } = await env.DB.prepare(`SELECT symbol,
-      COUNT(*) AS closed, COALESCE(SUM(CASE WHEN pips > 0 THEN 1 ELSE 0 END),0) AS wins, COALESCE(SUM(CASE WHEN pips < 0 THEN 1 ELSE 0 END),0) AS losses,
-      COALESCE(SUM(pips),0) AS pips,
-      COALESCE(SUM(CASE WHEN closed_at > ? THEN 1 ELSE 0 END),0) AS closed30,
-      COALESCE(SUM(CASE WHEN closed_at > ? AND pips > 0 THEN 1 ELSE 0 END),0) AS wins30,
-      COALESCE(SUM(CASE WHEN closed_at > ? AND pips < 0 THEN 1 ELSE 0 END),0) AS losses30,
-      COALESCE(SUM(CASE WHEN closed_at > ? THEN pips ELSE 0 END),0) AS pips30,
-      MIN(created_at) AS since
-      FROM signals WHERE decision IN ('BUY','SELL') AND ${DONE_SQL} GROUP BY symbol`).bind(t - 30 * DAY, t - 30 * DAY, t - 30 * DAY, t - 30 * DAY).all();
-  const member = !!user;
-  const signals = results.map((r) => {
-    const v = { ...signalView(r), has_chart: !!r.has_chart, has_close_chart: !!r.has_close_chart };
-    if (isLive(r.status) && !member) { v.price = null; v.sl = null; v.tp = null; v.reason = ''; v.news = ''; v.reason_en = ''; v.news_en = ''; v.locked = true; v.has_chart = false; }
-    return v;
-  });
-  const openHidden = (x) => x.decision !== 'WAIT' && !member && isLive(x.status);
-  const lastView = last ? { ...last, reason: openHidden(last) ? '' : last.reason, reason_en: openHidden(last) ? '' : last.reason_en } : null;   // news is public context
-  // latest analysis of every market + its newest WAIT picture (last 24 h) for the live cards on /sinyal
-  const { results: lastRows } = await env.DB.prepare(`SELECT id, symbol, decision, created_at, valid_until, reason, news, reason_en, news_en, trend_h4, trend_h1, confidence, status,
-      order_type, price, sl, tp, sl_now, be_at, pend_fail, (SELECT COUNT(*) FROM signal_charts c WHERE c.signal_id = signals.id AND c.kind = 'open') AS has_chart FROM signals
-      WHERE id IN (SELECT MAX(id) FROM signals WHERE COALESCE(tag, '') <> 'SCALP' GROUP BY symbol)`).all();
-  const { results: waitPics } = await env.DB.prepare(`SELECT s.symbol, MAX(s.id) AS id, MAX(s.created_at) AS at FROM signals s
-      JOIN signal_charts c ON c.signal_id = s.id AND c.kind = 'open' WHERE s.decision = 'WAIT' AND s.created_at > ? GROUP BY s.symbol`).bind(t - DAY).all();
-  // a running position (then a waiting pending order) is shown instead of a later WAIT analysis of that market
-  const { results: liveRows } = await env.DB.prepare(`SELECT id, symbol, decision, created_at, valid_until, reason, news, reason_en, news_en, trend_h4, trend_h1, confidence, status,
-      order_type, price, sl, tp, sl_now, be_at, tag, (SELECT COUNT(*) FROM signal_charts c WHERE c.signal_id = signals.id AND c.kind = 'open') AS has_chart FROM signals
-      WHERE decision IN ('BUY','SELL') AND status IN ('open','pending') AND created_at > ? ORDER BY CASE status WHEN 'open' THEN 0 ELSE 1 END, id DESC`).bind(t - 3 * DAY).all();
-  const scalpBy = {};
-  for (const lr of liveRows) if (lr.tag === 'SCALP' && lr.status === 'open' && !scalpBy[lr.symbol]) scalpBy[lr.symbol] = lr;
-  for (const lr of liveRows.filter((x) => x.tag !== 'SCALP')) {
-    const k = lastRows.findIndex((x) => x.symbol === lr.symbol);
-    if (k >= 0 && lastRows[k].id !== lr.id && !(lastRows[k].status === 'open' && lr.status === 'pending')) lastRows[k] = lr;
-    else if (k < 0) lastRows.push(lr);
-  }
-  const enabledSyms = new Set(markets.filter((m) => m.enabled).map((m) => m.symbol));
-  const lastByMarket = lastRows.filter((x) => enabledSyms.has(x.symbol)).map((x) => {
-    const pic = waitPics.find((p) => p.symbol === x.symbol);
-    const hide = openHidden(x);
-    const sc = scalpBy[x.symbol];
-    const scalp = sc ? { id: sc.id, decision: sc.decision, created_at: sc.created_at, locked: !member, price: member ? sc.price : null, sl: member ? sc.sl : null,
-      tp: member ? sc.tp : null, sl_now: member ? sc.sl_now || 0 : 0, be_at: sc.be_at || 0 } : null;
-    return { ...x, reason: hide ? '' : x.reason, reason_en: hide ? '' : x.reason_en, price: hide ? null : x.price, sl: hide ? null : x.sl, tp: hide ? null : x.tp,
-      locked: hide, has_chart: !!x.has_chart, wait_chart: pic ? pic.id : 0, wait_chart_at: pic ? pic.at : 0, scalp };
-  });
-  return json({ ok: true, server_time: t, member, signals, last: lastView, last_by_market: lastByMarket, stats30: stat, symbol: sym, market_stats: perMk,
-    markets: markets.filter((m) => m.enabled).map((m) => { const v = symView(m); delete v.profile; return v; }) });
-});
-
-// One signal in full (shareable link /sinyal?s=<id>); a running signal's levels only for logged-in users
-route('GET', '/signal/detail/:id', 'public', async ({ env, params, user }) => {
-  const r = await env.DB.prepare(`SELECT s.*, (SELECT COUNT(*) FROM signal_charts c WHERE c.signal_id=s.id AND c.kind='open') AS has_chart,
-      (SELECT COUNT(*) FROM signal_charts c WHERE c.signal_id=s.id AND c.kind='close') AS has_close_chart FROM signals s WHERE s.id=?`).bind(int(params.id) || 0).first();
-  if (!r || r.decision === 'WAIT') fail(404, 'Sinyal tidak ditemukan');
-  const v = { ...signalView(r), has_chart: !!r.has_chart, has_close_chart: !!r.has_close_chart };
-  if (isLive(r.status) && !user) { v.price = null; v.sl = null; v.tp = null; v.reason = ''; v.news = ''; v.reason_en = ''; v.news_en = ''; v.locked = true; v.has_chart = false; }
-  const m = await getSymbol(env, r.symbol);
-  return json({ ok: true, member: !!user, signal: v, market: { symbol: m.symbol, digits: m.digits, pip: m.pip, pip_label: m.pip_label } });
-});
-
-// ---- Garuda AI master settings (Admin > Garuda AI), fetched by the MASTER EA ----
-const AI_MODELS = {
-  'claude-fable-5-1': { label: 'Claude Fable 5.1 (paling kuat)', in: 10, out: 50 },
-  'claude-opus-5-5': { label: 'Claude Opus 5.5', in: 4, out: 20 },
-  'claude-sonnet-5-5': { label: 'Claude Sonnet 5.5 (hemat)', in: 2, out: 10 },
-};
-const AI_EFFORTS = ['low', 'medium', 'high', 'xhigh', 'max'];
-const AI_KEYS = {               // key: [type, min, max]
-  ai_paused: ['bool'], ai_model: ['model'], ai_effort: ['effort'], ai_news: ['bool'], ai_news_effort: ['effort'],
-  ai_news_max: ['int', 1, 10], ai_research_every: ['int', 1, 12], ai_web_tool: ['tool'], ai_intermarket: ['bool'], ai_vision: ['bool'], ai_chart: ['bool'],
-  ai_session_start: ['int', 0, 23], ai_session_end: ['int', 1, 24], ai_friday_last: ['int', 0, 24],
-  ai_interval_min: ['int', 15, 240], ai_level_trigger: ['bool'], ai_momentum: ['bool'], ai_momentum_24h: ['bool'],
-  ai_min_conf: ['int', 0, 100], ai_min_rr: ['num', 0.5, 10], ai_min_sl: ['num', 0.5, 200], ai_max_sl: ['num', 1, 500], ai_valid_min: ['int', 1, 60],
-  ai_cost_cap: ['num', 0, 1000], ai_master_trade: ['bool'], ai_min_conf_pending: ['int', 0, 100], ai_min_ev: ['num', 0, 3],
-  ai_max_trades_day: ['int', 1, 50], ai_max_daily_loss: ['num', 0, 20], ai_news_mode: ['bool'],
-};
-function aiConfig(s) {
-  const out = {};
-  for (const [k, [t]] of Object.entries(AI_KEYS)) {
-    const v = s[k];
-    out[k.slice(3)] = t === 'bool' ? v === '1' : (t === 'int' || t === 'num') ? Number(v) : String(v ?? '');
-  }
-  const m = AI_MODELS[out.model] || AI_MODELS['claude-fable-5-1'];
-  out.price_in = m.in; out.price_out = m.out;
-  return out;
-}
-const signalFilters = (s) => ({ min_conf: Number(s.ai_min_conf || 65), min_rr: Number(s.ai_min_rr || 1.5), min_sl: Number(s.ai_min_sl || 3), max_sl: Number(s.ai_max_sl || 20),
-  min_conf_pending: Number(s.ai_min_conf_pending || 55), min_ev: Number(s.ai_min_ev ?? 0.5),
-  max_trades_day: Number(s.ai_max_trades_day || 10), max_daily_loss: Number(s.ai_max_daily_loss ?? 3) });
-
-// MASTER EA: all settings incl. the Claude API key (only with the master secret). Also records that the master is alive.
-route('GET', '/master/config', 'signal_pub', async ({ env, url }) => {
-  const sym = canonSymbol(url.searchParams.get('symbol') || 'XAUUSD');
-  // Claude cost of every master today (UTC), so the daily cap covers all markets together
-  const t0 = now() - (now() % DAY);
-  // independent reads in parallel: the masters give up after a few seconds when D1 round trips are slow
-  const [s, m, all, ct] = await Promise.all([
-    getSettings(env),
-    getSymbol(env, sym),
-    allSymbols(env),
-    env.DB.prepare('SELECT COALESCE(SUM(cost_usd),0) AS c FROM signals WHERE created_at > ?').bind(t0).first(),
-  ]);
-  const cfg = aiConfig(s);
-  cfg.claude_key = s.ai_claude_key_enc ? await decrypt(env, s.ai_claude_key_enc) : '';
-  cfg.market = symView(m);
-  cfg.research_role = sym === canonSymbol(s.ai_research_symbol || 'XAUUSD');
-  cfg.markets = all.filter((x) => x.enabled).map((x) => x.symbol);
-  cfg.cost_today = Number(ct.c) || 0;
-  cfg.tg_wait = s.telegram_wait === '1' || s.web_wait_chart !== '0';      // picture also shown on /sinyal
-  cfg.tg_wait_hours = Math.max(1, Math.min(Number(s.telegram_wait_hours) || 3, 24));
-  const info = `${str(url.searchParams.get('acct'), 30)} · ${str(url.searchParams.get('ver'), 12)} · ${str(url.searchParams.get('status'), 80)}`;
-  await Promise.all([
-    putSetting(env, 'ai_master_seen', String(now())),
-    putSetting(env, 'ai_master_info', `${sym} · ${info}`),
-    m.symbol && m.pip ? env.DB.prepare('UPDATE ai_symbols SET master_seen=?, master_info=? WHERE symbol=?').bind(now(), info, sym).run() : null,
-  ]);
-  return json({ ok: true, server_time: now(), config: cfg });
-});
-
-// Shared news research: one master researches once per hour, the other masters reuse it
-route('POST', '/master/research', 'signal_pub', async ({ request, env }) => {
-  const b = await readJson(request);
-  const text = str(b.text, 6000);
-  if (!text) fail(400, 'Riset kosong');
-  await env.DB.prepare('INSERT INTO ai_research (created_at, symbol, text, cost_usd) VALUES (?,?,?,?)')
-    .bind(now(), canonSymbol(b.symbol), text, Number(b.cost_usd) || 0).run();
-  await env.DB.prepare('DELETE FROM ai_research WHERE created_at < ?').bind(now() - 30 * DAY).run();
-  return json({ ok: true });
-});
-route('GET', '/master/research', 'signal_pub', async ({ env }) => {
-  const r = await env.DB.prepare('SELECT created_at, symbol, text FROM ai_research ORDER BY id DESC LIMIT 1').first();
-  const every = Number((await getSettings(env)).ai_research_every) || 1;
-  if (!r || now() - r.created_at > (every + 2) * 3600) return json({ ok: true, text: '', created_at: 0 });
-  return json({ ok: true, text: r.text, created_at: r.created_at, symbol: r.symbol });
-});
-
-route('GET', '/admin/ai', 'admin', async ({ env }) => {
-  const s = await getSettings(env);
-  const t = now();
-  const [recent, stat] = await Promise.all([
-    env.DB.prepare('SELECT id, symbol, created_at, decision, confidence, price, sl, tp, status, pips, cost_usd, model FROM signals ORDER BY id DESC LIMIT 25').all(),
-    env.DB.prepare(`SELECT COUNT(*) AS analyses, COALESCE(SUM(cost_usd),0) AS cost, COALESCE(SUM(CASE WHEN decision IN ('BUY','SELL') THEN 1 ELSE 0 END),0) AS trades,
-        COALESCE(SUM(CASE WHEN pips > 0 THEN 1 ELSE 0 END),0) AS wins, COALESCE(SUM(CASE WHEN pips < 0 THEN 1 ELSE 0 END),0) AS losses, COALESCE(SUM(pips),0) AS pips
-        FROM signals WHERE created_at > ?`).bind(t - 30 * DAY).first(),
-  ]);
-  const today = await env.DB.prepare('SELECT COUNT(*) AS n, COALESCE(SUM(cost_usd),0) AS cost FROM signals WHERE created_at > ?').bind(t - (t % DAY)).first();
-  const research = await env.DB.prepare('SELECT COUNT(*) AS n, COALESCE(SUM(cost_usd),0) AS cost FROM ai_research WHERE created_at > ?').bind(t - 30 * DAY).first();
-  const { results: perSym } = await env.DB.prepare(`SELECT symbol, COUNT(*) AS analyses, COALESCE(SUM(cost_usd),0) AS cost,
-      COALESCE(SUM(CASE WHEN pips > 0 THEN 1 ELSE 0 END),0) AS wins, COALESCE(SUM(CASE WHEN pips < 0 THEN 1 ELSE 0 END),0) AS losses, COALESCE(SUM(pips),0) AS pips
-      FROM signals WHERE created_at > ? GROUP BY symbol`).bind(t - 30 * DAY).all();
-  const markets = (await allSymbols(env)).map((m) => ({ ...symView(m), master_seen: m.master_seen || 0, master_info: m.master_info || '',
-    stats30: perSym.find((x) => x.symbol === m.symbol) || null }));
-  return json({
-    config: aiConfig(s), key_set: !!s.ai_claude_key_enc, models: AI_MODELS, efforts: AI_EFFORTS,
-    master: { seen: Number(s.ai_master_seen || 0), info: s.ai_master_info || '' },
-    keys: { master: env.SIGNAL_SECRET || '', client: env.SIGNAL_KEY || '' },
-    stats30: stat, today, recent: recent.results, markets, research30: research, research_symbol: s.ai_research_symbol || 'XAUUSD',
-    ea: garudaEa(s), ea_master: garudaEa(s, true),
-  });
-});
-
-route('PUT', '/admin/ai', 'admin', async ({ request, env }) => {
-  const b = await readJson(request);
-  for (const [k, [t, mn, mx]] of Object.entries(AI_KEYS)) {
-    const name = k.slice(3);
-    if (b[name] === undefined) continue;
-    let v = b[name];
-    if (t === 'bool') v = v === true || v === '1' || v === 'on' ? '1' : '0';
-    else if (k === 'ai_interval_min') { if (![15, 30, 60, 120, 240].includes(Number(v))) fail(400, 'Interval analisis harus 15, 30, 60, 120 atau 240 menit'); v = String(Number(v)); }
-    else if (t === 'int' || t === 'num') {
-      const n = Number(v);
-      if (!Number.isFinite(n) || n < mn || n > mx) fail(400, `Nilai ${name} harus ${mn} sampai ${mx}`);
-      v = String(t === 'int' ? Math.round(n) : n);
-    } else if (t === 'model') { if (!AI_MODELS[v]) fail(400, 'Model tidak dikenal'); }
-    else if (t === 'effort') { if (!AI_EFFORTS.includes(v)) fail(400, 'Tingkat ketelitian tidak dikenal'); }
-    else if (t === 'tool') { if (!['web_search_20260209', 'web_search_20250305'].includes(v)) fail(400, 'Versi tool pencarian tidak dikenal'); }
-    await putSetting(env, k, v);
-  }
-  if (Number(b.min_sl) >= Number(b.max_sl)) fail(400, 'SL minimal harus lebih kecil dari SL maksimal');
-  if (typeof b.claude_key === 'string' && b.claude_key.trim()) {
-    const key = b.claude_key.trim();
-    if (!/^sk-ant-[A-Za-z0-9_-]{20,}$/.test(key)) fail(400, 'Format API key Claude tidak valid (diawali sk-ant-)');
-    await putSetting(env, 'ai_claude_key_enc', await encrypt(env, key));
-  }
-  if (b.claude_key_clear) await env.DB.prepare(`DELETE FROM settings WHERE key='ai_claude_key_enc'`).run();
-  if (Array.isArray(b.markets)) {
-    for (const m of b.markets) {
-      const sym = canonSymbol(m.symbol);
-      const row = await env.DB.prepare('SELECT symbol FROM ai_symbols WHERE symbol=?').bind(sym).first();
-      if (!row) continue;
-      const st = int(m.session_start), en = int(m.session_end), mn = Number(m.min_sl), mx = Number(m.max_sl);
-      if (!(st >= 0 && st <= 23 && en >= 1 && en <= 24 && st < en)) fail(400, `${sym}: jam sesi tidak valid`);
-      if (!(mn > 0 && mx > mn && mx <= 100000)) fail(400, `${sym}: batas SL tidak valid (minimal harus lebih kecil dari maksimal)`);
-      await env.DB.prepare('UPDATE ai_symbols SET enabled=?, session_start=?, session_end=?, weekend=?, min_sl=?, max_sl=?, profile=?, scalp=? WHERE symbol=?')
-        .bind(m.enabled ? 1 : 0, st, en, m.weekend ? 1 : 0, mn, mx, str(m.profile, 2500), m.scalp ? 1 : 0, sym).run();
-    }
-  }
-  if (b.research_symbol) {
-    const sym = canonSymbol(b.research_symbol);
-    if (!(await env.DB.prepare('SELECT symbol FROM ai_symbols WHERE symbol=?').bind(sym).first())) fail(400, 'Pasar riset tidak dikenal');
-    await putSetting(env, 'ai_research_symbol', sym);
-  }
-  return json({ ok: true });
-});
-
-// Test the Claude connection with the saved key and model (a tiny request)
-// ---- EA Garuda AI file: uploaded by the builder on the admin's PC whenever the compiled .ex5 changes ----
-function garudaEa(s, master = false) {
-  let v = s[master ? 'garuda_ai_master_ea' : 'garuda_ai_ea'];
-  if (typeof v === 'string') { try { v = JSON.parse(v); } catch { v = null; } }
-  return v && v.file_id ? v : null;
-}
 // ======================= VPS AUTO-UPDATE (GOLD HUNTER GARUDA ex5 + presets -> every MT5 on the VPS) =======================
 // The builder on the owner's PC publishes a release when #property version changes (or the presets change);
 // the VPS agent (PowerShell) polls GET /vps/release with x-ea-key = ea_master_key, downloads, installs into every
@@ -1760,105 +1124,13 @@ route('GET', '/admin/vps/download', 'admin', async ({ env, url, base }) => {
   fail(404, 'File tidak dikenal');
 });
 
-route('POST', '/builder/garuda-ai', 'builder', async ({ request, env }) => {
-  const b = await readJson(request);
-  const data = String(b.data_b64 || '');
-  if (!data || data.length > 2.6e6) fail(400, 'File EA kosong atau terlalu besar');
-  const bytes = unb64(data);
-  const sha = await sha256(data);
-  const master = b.variant === 'master';
-  const kind = master ? 'garuda_ai_master' : 'garuda_ai';
-  const name = `GarudaAI_${master ? 'MASTER' : 'OneShot'}_v${str(b.version, 12).replace(/[^0-9A-Za-z.]/g, '') || 'x'}.ex5`;
-  const r = await env.DB.prepare('INSERT INTO files (user_id, kind, name, mime, size, data_b64, created_at) VALUES (NULL, ?, ?, ?, ?, ?, ?)')
-    .bind(kind, name, 'application/octet-stream', bytes.length, data, now()).run();
-  const id = r.meta.last_row_id;
-  await env.DB.prepare('DELETE FROM files WHERE kind=? AND id<>?').bind(kind, id).run();
-  await putSetting(env, master ? 'garuda_ai_master_ea' : 'garuda_ai_ea', JSON.stringify({ file_id: id, name, version: str(b.version, 12), size: bytes.length, sha, at: now() }));
-  return json({ ok: true, sha });
-});
-route('GET', '/admin/ai/ea', 'admin', async ({ env, url }) => {
-  const master = url.searchParams.get('v') === 'master';
-  const e = garudaEa(await getSettings(env), master);
-  const f = e ? await env.DB.prepare('SELECT name, data_b64 FROM files WHERE id=? AND kind=?').bind(e.file_id, master ? 'garuda_ai_master' : 'garuda_ai').first() : null;
-  if (!f) fail(404, 'File EA Garuda AI belum di-upload builder');
-  return new Response(unb64(f.data_b64), { headers: { 'content-type': 'application/octet-stream',
-    'content-disposition': `attachment; filename="${f.name}"`, 'cache-control': 'private, no-store' } });
-});
-// Master key as the file the MASTER EA reads (MT5 data folder > ..\Common\Files). Admin only, never stored
-route('GET', '/admin/ai/master-key', 'admin', async ({ env }) => {
-  if (!env.SIGNAL_SECRET) fail(400, 'Kunci master belum diatur di server');
-  return new Response(env.SIGNAL_SECRET, { headers: { 'content-type': 'text/plain; charset=us-ascii',
-    'content-disposition': 'attachment; filename="GarudaAI_master_key.txt"', 'cache-control': 'private, no-store' } });
-});
-// Ready-made input presets (.set, UTF-16 like MT5 saves them). MASTER carries the master key: keep it private
-route('GET', '/admin/ai/preset', 'admin', async ({ env, url }) => {
-  const master = url.searchParams.get('mode') === 'master';
-  const lines = [
-    `; Garuda AI preset ${master ? 'MASTER' : 'CLIENT'} - goldhuntergaruda.com`,
-    `InpMode=${master ? 1 : 0}`,
-    'InpServerUrl=https://goldhuntergaruda.com',
-    `InpSignalKey=${master ? '' : env.SIGNAL_KEY || ''}`,
-    `InpSignalSecret=${master ? env.SIGNAL_SECRET || '' : ''}`,
-    'InpUseServerFilters=true',
-    'InpRiskPct=1.0',
-  ];
-  const text = '\ufeff' + lines.join('\r\n') + '\r\n';
-  const buf = new Uint8Array(text.length * 2);
-  for (let i = 0; i < text.length; i++) { const c = text.charCodeAt(i); buf[i * 2] = c & 255; buf[i * 2 + 1] = c >> 8; }
-  return new Response(buf, { headers: { 'content-type': 'application/octet-stream',
-    'content-disposition': `attachment; filename="GarudaAI_${master ? 'MASTER' : 'CLIENT'}.set"`, 'cache-control': 'private, no-store' } });
-});
-
-route('POST', '/admin/ai/test', 'admin', async ({ env }) => {
-  const s = await getSettings(env);
-  if (!s.ai_claude_key_enc) fail(400, 'API key Claude belum disimpan');
-  const key = await decrypt(env, s.ai_claude_key_enc);
-  const model = AI_MODELS[s.ai_model] ? s.ai_model : 'claude-fable-5-1';
-  const t0 = Date.now();
-  let r, j;
-  try {
-    r = await fetch('https://api.anthropic.com/v1/messages', {
-      method: 'POST',
-      headers: { 'content-type': 'application/json', 'x-api-key': key, 'anthropic-version': '2023-06-01' },
-      body: JSON.stringify({ model, max_tokens: 2000, output_config: { effort: 'low' },
-        messages: [{ role: 'user', content: 'Tes koneksi. Balas hanya dengan: Garuda AI siap.' }] }),
-    });
-    j = await r.json();
-  } catch (e) { fail(502, 'Tidak bisa menghubungi Claude: ' + (e.message || e)); }
-  if (!r.ok) fail(400, `Claude menolak (HTTP ${r.status}): ${(j && j.error && j.error.message) || 'cek API key & saldo'}`);
-  const text = (j.content || []).filter((c) => c.type === 'text').map((c) => c.text).join(' ').trim();
-  const u = j.usage || {};
-  const m = AI_MODELS[model];
-  return json({ ok: true, model: j.model, ms: Date.now() - t0, text, cost_usd: ((u.input_tokens || 0) * m.in + (u.output_tokens || 0) * m.out) / 1e6 });
-});
-
-route('GET', '/signal/latest', 'signal_read', async ({ env, url }) => {
-  const symbol = canonSymbol(url.searchParams.get('symbol') || 'XAUUSD');      // old clients without ?symbol= follow gold
-  let row = await env.DB.prepare('SELECT * FROM signals WHERE symbol=? ORDER BY id DESC LIMIT 1').bind(symbol).first();
-  const t = now();
-  const m = await getSymbol(env, symbol);
-  if (m.scalp && row && row.tag !== 'SCALP' && !['BUY', 'SELL'].includes(row.decision)) {
-    const sc = await env.DB.prepare("SELECT * FROM signals WHERE symbol=? AND tag='SCALP' AND decision IN ('BUY','SELL') AND status='open' AND created_at > ? ORDER BY id DESC LIMIT 1")
-      .bind(symbol, t - 150).first();
-    if (sc) row = sc;
-  }
-  const st = await getSettings(env);
-  const f = signalFilters(st);
-  f.min_sl = m.min_sl * m.pip;                 // price units, like the client's own checks
-  f.max_sl = m.max_sl * m.pip;
-  const trackId = int(url.searchParams.get('track')) || 0;
-  const tr = trackId && trackId !== (row && row.id) ? await env.DB.prepare('SELECT * FROM signals WHERE id=? AND symbol=?').bind(trackId, symbol).first() : null;
-  return json({ ok: true, server_time: t, symbol, enabled: !!m.enabled, signal: signalView(row) || null, tracked: signalView(tr) || null,
-    next: Math.min(nextSignalCheck(t, row, st), trackId ? 60 : 3600, m.scalp ? 40 : 3600), filters: f, market: symView(m) });
-});
-
 // ---- Admin: Telegram bot ----
 route('POST', '/admin/telegram/test', 'admin', async ({ env }) => {
   const c = await tgConfig(env);
   if (!c.token) fail(400, 'Token bot belum disimpan');
   if (!c.targets.length) fail(400, 'Belum ada target aktif');
   const results = await Promise.all(c.targets.map(async (t) => {
-    const r = await tgSend(c.token, t.chat_id, '🦅 <b>GARUDA AI</b>\nTes koneksi berhasil. Sinyal BUY / SELL beserta chart dan hasilnya akan dikirim ke sini.');
+    const r = await tgSend(c.token, t.chat_id, '🦅 <b>GOLD HUNTER GARUDA</b>\nTes koneksi berhasil. Laporan live EA GOLD HUNTER GARUDA (gambar laporan, peringatan) dan video konten akan dikirim ke sini.');
     return { name: t.name, chat_id: t.chat_id, ok: r.ok, error: r.error || '' };
   }));
   return json({ ok: true, enabled: c.on, results });
@@ -1876,13 +1148,6 @@ route('POST', '/admin/telegram/chats', 'admin', async ({ env }) => {
     if (ch && ch.type !== 'private') chats[ch.id] = { chat_id: String(ch.id), title: ch.title || ch.username || String(ch.id), type: ch.type };
   }
   return json({ ok: true, bot: me.ok ? '@' + me.result.username : '', chats: Object.values(chats) });
-});
-
-route('GET', '/admin/signals', 'admin', async ({ env, url }) => {
-  const limit = Math.max(1, Math.min(int(url.searchParams.get('limit')) || 100, 500));
-  const { results } = await env.DB.prepare('SELECT * FROM signals ORDER BY id DESC LIMIT ?').bind(limit).all();
-  const cost = await env.DB.prepare('SELECT COUNT(*) AS n, COALESCE(SUM(cost_usd),0) AS usd FROM signals WHERE created_at > ?').bind(now() - 30 * DAY).first();
-  return json({ signals: results.map((r) => ({ ...signalView(r), cost_usd: r.cost_usd, tokens_in: r.tokens_in, tokens_out: r.tokens_out })), last30: cost });
 });
 
 async function boardRows(env, rate, { includeHidden = false } = {}) {
@@ -2498,7 +1763,7 @@ route('PUT', '/admin/products/:id', 'admin', async ({ request, env, params }) =>
 const EDITABLE_SETTINGS = ['durations', 'discounts', 'bank_list', 'admin_notify_email', 'whatsapp', 'pay_deadline_hours', 'reminder_days', 'mt4_enabled',
   'ib_brokers', 'auto_complete_ea', 'auto_process_paid', 'welcome_email_password', 'email_provider', 'email_from', 'email_from_name', 'vps_spec',
   'min_capital_usd', 'invoice_days_before', 'auto_rebuild_on_version', 'report_interval_min', 'board_enabled', 'board_name_mode', 'board_landing_top', 'board_stale_days', 'profit_est_enabled', 'profit_est_min_idr', 'profit_est_max_idr', 'profit_est_basis',
-  'telegram_enabled', 'telegram_targets', 'telegram_wait', 'telegram_wait_hours', 'usdt_enabled', 'usdt_address',
+  'telegram_enabled', 'telegram_targets', 'usdt_enabled', 'usdt_address',
   'ea_master_key', 'ea_report_hour', 'ea_report_every', 'ea_tg_min_layers', 'ea_offline_min', 'ea_tg_enabled', 'ea_tg_events'];
 route('GET', '/admin/settings', 'admin', async ({ env }) => {
   const s = await getSettings(env);
@@ -2531,7 +1796,6 @@ route('PUT', '/admin/settings', 'admin', async ({ request, env }) => {
     }
     if (k === 'usdt_address' && v && !TRC20_RE.test(str(v, 60))) fail(400, 'Alamat USDT TRC20 tidak valid (34 karakter, diawali huruf T)');
     if (k === 'usdt_enabled') v = v === '1' || v === true ? '1' : '0';
-    if (k === 'telegram_wait_hours') { const n = Math.round(Number(v)); if (!(n >= 1 && n <= 24)) fail(400, 'Jeda analisis TUNGGU harus 1 sampai 24 jam'); v = String(n); }
     if (k === 'ib_brokers') v = v.map((x) => ({ name: str(x.name, 40), link: str(x.link, 300), active: !!x.active })).filter((x) => x.name);
     if (k === 'email_provider' && !['', 'log', 'resend', 'brevo'].includes(v)) fail(400, 'Penyedia email tidak dikenal');
     if (k === 'email_from' && v && !isEmail(str(v, 120))) fail(400, 'Alamat pengirim email tidak valid');
@@ -2595,10 +1859,8 @@ route('POST', '/builder/claim', 'builder', async ({ request, env, base, waitUnti
     await putSetting(env, 'daily_last_run', JSON.stringify({ at: now(), running: true }));
     waitUntil(runDaily(env, base).catch((e) => console.error('daily', e)));
   }
-  const ea = garudaEa(s), eam = garudaEa(s, true);
   const rel = vpsRelease(s);
   return json({ job: await claimBuild(env, str(b.builder_id, 60) || 'builder', b.versions && typeof b.versions === 'object' ? b.versions : {}),
-    garuda_ai_sha: ea ? ea.sha : '', garuda_ai_master_sha: eam ? eam.sha : '',
     vps_release: rel ? { version: rel.version, sha: rel.sha, sha_ex5: rel.sha_ex5 || '', sha_presets: rel.sha_presets || '' } : { version: '', sha: '', sha_ex5: '', sha_presets: '' } });
 });
 route('POST', '/builder/result', 'builder', async ({ request, env, base }) => {

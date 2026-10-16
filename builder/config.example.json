@@ -12,9 +12,5 @@
     "metaeditor": "C:/Program Files (x86)/MetaTrader 4 EXNESS/metaeditor.exe",
     "mql_dir": ""
   },
-  "report_base": "https://goldhuntergaruda.com",
-  "garuda_ai": {
-    "ex5": "C:/Users/User/Documents/Robot Trading/backup/arsip/GarudaAI OneShot/GarudaAI_OneShot.ex5",
-    "mq5": "C:/Users/User/Documents/Robot Trading/backup/arsip/GarudaAI OneShot/GarudaAI_OneShot.mq5"
-  }
+  "report_base": "https://goldhuntergaruda.com"
 }

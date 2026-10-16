@@ -1,32 +1,28 @@
 """
-Garuda AI promo video: vertical 1080x1920 (TikTok / Reels / Shorts) built from real signal data.
+GOLD HUNTER GARUDA promo video: vertical 1080x1920 (TikTok / Reels / Shorts) about the EA.
 
 render_video(job, out_path) -> seconds
   job = {
-    'kind': 'signal' | 'weekly' | 'edu',
-    'topic': 'Edukasi: ...' (kind edu; the part before ':' becomes the category chip),
+    'kind': 'edu',
+    'topic': 'Edukasi: ...' (the part before ':' becomes the category chip),
     'lang': 'id' | 'en',
     'voice': 'id-ID-ArdiNeural',
-    'script': {'scenes': [{'id': 'hook' | 'signal' | 'result' | 'stats' | 'point' | 'chart' | 'cta', 'say': '...', 'text': '...', 'title': '...', 'icon': '...'}], 'hook': '...'},
-    'signal': {...} (kind signal: symbol, name, decision, entry, sl, tp, close, pips, pip_label, digits, result, created_at, closed_at, confidence),
-    'chart_open': bytes | None, 'chart_close': bytes | None,
-    'stats': {'wr30': 75, 'tp30': 6, 'sl30': 2, 'markets': [{'symbol': 'XAUUSD', 'pips30': 505, 'pip_label': 'pips', 'wins30': 4, 'losses30': 1}]},
+    'script': {'scenes': [{'id': 'hook' | 'point' | 'cta', 'say': '...', 'text': '...', 'title': '...', 'icon': '...'}], 'hook': '...'},
   }
-Frames are drawn with Pillow and piped to ffmpeg (bundled by imageio-ffmpeg); narration from Microsoft Edge TTS.
+Scenes with any other id are skipped. Frames are drawn with Pillow and piped to ffmpeg (bundled by imageio-ffmpeg);
+narration from Microsoft Edge TTS.
 """
-import asyncio, io, os, subprocess, tempfile, time
+import asyncio, os, subprocess, tempfile, time
 
-from PIL import Image, ImageDraw, ImageFilter, ImageFont
+from PIL import Image, ImageDraw, ImageFont
 
 W, H, FPS = 1080, 1920, 30
 BG = (11, 14, 20)
 CARD = (19, 24, 33)
-LINE = (40, 48, 62)
 TEXT = (236, 238, 242)
 MUTED = (146, 154, 170)
 GOLD = (245, 197, 66)
 UP = (38, 194, 129)
-DN = (239, 83, 80)
 HERE = os.path.dirname(os.path.abspath(__file__))
 LOGO = os.path.join(HERE, '..', 'public', 'assets', 'brand', 'goldhunter-garuda-logo-256.png')
 FONT_DIR = os.path.join(os.environ.get('WINDIR', r'C:\Windows'), 'Fonts')
@@ -78,15 +74,6 @@ def ease(t):
     return 1 - (1 - t) ** 3
 
 
-def fmt(v, d):
-    return f'{float(v):,.{d}f}'
-
-
-def pips_txt(p, label, lang):
-    lab = T(lang, label, 'points') if label == 'poin' else label
-    return f"{'+' if p > 0 else ''}{p:,.1f} {lab}" if label == 'pips' else f"{'+' if p > 0 else ''}{round(p):,} {lab}"
-
-
 # ---------------------------------------------------------------- static background with header / footer
 def background(lang):
     im = Image.new('RGB', (W, H), BG)
@@ -99,8 +86,8 @@ def background(lang):
         im.paste(logo, (64, 70), logo)
     except OSError:
         pass
-    d.text((186, 78), 'GARUDA AI', font=F('black', 58), fill=GOLD)
-    d.text((190, 148), T(lang, 'Sinyal trading berbasis AI', 'AI-powered trading signals'), font=F('semi', 30), fill=MUTED)
+    d.text((186, 78), 'GOLD HUNTER GARUDA', font=F('black', 58), fill=GOLD)
+    d.text((190, 148), T(lang, 'Expert Advisor MT5 / MT4 · laporan live', 'Expert Advisor for MT5 / MT4 · live reports'), font=F('semi', 30), fill=MUTED)
     d.rectangle([64, 214, W - 64, 217], fill=GOLD)
     d.text((W / 2, H - 70), 'goldhuntergaruda.com', font=F('bold', 34), fill=GOLD, anchor='mm')
     return im
@@ -120,121 +107,23 @@ def subtitle(im, text):
         d.text((W / 2, y0 + 18 + i * lh + lh / 2), ln, font=f, fill=(255, 255, 255), anchor='mm')
 
 
-def paste_chart(im, png, y, t, dur, width=980):
-    if not png:
-        return y
-    if not hasattr(paste_chart, 'cache'):
-        paste_chart.cache = {}
-    key = id(png)
-    if key not in paste_chart.cache:
-        paste_chart.cache[key] = Image.open(io.BytesIO(png)).convert('RGB')
-    src = paste_chart.cache[key]
-    if src.size == (1600, 900):                         # Garuda picture: keep the chart area, the side panel is too small on a phone
-        src = src.crop((0, 92, 1112, 842))
-    z = 1.0 + 0.07 * (t / max(dur, 0.1))                 # slow zoom in
-    cw, ch = src.size
-    vw, vh = cw / z, ch / z
-    box = (int((cw - vw) / 2), int((ch - vh) / 2), int((cw + vw) / 2), int((ch + vh) / 2))
-    h = int(width * ch / cw)
-    crop = src.crop(box).resize((width, h), Image.LANCZOS).filter(ImageFilter.UnsharpMask(radius=1.2, percent=60, threshold=2))
-    x = (W - width) // 2
-    d = ImageDraw.Draw(im)
-    d.rounded_rectangle([x - 6, y - 6, x + width + 6, y + h + 6], radius=18, fill=LINE)
-    im.paste(crop, (x, y))
-    return y + h
-
-
 # ---------------------------------------------------------------- scenes: draw(im, t, dur)
 def scene_hook(job):
-    lang, s = job['lang'], job.get('signal') or {}
+    lang = job['lang']
     hook = job['script'].get('hook') or ''
     cat = category(job)
 
     def draw(im, t, dur):
         d = ImageDraw.Draw(im)
         k = ease(t / 0.5)
-        if s:
-            side = s['decision']
-            col = UP if side == 'BUY' else DN
-            chip = f"{'▲' if side == 'BUY' else '▼'} {side} {s['symbol']}"
-            f = F('black', 44)
-            tw = d.textlength(chip, font=f)
-            d.rounded_rectangle([W / 2 - tw / 2 - 34, 430, W / 2 + tw / 2 + 34, 510], radius=40, fill=col)
-            d.text((W / 2, 470), chip, font=f, fill=(255, 255, 255), anchor='mm')
-        elif cat:
+        if cat:
             f = F('black', 44)
             tw = d.textlength(cat, font=f)
             d.rounded_rectangle([W / 2 - tw / 2 - 34, 430, W / 2 + tw / 2 + 34, 510], radius=40, fill=GOLD)
             d.text((W / 2, 470), cat, font=f, fill=(26, 18, 0), anchor='mm')
         y = 600 + (1 - k) * 60
         text_block(d, hook, F('black', 92), 70, y, W - 140, TEXT if k > 0.2 else MUTED, max_lines=5)
-        d.text((W / 2, 1300), T(lang, 'Dianalisis oleh Claude AI', 'Analysed by Claude AI'), font=F('semi', 36), fill=GOLD, anchor='mm')
-    return draw
-
-
-def scene_signal(job):
-    lang, s = job['lang'], job['signal']
-    col = UP if s['decision'] == 'BUY' else DN
-    dg = int(s.get('digits') or 2)
-
-    def draw(im, t, dur):
-        d = ImageDraw.Draw(im)
-        d.text((W / 2, 300), T(lang, 'SINYAL DARI AI', 'THE AI SIGNAL'), font=F('bold', 38), fill=MUTED, anchor='mm')
-        d.text((W / 2, 362), f"{s['decision']} {s['symbol']}", font=F('black', 70), fill=col, anchor='mm')
-        yb = paste_chart(im, job.get('chart_open'), 440, t, dur)
-        y = (yb if job.get('chart_open') else 440) + 40
-        rows = [('Entry', fmt(s['entry'], dg), TEXT), ('Stop loss', fmt(s['sl'], dg), DN), ('Take profit', fmt(s['tp'], dg), UP)]
-        d.rounded_rectangle([90, y, W - 90, y + 300], radius=24, fill=CARD)
-        for i, (k_, v, c) in enumerate(rows):
-            if t < 0.25 + i * 0.25:
-                continue
-            yy = y + 52 + i * 92
-            d.text((130, yy), k_, font=F('semi', 40), fill=MUTED, anchor='lm')
-            d.text((W - 130, yy), v, font=F('black', 54), fill=c, anchor='rm')
-    return draw
-
-
-def scene_result(job):
-    lang, s = job['lang'], job['signal']
-    res = s.get('result') or ('TP' if s['pips'] > 0 else 'SL')
-    col = UP if s['pips'] > 0 else (DN if s['pips'] < 0 else GOLD)
-    head = {'TP': T(lang, 'TARGET TERCAPAI', 'TARGET HIT'), 'SL': T(lang, 'STOP LOSS', 'STOP LOSS'), 'BE': 'BREAK EVEN'}.get(res, T(lang, 'DITUTUP', 'CLOSED'))
-    dg = int(s.get('digits') or 2)
-    mins = max(0, int((s.get('closed_at') or 0) - (s.get('created_at') or 0)) // 60)
-    dur_txt = (f'{mins // 60}j {mins % 60}m' if mins >= 60 else f'{mins}m') if lang != 'en' else (f'{mins // 60}h {mins % 60}m' if mins >= 60 else f'{mins}m')
-
-    def draw(im, t, dur):
-        d = ImageDraw.Draw(im)
-        d.text((W / 2, 300), T(lang, 'HASILNYA', 'THE RESULT'), font=F('bold', 38), fill=MUTED, anchor='mm')
-        d.text((W / 2, 362), head, font=F('black', 70), fill=col, anchor='mm')
-        yb = paste_chart(im, job.get('chart_close') or job.get('chart_open'), 440, t, dur)
-        y = (yb if (job.get('chart_close') or job.get('chart_open')) else 440) + 40
-        d.rounded_rectangle([90, y, W - 90, y + 300], radius=24, fill=CARD, outline=col, width=4)
-        v = s['pips'] * ease(t / 0.9)
-        d.text((W / 2, y + 120), pips_txt(v, s.get('pip_label') or 'pips', lang), font=F('black', 104), fill=col, anchor='mm')
-        d.text((W / 2, y + 232), f"{fmt(s['entry'], dg)} → {fmt(s['close'], dg)}  ·  {dur_txt}", font=F('semi', 38), fill=MUTED, anchor='mm')
-    return draw
-
-
-def scene_stats(job):
-    lang, st = job['lang'], job.get('stats') or {}
-
-    def draw(im, t, dur):
-        d = ImageDraw.Draw(im)
-        d.text((W / 2, 330), st.get('title') or T(lang, 'TRACK RECORD 30 HARI', '30-DAY TRACK RECORD'), font=F('black', 56), fill=GOLD, anchor='mm')
-        wr = st.get('wr30')
-        d.text((W / 2, 560), f"{round((wr or 0) * ease(t / 0.9))}%" if wr is not None else '-', font=F('black', 220), fill=TEXT, anchor='mm')
-        d.text((W / 2, 720), T(lang, 'win rate', 'win rate') + f"  ·  {st.get('tp30', 0)} TP / {st.get('sl30', 0)} SL", font=F('bold', 44), fill=MUTED, anchor='mm')
-        y = 820
-        for m in (st.get('markets') or [])[:4]:
-            if t < 0.4:
-                break
-            p = float(m.get('pips30') or 0)
-            d.rounded_rectangle([110, y, W - 110, y + 110], radius=22, fill=CARD)
-            d.text((150, y + 55), m['symbol'], font=F('black', 46), fill=TEXT, anchor='lm')
-            d.text((W - 150, y + 55), pips_txt(p, m.get('pip_label') or 'pips', lang), font=F('black', 46), fill=UP if p > 0 else (DN if p < 0 else TEXT), anchor='rm')
-            y += 130
-        d.text((W / 2, y + 40), T(lang, 'Semua sinyal tercatat, termasuk yang rugi', 'Every signal is recorded, losses included'), font=F('semi', 36), fill=MUTED, anchor='mm')
+        d.text((W / 2, 1300), T(lang, 'Hasil live dari akun nyata', 'Live results from real accounts'), font=F('semi', 36), fill=GOLD, anchor='mm')
     return draw
 
 
@@ -275,22 +164,9 @@ def scene_point(job, sc=None):
     return draw
 
 
-def scene_chart(job, sc=None):
-    """A real analysis picture made by the master EA (zones, key levels, scenario)."""
-    lang = job['lang']
-
-    def draw(im, t, dur):
-        d = ImageDraw.Draw(im)
-        d.text((W / 2, 300), T(lang, 'CONTOH ANALISIS AI', 'A REAL AI ANALYSIS'), font=F('bold', 38), fill=MUTED, anchor='mm')
-        text_block(d, (sc or {}).get('title') or '', F('black', 64), 70, 340, W - 140, GOLD, max_lines=2)
-        paste_chart(im, job.get('chart_open'), 560, t, dur)
-    return draw
-
-
 def scene_cta(job, sc=None):
     lang = job['lang']
-    head = T(lang, 'Follow untuk edukasi & sinyal AI tiap hari', 'Follow for daily lessons & AI signals') if job.get('kind') == 'edu' \
-        else T(lang, 'Cek semua sinyal dan hasilnya sendiri', 'Check every signal and its result yourself')
+    head = T(lang, 'Follow untuk edukasi & laporan live EA tiap hari', 'Follow for daily lessons & live EA reports')
 
     def draw(im, t, dur):
         d = ImageDraw.Draw(im)
@@ -299,7 +175,7 @@ def scene_cta(job, sc=None):
         pw = 860 * (0.9 + 0.1 * k)
         d.rounded_rectangle([W / 2 - pw / 2, 900, W / 2 + pw / 2, 1030], radius=65, fill=GOLD)
         d.text((W / 2, 965), 'goldhuntergaruda.com', font=F('black', 60), fill=(26, 18, 0), anchor='mm')
-        d.text((W / 2, 1105), T(lang, 'Daftar gratis · notifikasi Telegram', 'Free sign-up · Telegram alerts'), font=F('semi', 40), fill=MUTED, anchor='mm')
+        d.text((W / 2, 1105), T(lang, 'Daftar gratis · laporan di Telegram', 'Free sign-up · reports on Telegram'), font=F('semi', 40), fill=MUTED, anchor='mm')
         d.rounded_rectangle([110, 1200, W - 110, 1380], radius=22, fill=(40, 18, 20))
         text_block(d, T(lang, 'Bukan saran investasi. Trading berisiko tinggi dan bisa rugi; hasil masa lalu tidak menjamin hasil berikutnya.',
                         'Not investment advice. Trading is high risk and can lose money; past results do not guarantee future results.'),
@@ -307,8 +183,8 @@ def scene_cta(job, sc=None):
     return draw
 
 
-SCENES = {'hook': scene_hook, 'signal': scene_signal, 'result': scene_result, 'stats': scene_stats, 'cta': scene_cta, 'point': scene_point, 'chart': scene_chart}
-WITH_SCENE = ('point', 'chart', 'cta')                    # these builders also get their own scene dict
+SCENES = {'hook': scene_hook, 'cta': scene_cta, 'point': scene_point}
+WITH_SCENE = ('point', 'cta')                             # these builders also get their own scene dict
 
 
 # ---------------------------------------------------------------- narration
@@ -330,8 +206,7 @@ def render_video(job, out_path):
     import imageio_ffmpeg
     ff = imageio_ffmpeg.get_ffmpeg_exe()
     voice = job.get('voice') or ('en-US-AndrewNeural' if job.get('lang') == 'en' else 'id-ID-ArdiNeural')
-    scenes = [sc for sc in job['script']['scenes'] if sc.get('id') in SCENES and (sc['id'] not in ('signal', 'result') or job.get('signal'))
-              and (sc['id'] != 'chart' or job.get('chart_open'))]
+    scenes = [sc for sc in job['script']['scenes'] if sc.get('id') in SCENES]
     tmp = tempfile.mkdtemp(prefix='garuda_video_')
     plan = []
     for i, sc in enumerate(scenes):
@@ -391,35 +266,13 @@ def render_video(job, out_path):
 
 if __name__ == '__main__':                               # quick local test with sample data
     import sys
-    if len(sys.argv) > 1 and sys.argv[1] == 'edu':
-        job = {'kind': 'edu', 'lang': 'id', 'topic': 'Edukasi: apa itu stop loss',
-               'chart_open': open(sys.argv[2], 'rb').read() if len(sys.argv) > 2 and sys.argv[2] != '-' else None,
-               'script': {'hook': 'Kenapa akun trader cepat habis?', 'scenes': [
-                   {'id': 'hook', 'say': 'Kenapa banyak akun trader cepat habis? Jawabannya sering cuma satu.'},
-                   {'id': 'point', 'icon': '🛑', 'title': 'Stop loss = batas rugi', 'say': 'Stop loss adalah harga di mana posisi otomatis ditutup kalau analisis salah.'},
-                   {'id': 'point', 'icon': '📏', 'title': 'Risiko 1% per trade', 'say': 'Dengan risiko satu persen, sepuluh kali salah pun akun masih aman.'},
-                   {'id': 'point', 'icon': '🤖', 'title': 'Selalu ada di sinyal AI', 'say': 'Setiap sinyal Garuda AI selalu punya stop loss dan target yang jelas.'},
-                   {'id': 'chart', 'title': 'Zona & level dari AI', 'say': 'Di chart ini, AI menandai zona dan level kunci sebelum memberi keputusan.'},
-                   {'id': 'cta', 'say': 'Follow channel ini dan cek goldhunter garuda dot com.', 'text': 'Follow & cek goldhuntergaruda.com'}]}}
-        t0 = time.time()
-        out = sys.argv[3] if len(sys.argv) > 3 else 'test_edu.mp4'
-        print(f'OK {out}: {render_video(job, out):.1f} s video, render {time.time() - t0:.0f} s')
-        sys.exit(0)
-    job = {
-        'kind': 'signal', 'lang': sys.argv[1] if len(sys.argv) > 1 else 'id',
-        'signal': {'symbol': 'XAUUSD', 'decision': 'SELL', 'entry': 4140.31, 'sl': 4152.31, 'tp': 4122.31, 'close': 4122.31, 'pips': 180.0,
-                   'pip_label': 'pips', 'digits': 2, 'result': 'TP', 'created_at': time.time() - 8100, 'closed_at': time.time(), 'confidence': 72},
-        'stats': {'wr30': 75, 'tp30': 6, 'sl30': 2, 'markets': [{'symbol': 'XAUUSD', 'pips30': 505, 'pip_label': 'pips'}, {'symbol': 'BTCUSD', 'pips30': 1100, 'pip_label': 'poin'}]},
-        'script': {'hook': 'AI kami bilang SELL emas. Hasilnya?', 'scenes': [
-            {'id': 'hook', 'say': 'AI kami bilang SELL emas. Hasilnya?'},
-            {'id': 'signal', 'say': 'Claude membaca chart dan berita, lalu memberi sinyal SELL di 4140 dengan stop loss dan target yang jelas.'},
-            {'id': 'result', 'say': 'Dua jam kemudian target tercapai. Plus 180 pips.'},
-            {'id': 'stats', 'say': 'Win rate tiga puluh hari tujuh puluh lima persen, dan semua sinyal tercatat, termasuk yang rugi.'},
-            {'id': 'cta', 'say': 'Cek sendiri semua sinyal dan hasilnya di goldhunter garuda dot com.'}]},
-        'chart_open': open(sys.argv[2], 'rb').read() if len(sys.argv) > 2 else None,
-        'chart_close': open(sys.argv[3], 'rb').read() if len(sys.argv) > 3 else None,
-    }
-    out = sys.argv[4] if len(sys.argv) > 4 else 'test_video.mp4'
+    job = {'kind': 'edu', 'lang': sys.argv[1] if len(sys.argv) > 1 else 'id', 'topic': 'Cara kerja: apa itu basket dan TP bersama',
+           'script': {'hook': 'Kenapa EA ini menutup banyak posisi sekaligus?', 'scenes': [
+               {'id': 'hook', 'say': 'Kenapa EA ini menutup banyak posisi sekaligus? Ini rahasianya.'},
+               {'id': 'point', 'icon': '🪜', 'title': 'Basket = kumpulan layer', 'say': 'Saat harga melawan, EA menambah layer. Semua layer satu sisi disebut basket.'},
+               {'id': 'point', 'icon': '🎯', 'title': 'TP dari harga rata-rata', 'say': 'Semua posisi ditutup bersamaan di harga rata-rata ditambah target.'},
+               {'id': 'point', 'icon': '⚠️', 'title': 'Jujur soal risiko', 'say': 'Tidak ada stop loss per posisi, jadi tren panjang bisa membuat floating dalam.'},
+               {'id': 'cta', 'say': 'Lihat hasil live-nya di goldhunter garuda dot com.', 'text': 'Cek goldhuntergaruda.com/live'}]}}
+    out = sys.argv[2] if len(sys.argv) > 2 else 'test_edu.mp4'
     t0 = time.time()
-    secs = render_video(job, out)
-    print(f'OK {out}: {secs:.1f} s video, render {time.time() - t0:.0f} s')
+    print(f'OK {out}: {render_video(job, out):.1f} s video, render {time.time() - t0:.0f} s')

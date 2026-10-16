@@ -1,4 +1,4 @@
-// GOLD HUNTER GARUDA: one picture with the trading result of every setup (Telegram report).
+// GOLD HUNTER GARUDA: one picture with the trading result of every EA instance (Telegram report), one row per chart.
 // Closed profit only (today, since start, % of capital) - floating is deliberately left out.
 // SVG -> PNG with the vendored resvg WebAssembly build and Plus Jakarta Sans.
 import { initWasm, Resvg } from './vendor/resvg/index.mjs';
@@ -26,12 +26,11 @@ const money = (v) => {
 };
 const pct = (v) => (v == null || !Number.isFinite(Number(v)) ? '' : (v > 0 ? '+' : '') + Number(v).toLocaleString('id-ID', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + '%');
 const col = (v) => (v > 0 ? '#5ee39a' : v < 0 ? '#ff7d89' : '#a3a3b2');
-const RISK = { LOW: ['Low', '#2ecc71'], MEDIUM: ['Medium', '#f5c542'], HIGH: ['High', '#ef4d5a'] };
 const ICON = { XAUUSD: 'Emas', BTCUSD: 'Bitcoin', EURUSD: 'Euro', USDJPY: 'Yen' };
 const running = (sec) => { const d = Math.floor(sec / 86400); return d >= 1 ? `${d} hari` : sec >= 3600 ? `${Math.floor(sec / 3600)} jam` : 'baru mulai'; };
 
 /**
- * rows: [{ symbol, risk, label, online, day_usd, day_pct, total_usd, total_pct, running, series, wins }]
+ * rows: [{ symbol, name, account, budget_usd, label, online, day_usd, day_pct, total_usd, total_pct, running, series, wins }]
  * head: { date, clock, total_day_usd, total_usd, online, count }
  */
 export async function reportPng(rows, head) {
@@ -53,22 +52,19 @@ export async function reportPng(rows, head) {
   const half = (W - PAD * 2 - 20) / 2;
   const tiles = tile(PAD, half, 'Profit hari ini · semua akun', money(head.total_day_usd), '', col(head.total_day_usd))
     + tile(PAD + half + 20, half, 'Profit sejak mulai · semua akun', money(head.total_usd), '', col(head.total_usd));
-  const th = `<text x="${C.setup}" y="${TOP - 18}" font-size="16" font-weight="700" fill="#7c7c8c" letter-spacing="1.5">SETUP</text>
+  const th = `<text x="${C.setup}" y="${TOP - 18}" font-size="16" font-weight="700" fill="#7c7c8c" letter-spacing="1.5">EA</text>
     <text x="${C.day}" y="${TOP - 18}" font-size="16" font-weight="700" fill="#7c7c8c" text-anchor="end" letter-spacing="1.5">HARI INI</text>
     <text x="${C.total}" y="${TOP - 18}" font-size="16" font-weight="700" fill="#7c7c8c" text-anchor="end" letter-spacing="1.5">SEJAK MULAI</text>
     <text x="${C.pctx}" y="${TOP - 18}" font-size="16" font-weight="700" fill="#7c7c8c" text-anchor="end" letter-spacing="1.5">% MODAL</text>
     <text x="${C.run}" y="${TOP - 18}" font-size="16" font-weight="700" fill="#7c7c8c" text-anchor="end" letter-spacing="1.5">LAMA</text>`;
   const body = rows.length ? rows.map((r, i) => {
     const y = TOP + i * RH;
-    const [rn, rc] = RISK[r.risk] || ['Master', '#4da3ff'];
-    const pillW = rn.length * 11 + 26;
-    const nameX = C.setup + 132;
+    const sub = [r.name && r.name !== r.symbol ? r.symbol : (ICON[r.symbol] || ''), r.account ? 'akun ' + r.account : '',
+      r.budget_usd ? 'anggaran $' + Math.round(r.budget_usd).toLocaleString('id-ID') : '', r.series ? `${r.series} seri hari ini` : ''].filter(Boolean).join(' · ');
     return `<rect x="${PAD}" y="${y}" width="${W - PAD * 2}" height="${RH - 8}" rx="14" fill="${i % 2 ? '#101016' : '#14141c'}"/>
       <circle cx="${PAD + 12}" cy="${y + (RH - 8) / 2}" r="5" fill="${r.online ? '#5ee39a' : '#ff7d89'}"/>
       <text x="${C.setup}" y="${y + 30}" font-size="24" font-weight="700" fill="#ececf1">${X(r.name || r.symbol)}</text>
-      <text x="${C.setup}" y="${y + 54}" font-size="15" fill="#7c7c8c">${X(r.budget_usd ? 'anggaran $' + Math.round(r.budget_usd).toLocaleString('id-ID') : (ICON[r.symbol] || ''))}${r.series ? ` · ${r.series} seri hari ini` : ''}</text>
-      <rect x="${nameX}" y="${y + 12}" width="${pillW}" height="28" rx="14" fill="${rc}" fill-opacity="0.14" stroke="${rc}" stroke-opacity="0.6"/>
-      <text x="${nameX + pillW / 2}" y="${y + 32}" font-size="15" font-weight="700" fill="${rc}" text-anchor="middle">${X(rn)}</text>
+      <text x="${C.setup}" y="${y + 54}" font-size="15" fill="#7c7c8c">${X(sub)}</text>
       <text x="${C.day}" y="${y + 32}" font-size="24" font-weight="700" fill="${col(r.day_usd)}" text-anchor="end">${X(money(r.day_usd))}</text>
       <text x="${C.day}" y="${y + 54}" font-size="15" fill="#7c7c8c" text-anchor="end">${X(pct(r.day_pct))}</text>
       <text x="${C.total}" y="${y + 40}" font-size="24" font-weight="700" fill="${col(r.total_usd)}" text-anchor="end">${X(r.total_usd == null ? 'menghitung' : money(r.total_usd))}</text>
@@ -77,7 +73,7 @@ export async function reportPng(rows, head) {
   }).join('') : `<text x="${W / 2}" y="${TOP + 40}" font-size="22" fill="#a3a3b2" text-anchor="middle">Belum ada akun yang melapor.</text>`;
   const fy = TOP + Math.max(1, rows.length) * RH + 40;
   const foot = `<line x1="${PAD}" y1="${fy}" x2="${W - PAD}" y2="${fy}" stroke="#2a2a36"/>
-    <text x="${PAD}" y="${fy + 38}" font-size="17" fill="#7c7c8c">Profit tertutup saja (floating tidak dihitung) · % dari anggaran setup (atau modal akun) · 100 USC = $1</text>
+    <text x="${PAD}" y="${fy + 38}" font-size="17" fill="#7c7c8c">Profit tertutup saja (floating tidak dihitung) · % dari anggaran EA (atau modal akun) · 100 USC = $1</text>
     <text x="${PAD}" y="${fy + 70}" font-size="17" fill="#7c7c8c">Hasil masa lalu bukan jaminan. Trading berisiko tinggi.</text>
     <text x="${W - PAD}" y="${fy + 70}" font-size="20" font-weight="700" fill="#f5c542" text-anchor="end">goldhuntergaruda.com/live</text>`;
   const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${W}" height="${H}" viewBox="0 0 ${W} ${H}" font-family="Plus Jakarta Sans">${bg}${title}${tiles}${th}${body}${foot}</svg>`;

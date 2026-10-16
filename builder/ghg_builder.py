@@ -354,32 +354,6 @@ def handle(cfg, job):
             log(f'  gagal melapor ke web: {e2}')
 
 
-def garuda_paths(cfg):
-    """Compiled Garuda AI EA (.ex5) and its source (for the version number)."""
-    g = cfg.get('garuda_ai') or {}
-    base = os.path.join(os.path.dirname((cfg.get('mt5') or {}).get('ea_source') or HERE), 'GarudaAI OneShot')
-    return g.get('ex5') or os.path.join(base, 'GarudaAI_OneShot.ex5'), g.get('mq5') or os.path.join(base, 'GarudaAI_OneShot.mq5')
-
-
-def sync_garuda_ai(cfg, server_sha, variant='client'):
-    """Upload the Garuda AI EA to the web (Admin > Garuda AI > Unduh) whenever the local .ex5 differs from the web copy."""
-    ex5, mq5 = garuda_paths(cfg)
-    if variant == 'master':
-        ex5 = os.path.join(os.path.dirname(ex5), 'GarudaAI_MASTER.ex5')
-    if not os.path.exists(ex5):
-        return
-    data = base64.b64encode(open(ex5, 'rb').read()).decode()
-    sha = hashlib.sha256(data.encode()).hexdigest()
-    if sha == server_sha:
-        return
-    version = ''
-    if os.path.exists(mq5):
-        m = re.search(r'#property\s+version\s+"([^"]+)"', read_text(mq5))
-        version = m.group(1) if m else ''
-    api(cfg, '/api/builder/garuda-ai', {'version': version, 'variant': variant, 'data_b64': data})
-    log(f'EA Garuda AI {variant.upper()} v{version} di-upload ke web ({len(data) * 3 // 4:,} byte)')
-
-
 VPS_STATE = {'warned': '', 'failed_mtime': 0.0}
 
 
@@ -431,23 +405,6 @@ def sync_vps_release(cfg, server):
             log('VPS: compile GAGAL, rilis tidak diterbitkan:\n' + out[-1500:])
             return
         log(f'VPS: compile OK ({mm.group(0) if mm else "selesai"})')
-    # the 12 setup EAs (XAU/BTC/EUR/JPY 1-3) are rebuilt from this source whenever it is newer than them;
-    # config.json "vps": {"setups": false} = only the main EA is published (user 2026-10-16: 1 EA on every chart)
-    vs = []
-    try:
-        import ghg_variants
-        if (cfg.get('vps') or {}).get('setups', True) is False:
-            raise StopIteration
-        vs = ghg_variants.setup_ex5s(cfg)
-        if len(vs) < len(ghg_variants.variants()) or any(os.path.getmtime(v) < os.path.getmtime(ex5) for v in vs):
-            log(f'VPS: membuat ulang {len(ghg_variants.variants())} EA setup dari v{version} ...')
-            vs = ghg_variants.build_all(cfg, log=log)
-    except StopIteration:
-        vs = []
-    except Exception as e:
-        VPS_STATE['failed_mtime'] = os.path.getmtime(src)
-        log(f'VPS: EA setup gagal dibuat, rilis tidak diterbitkan: {e}')
-        return
     # MT4 version (Robot Trading\MT4) follows every MT5 build; a failure never blocks the MT5 release
     try:
         import ghg_mt4
@@ -458,9 +415,9 @@ def sync_vps_release(cfg, server):
             log(f'MT4: v{version} dibuat ulang ({res[-1].strip() if res else "compile selesai"})')
     except Exception as e:
         log(f'MT4: versi MT4 gagal dibuat: {e}')
-    extras = [(os.path.basename(v), open(v, 'rb').read()) for v in sorted(vs)]
+    # one EA on every chart: the release is the main .ex5 only (no extra EAs)
     data = open(ex5, 'rb').read()
-    sha_ex5 = hashlib.sha256(data + b''.join(n.encode('utf-8') + b'\0' + b for n, b in extras)).hexdigest()
+    sha_ex5 = hashlib.sha256(data).hexdigest()
     presets = [(os.path.basename(f), open(f, 'rb').read()) for f in sets]
     sha_p = hashlib.sha256(b''.join(n.encode('utf-8') + b'\0' + b for n, b in presets)).hexdigest()
     sha = hashlib.sha256(f'{version}|{sha_ex5}|{sha_p}'.encode()).hexdigest()
@@ -475,15 +432,16 @@ def sync_vps_release(cfg, server):
     api(cfg, '/api/builder/vps-release', {
         'version': version, 'sha': sha, 'sha_ex5': sha_ex5, 'sha_presets': sha_p, 'host': socket.gethostname(),
         'ex5_name': name + '.ex5', 'ex5_b64': base64.b64encode(data).decode(),
-        'extras': [{'name': n, 'b64': base64.b64encode(b).decode()} for n, b in extras],
+        'extras': [],
         'presets': [{'name': n, 'b64': base64.b64encode(b).decode()} for n, b in presets]})
     VPS_STATE['warned'] = ''
-    log(f'VPS: rilis v{version} diterbitkan ({len(data):,} byte + {len(extras)} EA setup + {len(presets)} preset). Agen VPS memasangnya dalam ±1 menit.')
+    log(f'VPS: rilis v{version} diterbitkan ({len(data):,} byte + {len(presets)} preset). Agen VPS memasangnya dalam ±1 menit.')
 
 
 def sync_content(cfg):
     """Promo videos: take one queued job from the website, render it here (garuda_video.py), keep the MP4 in the
-    content folder and hand it to Telegram through the website."""
+    content folder and hand it to Telegram / social networks through the website. Only educational videos (kind
+    'edu') come from the website for now."""
     try:
         res = api(cfg, '/api/builder/content/claim', {})
     except Exception as e:
@@ -495,14 +453,10 @@ def sync_content(cfg):
     if not job:
         return
     import garuda_video
-    folder = cfg.get('content_dir') or os.path.join(os.path.expanduser('~'), 'Documents', 'GarudaAI Konten')
+    folder = cfg.get('content_dir') or os.path.join(os.path.expanduser('~'), 'Documents', 'GoldHunter Konten')
     os.makedirs(folder, exist_ok=True)
-    tag = (job.get('signal') or {}).get('symbol', 'edukasi' if job['kind'] == 'edu' else 'rekap').lower()
-    name = f"garuda-ai_{datetime.datetime.now():%Y%m%d_%H%M}_{job['kind']}_{tag}_{job['id']}.mp4"
+    name = f"goldhunter-garuda_{datetime.datetime.now():%Y%m%d_%H%M}_{job['kind']}_{job['id']}.mp4"
     out = os.path.join(folder, name)
-    for k in ('chart_open', 'chart_close'):
-        if job.get(k):
-            job[k] = base64.b64decode(job[k])
     try:
         secs = garuda_video.render_video(job, out)
         with open(out[:-4] + '.txt', 'w', encoding='utf-8') as f:
@@ -557,13 +511,6 @@ def main():
         try:
             res = api(cfg, '/api/builder/claim', {'builder_id': builder_id, 'versions': source_versions(cfg)})
             job = res.get('job')
-            if 'garuda_ai_sha' in res:
-                try:
-                    sync_garuda_ai(cfg, res.get('garuda_ai_sha') or '')
-                    if 'garuda_ai_master_sha' in res:
-                        sync_garuda_ai(cfg, res.get('garuda_ai_master_sha') or '', 'master')
-                except Exception as e:
-                    log(f'Gagal upload EA Garuda AI: {e}')
             if 'vps_release' in res:
                 try:
                     sync_vps_release(cfg, res.get('vps_release') or {})
