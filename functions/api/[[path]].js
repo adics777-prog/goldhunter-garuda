@@ -463,6 +463,12 @@ route('POST', '/ea/live', 'public', async ({ request, env, waitUntil, base }) =>
       VALUES (?,?,?,?,?,?,?,?,?,?,0,?,?,?) ON CONFLICT(login, symbol, magic) DO NOTHING`)
     .bind(login, sym, snap.magic, snap.symbol, str(b.server, 60), snap.currency, setupName, budget, t, t, lic ? lic.id : null, lic ? lic.user_id : null, lic ? 0 : 1).run();
   const row = await env.DB.prepare('SELECT * FROM ea_setups WHERE login=? AND symbol=? AND magic=?').bind(login, sym, snap.magic).first();
+  // default start = the EA's first own deal on this account (not the first report), unless the admin set a date
+  const ownStart = int(b.own_start_utc);
+  if (!row.since_manual && ownStart > 1e9 && ownStart < t && ownStart < row.since - 60) {
+    await env.DB.prepare('UPDATE ea_setups SET since=?, total=0, acct_total=0, total_ok=0 WHERE id=?').bind(ownStart, row.id).run();
+    row.since = ownStart;
+  }
   const totalOk = row.since > 0 && int(b.since_used) === row.since ? 1 : 0;
   const day = wibDay(t);
   const symFloat = (snap.buy.profit || 0) + (snap.sell.profit || 0);
@@ -583,7 +589,7 @@ route('PUT', '/admin/ea/setups/:id', 'admin', async ({ request, env, params }) =
   let since = b.reset ? now() : (b.since != null && b.since !== '' ? int(b.since) : r.since);
   if (!(since > 0) || since > now() + 60) fail(400, 'Tanggal mulai tidak valid');
   const restart = since !== r.since;
-  await env.DB.prepare(`UPDATE ea_setups SET label=?, visible=?, sort=?, since=?${restart ? ', total=0, acct_total=0, total_ok=0, max_dd_pct=0, min_float=0, max_layers=0' : ''} WHERE id=?`)
+  await env.DB.prepare(`UPDATE ea_setups SET label=?, visible=?, sort=?, since=?${restart ? ', since_manual=1, total=0, acct_total=0, total_ok=0, max_dd_pct=0, min_float=0, max_layers=0' : ''} WHERE id=?`)
     .bind(str(b.label, 60), b.visible ? 1 : 0, int(b.sort) || 0, since, r.id).run();
   if (restart) {
     // deepest DD / floating / longest basket rebuilt from the daily rows inside the new period
