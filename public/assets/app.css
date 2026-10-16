@@ -238,11 +238,6 @@ label.row{flex-wrap:nowrap}
 .conn{display:flex;align-items:center;gap:10px;padding:12px 14px;border:1px solid var(--line);border-radius:12px;background:var(--bg-2);margin-bottom:14px;flex-wrap:wrap}
 .conn b{color:var(--text)}
 .net-badges{display:flex;gap:6px;flex-wrap:wrap}
-.sig-mini{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:10px 0;border-bottom:1px solid var(--line)}
-.sig-mini:last-child{border-bottom:0}
-.mk-pill{display:inline-flex;align-items:center;gap:6px;padding:6px 12px;border-radius:20px;border:1px solid var(--line);background:var(--bg-2);font-size:.82rem;margin:0 6px 6px 0}
-.mk-pill .dot{width:8px;height:8px;border-radius:50%;background:#555}
-.mk-pill .dot.on{background:#3ddc84;box-shadow:0 0 6px #3ddc84}
 @media (max-width:600px){.save-bar .btn{width:100%}}
 .stats-grid{grid-template-columns:repeat(auto-fit,minmax(160px,1fr))}
 @media (max-width:600px){
@@ -253,9 +248,4 @@ label.row{flex-wrap:nowrap}
   .bkr .bk-name{grid-column:1/-1}
   .tgr{grid-template-columns:1fr auto auto!important}
   .tgr .tg-name{grid-column:1/-1}
-  .mk-pill{font-size:.78rem;padding:5px 10px}
 }
-.pend-box{margin-top:8px;padding:8px 10px;border:1px dashed rgba(77,163,255,.45);border-radius:10px;background:rgba(77,163,255,.06);font-size:.86rem;overflow-wrap:anywhere}
-.pend-box .pos{color:#6ee7a2}.pend-box .neg{color:#ff8b95}
-.fail-box{border-color:rgba(255,139,149,.45);background:rgba(255,139,149,.06)}
-.scalp-box{border-color:rgba(245,196,81,.5);background:rgba(245,196,81,.06)}

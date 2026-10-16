@@ -14,7 +14,7 @@
   async function setupWhatsApp() {
     const c = await getCatalog().catch(() => null);
     if (c && c.telegram_link) { $('#tg-side').href = c.telegram_link; $('#tg-side').classList.remove('hidden'); }
-    const wa = c && waLink(c.whatsapp, 'Halo admin Garuda AI, saya butuh bantuan');
+    const wa = c && waLink(c.whatsapp, 'Halo admin GoldHunter Garuda, saya butuh bantuan');
     if (!wa) return;
     $('#wa-side').href = wa;
     $('#wa-side').classList.remove('hidden');
@@ -65,20 +65,20 @@
       (typeof GHL !== 'undefined' ? GHL.load(true) : Promise.resolve(null)).catch(() => null)]);
     const vpsP = c.products.find((p) => p.requires_ib && p.includes_vps) || c.products.find((p) => p.includes_vps);
     const ibOffer = c.products.some((p) => p.requires_ib);
-    // GOLD HUNTER GARUDA live: the setups reporting from real accounts (the AI signal card is archived)
+    // GOLD HUNTER GARUDA live: the EAs reporting from real accounts (one card per EA chart)
     const setups = lv && lv.setups ? lv.setups : [];
     const top = setups.slice().sort((a, b) => (b.online - a.online) || ((b.total_pct ?? -1e9) - (a.total_pct ?? -1e9))).slice(0, 4);
-    const aiCard = `<div class="card gold" style="margin-bottom:22px">
+    const liveCard = `<div class="card gold" style="margin-bottom:22px">
         <div class="row between" style="flex-wrap:wrap;gap:10px;margin-bottom:12px"><h3 style="margin:0">📡 Laporan Live GOLD HUNTER GARUDA</h3>
-          <div class="row" style="gap:8px;flex-wrap:wrap">${c.telegram_link ? `<a class="btn btn-outline btn-sm" href="${esc(c.telegram_link)}" target="_blank" rel="noopener">✈️ Gabung Telegram</a>` : ''}<a class="btn btn-gold btn-sm" href="/live">Buka semua setup</a></div></div>
-        ${top.length ? `<div class="ghl-cards">${top.map((x) => GHL.card(x)).join('')}</div>` : '<p class="small muted">Akun pantau sedang disiapkan. Laporan live tampil di sini begitu EA-nya mulai mengirim data.</p>'}
+          <div class="row" style="gap:8px;flex-wrap:wrap">${c.telegram_link ? `<a class="btn btn-outline btn-sm" href="${esc(c.telegram_link)}" target="_blank" rel="noopener">✈️ Gabung Telegram</a>` : ''}<a class="btn btn-gold btn-sm" href="/live">Buka laporan live</a></div></div>
+        ${top.length ? `<div class="ghl-cards">${top.map((x) => GHL.card(x)).join('')}</div>` : '<p class="small muted">Akun live sedang disiapkan. Laporan live tampil di sini begitu EA-nya mulai mengirim data.</p>'}
         <p class="tiny muted" style="margin-top:12px">Bukan saran investasi. Trading berisiko tinggi; hasil masa lalu tidak menjamin hasil berikutnya.</p></div>`;
     const active = lic.licenses.filter((l) => l.status !== 'suspended').slice(0, 3);
     const bills = (await api('/orders')).orders.filter((o) => o.status === 'awaiting_payment' && o.total > 0);
     view.innerHTML = `
       ${title(`Halo, ${esc(me.name.split(' ')[0])} 👋`)}
       ${bills.length ? `<div class="alert warn" style="margin-bottom:18px">💳 Anda punya <b>${bills.length} tagihan</b> menunggu pembayaran${bills.length === 1 ? `: <b>${rupiah(bills[0].total)}</b>, jatuh tempo ${fmtDate(bills[0].pay_deadline)}` : ''}. <a href="#/bayar${bills.length === 1 ? '/' + bills[0].id : ''}">Bayar sekarang →</a></div>` : ''}
-      ${aiCard}
+      ${liveCard}
       ${s.active_licenses || s.open_orders ? `<div class="grid c4" style="margin-bottom:22px">
         <a class="stat" href="#/lisensi"><b>${s.active_licenses}</b><span>Lisensi aktif</span></a>
         <a class="stat" href="#/pesanan"><b>${s.open_orders}</b><span>Pesanan berjalan</span></a>
@@ -264,7 +264,7 @@
         <div style="margin-bottom:18px"><div class="small muted" style="margin-bottom:8px">Transfer ke salah satu rekening berikut:</div>${(banks || []).length || !(usdt && usdt.amount) ? bankList(banks) : ''}${usdtBox(usdt)}</div>
         <div class="row"><a class="btn btn-gold" href="#/bayar/${o.id}">Saya Sudah Transfer → Konfirmasi Pembayaran</a>
           ${o.proof_file_id ? '' : '<button class="btn btn-red btn-sm" type="button" id="cancel">Batalkan pesanan</button>'}</div>
-        <div style="margin-top:12px">${waButton(whatsapp, `Halo admin Garuda AI, saya ada kendala pembayaran pesanan ${o.code}`)}</div></div>`;
+        <div style="margin-top:12px">${waButton(whatsapp, `Halo admin GoldHunter Garuda, saya ada kendala pembayaran pesanan ${o.code}`)}</div></div>`;
     } else if (o.status === 'awaiting_verification') {
       action = `<div class="alert ok">${free
         ? '✅ Pengajuan diterima. Admin sedang mengecek bahwa akun Anda terdaftar di bawah IB kami, lalu <b>segera memproses</b>.'
@@ -295,7 +295,7 @@
           </dl></div>
         </div>
         <div class="card"><h3>Status</h3><ul class="timeline">${steps.map(([t, at]) => `<li class="${at ? 'done' : ''}">${t}${at > 1 ? `<div class="tiny muted">${fmtDateTime(at)}</div>` : ''}</li>`).join('')}</ul>
-          ${waButton(whatsapp, `Halo admin Garuda AI, saya mau tanya pesanan ${o.code}`, '💬 Tanya admin via WhatsApp')}</div>
+          ${waButton(whatsapp, `Halo admin GoldHunter Garuda, saya mau tanya pesanan ${o.code}`, '💬 Tanya admin via WhatsApp')}</div>
       </div>`;
     const cancel = $('#cancel');
     if (cancel) cancel.onclick = async () => {
@@ -317,7 +317,7 @@
           ${unpaid.map((o) => `<tr><td class="mono small">${esc(o.code)}<div class="tiny muted">${o.kind === 'renew' ? 'Perpanjangan ' + o.months + ' bln' : 'Pesanan baru'}</div></td><td>${esc(o.product_name)}</td><td>${esc(o.account_number)}</td><td class="nowrap"><b>${totalHtml(o)}</b></td>
             <td class="small nowrap">${fmtDate(o.pay_deadline)}</td><td>${orderBadge(o.status)}</td><td><a class="btn btn-gold btn-sm" href="#/bayar/${o.id}">${o.status === 'awaiting_payment' ? 'Bayar' : 'Ganti bukti'}</a></td></tr>`).join('')}</tbody></table></div>`
           : '<div class="card empty">Tidak ada tagihan. <a href="#/pesanan">Lihat pesanan saya</a></div>'}
-        <div style="margin-top:16px">${waButton(c.whatsapp, 'Halo admin Garuda AI, saya ada kendala pembayaran')}</div>`;
+        <div style="margin-top:16px">${waButton(c.whatsapp, 'Halo admin GoldHunter Garuda, saya ada kendala pembayaran')}</div>`;
       return;
     }
     const { order: o, banks, whatsapp, usdt } = await api('/orders/' + id);
@@ -347,7 +347,7 @@
           <div class="card"><h3>Rekening tujuan</h3>${(banks || []).length || !(usdt && usdt.amount) ? bankList(banks) : ''}${usdtBox(usdt)}
             <p class="tiny muted" style="margin-top:10px">Batas pembayaran: ${fmtDateTime(o.pay_deadline)}</p></div>
           <div class="card"><h3>Ada kendala?</h3><p class="small muted" style="margin-bottom:12px">Salah nominal, transfer gagal, atau bukti tidak bisa diupload? Hubungi admin, sebutkan kode pesanan <b>${esc(o.code)}</b>.</p>
-            ${waButton(whatsapp, `Halo admin Garuda AI, saya ada kendala pembayaran pesanan ${o.code} (total ${rupiah(o.total)})`, '💬 Chat Admin via WhatsApp') || '<span class="muted small">Kontak admin belum diatur.</span>'}</div>
+            ${waButton(whatsapp, `Halo admin GoldHunter Garuda, saya ada kendala pembayaran pesanan ${o.code} (total ${rupiah(o.total)})`, '💬 Chat Admin via WhatsApp') || '<span class="muted small">Kontak admin belum diatur.</span>'}</div>
         </div>
       </div>`;
     const im = $('#inv-months');
