@@ -444,6 +444,14 @@ def sync_vps_release(cfg, server):
             log('VPS: compile GAGAL, rilis tidak diterbitkan:\n' + out[-1500:])
             return
         log(f'VPS: compile OK ({mm.group(0) if mm else "selesai"})')
+        # the MT5 on this PC gets the same release; it is loaded the next time that MT5 starts
+        try:
+            local = os.path.join(p.get('mql_dir') or '', 'Experts', name + '.ex5')
+            if p.get('mql_dir') and os.path.isdir(os.path.dirname(local)):
+                shutil.copy2(ex5, local)
+                log('VPS: EA juga disalin ke MT5 PC ini (aktif setelah MT5 dibuka ulang)')
+        except Exception as e:
+            log(f'VPS: gagal menyalin EA ke MT5 PC ini: {e}')
     # MT4 version (Robot Trading\MT4) follows every MT5 build; a failure never blocks the MT5 release
     try:
         import ghg_mt4
