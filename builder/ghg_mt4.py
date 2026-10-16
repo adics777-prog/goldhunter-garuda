@@ -54,7 +54,7 @@ def arr_init(m):
     return f'{ind}{typ} {name}[{size}];\n' + '\n'.join(f'{ind}{name}[{i}] = {v};' for i, v in enumerate(parts))
 
 
-def generate():
+def generate(web_key=''):
     s = open(SRC, encoding='utf-8-sig').read().replace('\r\n', '\n')
     shim = open(os.path.join(HERE, 'ghg_mt4_compat.mqh'), encoding='utf-8').read().replace('\r\n', '\n')
     version = re.search(r'#property\s+version\s+"([^"]+)"', s).group(1)
@@ -100,6 +100,9 @@ def generate():
     # --- compatibility layer replaces Trade.mqh
     shim = shim.replace('OnTradeTransaction(', 'C4OnTradeTransaction(')
     s = rep(s, '#include <Trade\\Trade.mqh>\n', '#property strict\n' + shim + '\n')
+    if web_key:
+        import ghg_builder
+        s = ghg_builder.with_web_key(s, web_key)
     os.makedirs(OUT_DIR, exist_ok=True)
     open(OUT, 'w', encoding='utf-8-sig', newline='\r\n').write(s)
     return version

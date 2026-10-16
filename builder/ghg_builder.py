@@ -275,6 +275,18 @@ def read_text(path):
         return raw.decode('cp1252')
 
 
+WEB_KEY_DEFINE = re.compile(r'^#define\s+GHG_WEB_KEY\s+"[^"]*"', re.M)
+
+
+def with_web_key(src, key):
+    """Compile the web key into the EA (#define GHG_WEB_KEY). Owner release: the master key; licence build:
+    lic.<license_id>.<report_token>. Input 13.2 filled by hand still wins inside the EA."""
+    key = re.sub(r'[^0-9A-Za-z._-]', '', str(key or ''))
+    if not key or not WEB_KEY_DEFINE.search(src):
+        return src
+    return WEB_KEY_DEFINE.sub(f'#define GHG_WEB_KEY   "{key}"', src, count=1)
+
+
 def metaedit(p, target, logfile):
     """MetaEditor needs /compile:"path" with the quote AFTER the colon; a Python argument list quotes the whole
     argument ("/compile:C:\a b.mq5"), which MetaEditor rejects as soon as the path has a space."""
@@ -284,8 +296,15 @@ def metaedit(p, target, logfile):
 
 def build(cfg, job):
     platform = job['platform']
-    p = cfg.get(platform) or {}
+    p = dict(cfg.get(platform) or {})
     source = p.get('ea_source')
+    if platform == 'mt4' and not source:
+        import ghg_mt4                                  # MT4 = generated from the MT5 source
+        ghg_mt4.generate()
+        source = ghg_mt4.OUT
+        p.setdefault('mql_dir', '')
+        if not p['mql_dir']:
+            p['mql_dir'] = ghg_mt4.MT4_DATA + '\\MQL4'
     if not source or not os.path.exists(source):
         raise RuntimeError(f'Source EA untuk {platform.upper()} belum ada ({source or "belum diatur di config.json"}). '
                            f'EA saat ini hanya tersedia untuk MT5.')
@@ -306,6 +325,10 @@ def build(cfg, job):
     version = (re.search(r'#property\s+version\s+"([^"]+)"', src) or [None, ''])[1]
     licensed = inject_license(src, job['id'], job['account_number'], job.get('expires_at') or 0)
     licensed = inject_report(licensed, job, version, cfg.get('report_base') or cfg['api_base'])
+    if platform == 'mt4':
+        licensed = re.sub(r'(?<!C4)TimeTradeServer\(', 'C4TimeTradeServer(', licensed)   # report code is MQL5
+    if job.get('license_id') and job.get('report_token'):
+        licensed = with_web_key(licensed, f"lic.{job['license_id']}.{job['report_token']}")
     target = os.path.join(jobdir, name + ext)
     with open(target, 'w', encoding='utf-8-sig', newline='\r\n') as f:
         f.write(licensed.replace('\r\n', '\n'))
@@ -396,8 +419,24 @@ def sync_vps_release(cfg, server):
             return
         logfile = os.path.join(WORK, 'vps_compile.log')
         os.makedirs(WORK, exist_ok=True)
-        log(f'VPS: versi baru v{version} terdeteksi, compile {name}.mq5 ...')
-        metaedit(p, src, logfile)
+        key = VPS_STATE.get('ea_key') or ''
+        log(f'VPS: versi baru v{version} terdeteksi, compile {name}.mq5 {"(kunci master ditanam)" if key else "(tanpa kunci web bawaan)"} ...')
+        if key:
+            # compiled from a copy so the master key never lands in the source file
+            kdir = os.path.join(WORK, 'vps_src')
+            shutil.rmtree(kdir, ignore_errors=True)
+            os.makedirs(kdir)
+            ksrc = os.path.join(kdir, name + '.mq5')
+            with open(ksrc, 'w', encoding='utf-8-sig', newline='\r\n') as f:
+                f.write(with_web_key(read_text(src), key).replace('\r\n', '\n'))
+            metaedit(p, ksrc, logfile)
+            kex5 = os.path.join(kdir, name + '.ex5')
+            if os.path.exists(kex5):
+                shutil.copy2(kex5, ex5)
+                os.utime(ex5, None)
+            shutil.rmtree(kdir, ignore_errors=True)
+        else:
+            metaedit(p, src, logfile)
         out = read_text(logfile) if os.path.exists(logfile) else ''
         mm = re.search(r'(\d+)\s+errors?,\s*(\d+)\s+warnings?', out)
         if not os.path.exists(ex5) or os.path.getmtime(ex5) < mt or (mm and int(mm.group(1)) > 0):
@@ -409,7 +448,7 @@ def sync_vps_release(cfg, server):
     try:
         import ghg_mt4
         if not os.path.exists(ghg_mt4.OUT_EX4) or os.path.getmtime(ghg_mt4.OUT_EX4) < os.path.getmtime(ex5):
-            ghg_mt4.generate()
+            ghg_mt4.generate(web_key=VPS_STATE.get('ea_key') or '')
             ghg_mt4.make_presets()
             res = ghg_mt4.compile_mt4()
             log(f'MT4: v{version} dibuat ulang ({res[-1].strip() if res else "compile selesai"})')
@@ -511,6 +550,8 @@ def main():
         try:
             res = api(cfg, '/api/builder/claim', {'builder_id': builder_id, 'versions': source_versions(cfg)})
             job = res.get('job')
+            if 'ea_key' in res:
+                VPS_STATE['ea_key'] = str(res.get('ea_key') or '').strip()
             if 'vps_release' in res:
                 try:
                     sync_vps_release(cfg, res.get('vps_release') or {})
