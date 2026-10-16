@@ -18,7 +18,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@700;900&family=Poppins:wght@300;400;600;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="/assets/app.css?v=2c8dc762">
+<link rel="stylesheet" href="/assets/app.css?v=858ecda3">
 <style>
   .pub-top{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:14px clamp(16px,4vw,40px);border-bottom:1px solid var(--line);background:var(--bg-2);position:sticky;top:0;z-index:20}
   .pub-top .brand{padding:0}
@@ -60,7 +60,7 @@
   <div class="grid c3" style="margin-bottom:18px" id="tiles"></div>
   <div id="list"><div class="loading"><span class="spinner"></span></div></div>
   <p class="center tiny muted" id="note" style="margin-top:12px"></p>
-  <div class="center" style="margin:28px 0"><a class="btn btn-gold" href="/live" data-en="📡 See the live setup reports">📡 Lihat laporan live tiap setup</a></div>
+  <div class="center" style="margin:28px 0"><a class="btn btn-gold" href="/live" data-en="📡 See the live reports of our own accounts">📡 Lihat laporan live akun/EA kami</a></div>
   <div class="alert err small center" style="line-height:1.7" data-en="<b>⚠️ RISK WARNING.</b> These are real member accounts reported automatically by the EA, unedited, and they are <b>not a guarantee</b> of your results. Trading forex, gold and crypto carries a very high risk and can lead to the loss of part or all of your capital. Results differ per account depending on capital, settings, start date and broker. Some members chose not to be shown. <a href='/#risiko' style='color:#ff8b95;text-decoration:underline'>Read the full risk warning</a>.">
     <b>⚠️ PERINGATAN RISIKO.</b> Data di atas adalah hasil nyata akun member yang dilaporkan otomatis oleh EA, tanpa diubah, dan <b>bukan jaminan</b> hasil Anda.
     Trading forex, emas &amp; kripto berisiko sangat tinggi dan dapat menyebabkan kehilangan sebagian atau seluruh modal.
@@ -70,7 +70,7 @@
 </main>
 <script src="/assets/i18n.js?v=489e4256"></script>
 <script src="/assets/common.js?v=aa4bb046"></script>
-<script src="/assets/ghlive.js?v=4ec8ce6a"></script>
+<script src="/assets/ghlive.js?v=0c0e73d8"></script>
 <script>
 (() => {
   const { $, esc, ago } = GHG;
@@ -93,7 +93,7 @@
         <td class="right nowrap ${cls(r[k])}">${r[k] == null ? '-' : usd(r[k])}</td>
         <td class="right nowrap ${cls(r[pk])}">${pct(r[pk])}</td>
         <td class="hide-sm tiny muted nowrap">${esc(ago(r.updated_at))}</td></tr>`).join('')}</tbody></table></div>`
-      : `<div class="card empty" style="text-align:center">${T('Belum ada akun member yang melapor. Sementara itu, lihat hasil setup kami sendiri di', 'No member account is reporting yet. In the meantime, see our own setups on')} <a href="/live" style="color:var(--gold)">${T('halaman live', 'the live page')}</a>.</div>`;
+      : `<div class="card empty" style="text-align:center">${T('Belum ada akun member yang melapor. Sementara itu, lihat hasil akun/EA kami sendiri di', 'No member account is reporting yet. In the meantime, see our own accounts on')} <a href="/live" style="color:var(--gold)">${T('halaman live', 'the live page')}</a>.</div>`;
     $('#note').textContent = T('Diurutkan dari persen profit tertinggi. Modal = saldo awal + deposit − penarikan. Akun cent: 100 USC = $1. Data diperbarui otomatis tiap beberapa menit.',
       'Sorted by highest % profit. Capital = start balance + deposits − withdrawals. Cent accounts: 100 USC = $1. Data refreshes automatically every few minutes.');
   }

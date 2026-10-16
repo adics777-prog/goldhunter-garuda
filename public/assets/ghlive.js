@@ -1,4 +1,4 @@
-// GOLD HUNTER GARUDA live: shared rendering of setups (landing, /live, member area). Needs common.js (GHG); i18n.js (T) optional.
+// GOLD HUNTER GARUDA live: shared rendering of the EA instances, one per chart (landing, /live, member area). i18n.js (T) optional.
 const GHL = (() => {
   const TT = (id, en) => (typeof window.T === 'function' ? window.T(id, en) : id);
   const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -22,27 +22,9 @@ const GHL = (() => {
     return TT('baru mulai', 'just started');
   };
   const run = (sec) => ((sec || 0) < 3600 ? TT('baru mulai', 'just started') : `${TT('berjalan', 'running')} ${days(sec)}`);
-  const RISK = () => ({
-    LOW: { name: 'Low', cls: 'b-green', txt: TT('Risiko rendah', 'Low risk') },
-    MEDIUM: { name: 'Medium', cls: 'b-gold', txt: TT('Risiko sedang', 'Medium risk') },
-    HIGH: { name: 'High', cls: 'b-red', txt: TT('Risiko tinggi', 'High risk') },
-  });
-  const riskBadge = (r) => { const x = RISK()[r]; return x ? `<span class="badge ${x.cls}">${x.name}</span>` : `<span class="badge b-blue">${TT('Akun master', 'Master account')}</span>`; };
   const NAME = () => ({ XAUUSD: TT('Emas', 'Gold'), BTCUSD: 'Bitcoin', EURUSD: 'Euro / Dolar', USDJPY: TT('Dolar / Yen', 'Dollar / Yen') });
   const ICON = { XAUUSD: '🥇', BTCUSD: '₿', EURUSD: '💶', USDJPY: '💴' };
   const PAIRS = ['XAUUSD', 'BTCUSD', 'EURUSD', 'USDJPY'];
-  // The 12 monitoring-account presets: first lot 0.01 per `caps` USC (LOW / MEDIUM / HIGH), lot follows the balance.
-  // Minimum account capital = capital per 0.01 lot (below it the broker minimum 0.01 is used, i.e. more risk).
-  // Tester 1 Jan - 10 Oct 2026 gold 0.01 per 10,000 (= HIGH): deepest floating of one side -41% (29 Jan, 48 positions).
-  // hold = adverse move without any pause at -10% / -30% / -50% floating (lot x1.15 per layer, step x1.1 from layer 4).
-  const PRESET = {
-    XAUUSD: { caps: [40000, 20000, 10000], dist: '$1', tp: '$1,50', back: '$0,50', hold: [['$61', '$97', '$120'], ['$45', '$72', '$90'], ['$33', '$53', '$67']] },
-    BTCUSD: { caps: [16000, 8000, 4000], dist: '$35', tp: '$50', back: '$17,50', hold: [['$2.245', '$3.593', '$4.456'], ['$1.660', '$2.673', '$3.323'], ['$1.218', '$1.981', '$2.472']] },
-    EURUSD: { caps: [12800, 6400, 3200], dist: '3 pip', tp: '4 pip', back: '1,5 pip', hold: [['187 pip', '299 pip', '371 pip'], ['138 pip', '223 pip', '277 pip'], ['101 pip', '165 pip', '206 pip']] },
-    USDJPY: { caps: [8000, 4000, 2000], dist: '3 pip', tp: '4 pip', back: '1,5 pip', hold: [['186 pip', '298 pip', '370 pip'], ['137 pip', '222 pip', '276 pip'], ['101 pip', '164 pip', '205 pip']] },
-  };
-  const RISKS = ['LOW', 'MEDIUM', 'HIGH'];
-  const enNum = (s) => (TT('id', 'en') === 'en' ? String(s).replace(/\./g, '#').replace(/,/g, '.').replace(/#/g, ',') : s);
 
   // small bar chart of daily profit since the start
   function spark(arr, cur) {
@@ -59,13 +41,13 @@ const GHL = (() => {
     return `<svg class="ghl-spark" viewBox="0 0 100 56" preserveAspectRatio="none" aria-hidden="true"><line x1="0" y1="28" x2="100" y2="28" stroke="rgba(255,255,255,.18)" stroke-width="0.4"/>${bars}</svg>`;
   }
 
-  // one setup on the overview / landing
+  // one EA instance (chart) on the overview / landing / member home
   function card(v, opts = {}) {
     const cur = v.currency;
     const fl = toUsd(v.floating, cur);
     const pos = (x) => (x && x.count ? `${x.count} ${TT('posisi', 'pos')}` : '-');
     return `<a class="ghl-card ${v.online ? '' : 'off'}" href="/live?setup=${v.id}">
-      <div class="ghl-head"><span class="ghl-sym">${ICON[v.symbol] || '📈'} ${esc(v.setup_name || v.symbol)}</span>${riskBadge(v.risk)}<span class="ghl-dot ${v.online ? 'on' : ''}" title="${v.online ? 'online' : 'offline'}"></span></div>
+      <div class="ghl-head"><span class="ghl-sym">${ICON[v.symbol] || '📈'} ${esc(v.label || v.symbol)}</span>${v.label && v.label !== v.symbol ? `<span class="badge b-blue">${esc(v.symbol)}</span>` : ''}<span class="ghl-dot ${v.online ? 'on' : ''}" title="${v.online ? 'online' : 'offline'}"></span></div>
       <div class="ghl-k">${TT('Profit sejak mulai', 'Profit since start')}</div>
       <div class="ghl-big"><span class="${cls(v.total_usd)}">${v.total_usd == null ? TT('menghitung…', 'counting…') : usd(v.total_usd)}</span>
         <span class="ghl-pct ${cls(v.total_pct)}">${v.total_pct == null ? '' : pct(v.total_pct)}</span></div>
@@ -82,28 +64,6 @@ const GHL = (() => {
     </a>`;
   }
 
-  // an offer (pair x risk) on the landing: preset facts + its live monitoring account if it reports
-  function offer(sym, risk, live) {
-    const p = PRESET[sym], i = RISKS.indexOf(risk), h = p.hold[i];
-    const R = RISK()[risk];
-    const liveBox = live
-      ? `<div class="ghl-live"><div class="row between" style="gap:6px"><span class="tiny muted">${TT('Akun pantau live', 'Live monitoring account')} <span class="ghl-dot ${live.online ? 'on' : ''}"></span></span><span class="tiny muted">${run(live.running)}</span></div>
-          <div class="ghl-big" style="margin-top:2px"><span class="${cls(live.total_usd)}">${live.total_usd == null ? TT('menghitung…', 'counting…') : usd(live.total_usd)}</span><span class="ghl-pct ${cls(live.total_pct)}">${live.total_pct == null ? '' : pct(live.total_pct)}</span></div>
-          <div class="tiny muted">${TT('DD terdalam', 'Max DD')} ${live.max_dd_pct ? '-' + num(live.max_dd_pct, 2) + '%' : '0%'} · ${TT('basket terpanjang', 'longest basket')} ${num(live.max_layers || 0)}</div></div>`
-      : `<div class="ghl-live soon"><span class="tiny">⏳ ${TT('Akun pantau segera tayang di sini', 'Its monitoring account goes live here soon')}</span></div>`;
-    return `<div class="ghl-offer r-${risk.toLowerCase()}">
-      <div class="row between" style="gap:8px"><b class="ghl-oname">${R.name}</b><span class="badge ${R.cls}">${R.txt}</span></div>
-      <dl class="ghl-dl">
-        <dt>${TT('Lot pertama', 'First lot')}</dt><dd>0.01 ${TT('per', 'per')} ${usd(p.caps[i] / 100, false).replace(/[.,]00$/, '')} ${TT('modal, ikut balance', 'of capital, grows with balance')}</dd>
-        <dt>${TT('Modal minimal', 'Min. capital')}</dt><dd>${usd(p.caps[i] / 100, false).replace(/[.,]00$/, '')} <small>(${num(p.caps[i])} USC)</small></dd>
-        <dt>${TT('Tahan melawan', 'Withstands')}</dt><dd>${enNum(h[0])} <small>(−10%)</small> · ${enNum(h[2])} <small>(−50%)</small></dd>
-        <dt>${TT('Jarak · TP', 'Step · TP')}</dt><dd>${enNum(p.dist)} · ${enNum(p.tp)}</dd>
-      </dl>
-      ${liveBox}
-      <a class="btn ${live ? 'btn-gold' : 'btn-ghost'} btn-sm ghl-obtn" href="${live ? '/live?setup=' + live.id : '/live'}">${live ? TT('📡 Laporan live', '📡 Live report') : TT('Lihat semua live', 'See all live reports')}</a>
-    </div>`;
-  }
-
   let cache = null, cacheAt = 0;
   async function load(force) {
     if (!force && cache && Date.now() - cacheAt < 20000) return cache;
@@ -112,7 +72,6 @@ const GHL = (() => {
     cacheAt = Date.now();
     return cache;
   }
-  const find = (setups, sym, risk) => (setups || []).find((x) => x.symbol === sym && x.risk === risk);
 
   const CSS = `
   .ghl-cards{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:12px}
@@ -122,7 +81,6 @@ const GHL = (() => {
   .ghl-head{display:flex;align-items:center;gap:8px;margin-bottom:8px}
   .ghl-sym{font-weight:800;letter-spacing:.3px}
   .ghl-dot{display:inline-block;width:8px;height:8px;border-radius:50%;background:#ff8b95;margin-left:auto;flex:none}
-  .ghl-live .ghl-dot{margin-left:4px;vertical-align:middle}
   .ghl-dot.on{background:#6ee7a2;box-shadow:0 0 0 3px rgba(110,231,162,.18)}
   .ghl-k{color:var(--muted);font-size:.72rem;text-transform:uppercase;letter-spacing:.4px}
   .ghl-big{display:flex;align-items:baseline;gap:8px;flex-wrap:wrap;font-size:1.45rem;font-weight:800;line-height:1.25}
@@ -134,15 +92,6 @@ const GHL = (() => {
   .ghl-grid b{font-weight:700}
   .ghl-foot{display:flex;justify-content:space-between;gap:8px;flex-wrap:wrap;border-top:1px solid var(--line);margin-top:10px;padding-top:8px;font-size:.78rem;color:var(--muted)}
   .ghl-cta{display:block;margin-top:8px;color:var(--gold);font-weight:700;font-size:.82rem}
-  .ghl-offers{display:grid;grid-template-columns:repeat(auto-fit,minmax(250px,1fr));gap:12px}
-  .ghl-offer{border:1px solid var(--line);border-radius:16px;background:var(--card);padding:16px;display:flex;flex-direction:column;gap:10px;min-width:0}
-  .ghl-offer.r-low{border-top:3px solid #2ecc71}.ghl-offer.r-medium{border-top:3px solid var(--gold)}.ghl-offer.r-high{border-top:3px solid #ef4d5a}
-  .ghl-oname{font-size:1.15rem;font-family:'Cinzel',serif}
-  .ghl-dl{display:grid;grid-template-columns:auto 1fr;gap:4px 10px;margin:0;font-size:.84rem}
-  .ghl-dl dt{color:var(--muted)} .ghl-dl dd{margin:0;overflow-wrap:anywhere} .ghl-dl small{color:var(--muted)}
-  .ghl-live{border:1px dashed var(--line);border-radius:12px;padding:10px 12px;background:var(--bg-2)}
-  .ghl-live.soon{color:var(--muted);text-align:center}
-  .ghl-obtn{margin-top:auto;align-self:flex-start}
   .ghl-tabs{display:flex;gap:8px;flex-wrap:wrap;justify-content:center;margin-bottom:16px}
   .ghl-tabs button{border:1px solid var(--line);background:var(--bg-2);color:var(--text);border-radius:30px;padding:8px 14px;font-weight:700;font-size:.85rem;cursor:pointer}
   .ghl-tabs button.active{border-color:var(--gold);color:var(--gold);background:rgba(245,197,66,.08)}
@@ -153,5 +102,5 @@ const GHL = (() => {
     st.textContent = CSS;
     document.head.appendChild(st);
   }
-  return { TT, run, esc, toUsd, usd, num, pct, cls, days, riskBadge, NAME, ICON, PAIRS, PRESET, RISKS, RISK, spark, card, offer, load, find, enNum };
+  return { TT, run, esc, toUsd, usd, num, pct, cls, days, NAME, ICON, PAIRS, spark, card, load };
 })();
