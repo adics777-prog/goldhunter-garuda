@@ -8,6 +8,7 @@
 #  Uji tanpa menyalin / me-restart:  powershell -ExecutionPolicy Bypass -File GHG-VPS-Agent.ps1 -DryRun -Once
 # =====================================================================================
 param([switch]$Once, [switch]$DryRun)
+$AgentVersion = '1.1'
 $ErrorActionPreference = 'Stop'
 $Here = Split-Path -Parent $MyInvocation.MyCommand.Path
 $LogFile = Join-Path $Here 'agent.log'
@@ -35,7 +36,7 @@ $Key = ([string]$Cfg.key).Trim()
 $Every = 60; if ($Cfg.interval_seconds) { $Every = [Math]::Max(30, [int]$Cfg.interval_seconds) }
 $Restart = $true; if ($null -ne $Cfg.restart_terminals) { $Restart = [bool]$Cfg.restart_terminals }
 $Gap = 20; if ($Cfg.restart_gap_seconds) { $Gap = [Math]::Max(5, [int]$Cfg.restart_gap_seconds) }
-$Headers = @{ 'x-ea-key' = $Key; 'User-Agent' = 'GHG-VPS-Agent/1.0' }
+$Headers = @{ 'x-ea-key' = $Key; 'User-Agent' = 'GHG-VPS-Agent/1.1' }
 
 function Load-State { if (Test-Path $StateFile) { try { return Get-Content $StateFile -Raw | ConvertFrom-Json } catch { } } return [pscustomobject]@{ sha = ''; version = '' } }
 function Save-State($st) { $st | ConvertTo-Json | Set-Content -Path $StateFile -Encoding UTF8 }
@@ -57,10 +58,24 @@ function Get-Origin([string]$dataDir) {
   if (Test-Path (Join-Path $dataDir 'terminal64.exe')) { return $dataDir }
   return ''
 }
+# MT5 milik folder instalasi ini. Jalur exe dibaca lewat WMI, lalu Get-Process sebagai cadangan. Bila MT5 berjalan
+# dengan hak administrator sedangkan agen tidak, jalurnya tidak terbaca: agen harus dipasang ulang (Task Scheduler,
+# hak tertinggi) supaya bisa menutup & membuka MT5.
+$script:WarnedElev = $false
 function Get-TerminalProcs([string]$installDir) {
   if (-not $installDir) { return @() }
   $exe = (Join-Path $installDir 'terminal64.exe').ToLower()
-  return @(Get-CimInstance Win32_Process -Filter "Name='terminal64.exe'" | Where-Object { $_.ExecutablePath -and $_.ExecutablePath.ToLower() -eq $exe })
+  $all = @(Get-CimInstance Win32_Process -Filter "Name='terminal64.exe'")
+  $hit = @($all | Where-Object { $_.ExecutablePath -and $_.ExecutablePath.ToLower() -eq $exe })
+  if ($hit.Count -eq 0 -and $all.Count -gt 0) {
+    $ids = @(Get-Process -Name terminal64 -ErrorAction SilentlyContinue | Where-Object { $_.Path -and $_.Path.ToLower() -eq $exe } | ForEach-Object { $_.Id })
+    $hit = @($all | Where-Object { $ids -contains $_.ProcessId })
+    if ($hit.Count -eq 0 -and -not $script:WarnedElev -and @($all | Where-Object { -not $_.ExecutablePath }).Count -gt 0) {
+      Log 'PERINGATAN: MT5 berjalan dengan hak administrator, agen tidak bisa melihat / me-restart-nya. Jalankan ulang Pasang-Agen-VPS.bat (klik kanan > Run as administrator).'
+      $script:WarnedElev = $true
+    }
+  }
+  return $hit
 }
 
 function Get-Json([string]$path) { return Invoke-RestMethod -Uri ($Web + '/api' + $path) -Headers $Headers -TimeoutSec 60 }
@@ -124,7 +139,9 @@ function Install-Release($rel) {
   Remove-Item $tmp -Recurse -Force -ErrorAction SilentlyContinue
 }
 
-Log ("GHG VPS Agent aktif -> {0} (cek tiap {1} detik, restart MT5: {2}{3})" -f $Web, $Every, $Restart, $(if ($DryRun) { ', MODE UJI' } else { '' }))
+$IsAdmin = ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
+Log ("GHG VPS Agent {0} aktif -> {1} (cek tiap {2} detik, restart MT5: {3}, hak admin: {4}{5})" -f $AgentVersion, $Web, $Every, $Restart, $IsAdmin, $(if ($DryRun) { ', MODE UJI' } else { '' }))
+foreach ($d in (Get-DataDirs)) { $o = Get-Origin $d; Log ("  MT5: {0} | data {1} | berjalan: {2}" -f $o, $d, ((Get-TerminalProcs $o).Count -gt 0)) }
 $state = Load-State
 $lastStatus = [datetime]::MinValue
 while ($true) {
