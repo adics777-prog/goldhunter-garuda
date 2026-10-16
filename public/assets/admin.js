@@ -304,6 +304,17 @@
   }
 
   // ------------------------------------------------------------------ licenses
+  // Member VPS agents of a licence (licence mode): host, installed EA version / build, last heartbeat
+  const licAgents = (l, full) => {
+    const list = l.vps_agents || [];
+    if (!list.length) return l.includes_ea ? '<span class="muted">belum terhubung</span>' : '-';
+    return list.map((a) => {
+      const on = Date.now() / 1000 - a.updated_at < 600;
+      const cur = a.build_id && a.build_id === l.current_build_id;
+      return `<div class="${full ? '' : 'nowrap'}" style="overflow-wrap:anywhere">${on ? '<span style="color:#6ee7a2">●</span>' : '<span style="color:#ff8b95">●</span>'} <b>${esc(a.host)}</b> · ${a.version ? 'v' + esc(a.version) : '-'}${a.build_id ? ' #' + a.build_id : ''}${cur ? ' <span class="badge b-green">terbaru</span>' : ''}
+        <span class="muted">· ${ago(a.updated_at)}</span></div>${full ? `<div class="muted" style="margin:0 0 6px 14px">${a.agent ? 'agen ' + esc(a.agent) + ' · ' : ''}${a.installed_at ? 'dipasang ' + fmtDateTime(a.installed_at) + ' · ' : ''}${esc(a.note)}${(a.terminals || []).length ? '<br>' + a.terminals.map((x) => `${esc((x.origin || x.data).split('\\').pop())} (login ${esc(x.login || '?')}${x.matched ? ', cocok' : ''}${x.running ? ', berjalan' : ''})`).join(', ') : ''}</div>` : ''}`;
+    }).join('');
+  };
   async function licensesPage(id) {
     if (id) return licenseDetail(id);
     const st = JSON.parse(sessionStorage.getItem('lic') || '{"status":"","q":""}');
@@ -312,12 +323,13 @@
       <input id="lq" placeholder="Cari akun / email / IP" value="${esc(st.q)}" style="max-width:260px"></div><div id="ll"></div>`;
     const load = async () => {
       const { licenses } = await api('/admin/licenses?' + new URLSearchParams(st));
-      $('#ll').innerHTML = licenses.length ? `<div class="table-wrap"><table><thead><tr><th>Akun</th><th>Member</th><th>Paket</th><th>Berlaku</th><th>VPS</th><th>Status</th><th>File EA</th></tr></thead><tbody>
+      $('#ll').innerHTML = licenses.length ? `<div class="table-wrap"><table><thead><tr><th>Akun</th><th>Member</th><th>Paket</th><th>Berlaku</th><th>VPS</th><th>Status</th><th>File EA</th><th>Agen VPS</th></tr></thead><tbody>
         ${licenses.map((l) => `<tr class="click" onclick="location.hash='#/lisensi/${l.id}'"><td><b>${esc(l.account_number)}</b><div class="tiny muted">${esc(l.broker)} · ${l.platform.toUpperCase()}</div></td>
           <td>${esc(l.user_name)}<div class="tiny muted">${esc(l.user_email)}</div></td><td class="small">${esc(l.product_name)}</td>
           <td class="nowrap small">${fmtDate(l.expires_at)}${l.expires_at ? `<div class="tiny ${l.days_left <= 7 ? '' : 'muted'}" style="${l.days_left <= 7 ? 'color:var(--orange)' : ''}">${l.days_left > 0 ? l.days_left + ' hari lagi' : 'habis'}</div>` : ''}</td>
           <td class="small mono">${l.includes_vps ? esc(l.vps_ip || '— belum diisi') : '-'}</td><td>${licenseBadge(l.status)}</td>
-          <td>${l.ea_file_id ? `<a class="btn btn-ghost btn-sm" href="/api/files/${l.ea_file_id}" onclick="event.stopPropagation()" title="Unduh file EA member">⬇ .${l.platform === 'mt4' ? 'ex4' : 'ex5'}</a>` : l.includes_ea ? '<span class="tiny muted">belum ada</span>' : '-'}</td></tr>`).join('')}</tbody></table></div>` : '<div class="card empty">Belum ada lisensi.</div>';
+          <td>${l.ea_file_id ? `<a class="btn btn-ghost btn-sm" href="/api/files/${l.ea_file_id}" onclick="event.stopPropagation()" title="Unduh file EA member">⬇ .${l.platform === 'mt4' ? 'ex4' : 'ex5'}</a>` : l.includes_ea ? '<span class="tiny muted">belum ada</span>' : '-'}</td>
+          <td class="tiny">${licAgents(l)}</td></tr>`).join('')}</tbody></table></div>` : '<div class="card empty">Belum ada lisensi.</div>';
     };
     $('#lt').onchange = (e) => { st.status = e.target.value; sessionStorage.setItem('lic', JSON.stringify(st)); load(); };
     let t; $('#lq').oninput = (e) => { clearTimeout(t); t = setTimeout(() => { st.q = e.target.value; sessionStorage.setItem('lic', JSON.stringify(st)); load(); }, 300); };
@@ -354,6 +366,8 @@
               <td>${b.id}<div class="tiny muted">${ago(b.created_at)}</div></td><td>${esc(b.account_number)}</td><td class="small">${fmtDate(b.expires_at)}</td>
               <td>${buildBadge(b.status)}<div class="tiny muted">${esc(b.reason)}</div></td>
               <td>${b.file_id && b.status === 'done' ? `<a class="small" href="/api/files/${b.file_id}">Unduh</a>` : b.status === 'failed' ? `<a class="small" href="#" data-log="${b.id}">Log</a>` : ''}</td></tr>`).join('')}</tbody></table></div>` : '<div class="muted small">Belum ada build.</div>'}</div>` : ''}
+          ${l.includes_ea ? `<div class="card"><h3>Agen VPS (update otomatis)</h3><div class="small">${licAgents({ ...l, current_build_id: l.build && l.build.id }, true)}</div>
+            <p class="tiny muted" style="margin:8px 0 0">Member memasang agen dari menu Lisensi &amp; VPS (config.json berisi kunci lisensi akun ini).</p></div>` : ''}
           ${changes.length ? `<div class="card"><h3>Riwayat ganti akun</h3>${changes.map((c) => `<div class="small" style="padding:6px 0;border-bottom:1px solid var(--line)">${esc(c.old_account)} → <b>${esc(c.new_account)}</b> · ${c.status} · ${fmtDate(c.created_at)}</div>`).join('')}</div>` : ''}
         </div>
       </div>`;
@@ -941,6 +955,7 @@
     box.innerHTML = `<div class="table-wrap"><table><thead><tr><th>EA</th><th>Label tampil</th><th>Tampil</th><th>Urut</th><th>Mulai hitung</th><th class="right">Hasil</th><th></th></tr></thead><tbody>
       ${list.map((x) => `<tr data-id="${x.id}" style="${x.visible ? '' : 'opacity:.55'}">
         <td class="nowrap"><b>${esc(x.symbol)}</b> <span class="tiny muted">${esc(x.broker_symbol)}</span><div class="tiny muted">akun ${esc(x.login)} · magic ${x.magic}${x.setup_name ? ' · ' + esc(x.setup_name) : ''} · v${esc(x.version)}</div>
+          ${x.license_id ? `<div class="tiny">👤 <a href="#/lisensi/${x.license_id}">${esc(x.owner_name || 'member')}</a> <span class="muted">${esc(x.owner_email)}</span></div>` : ''}
           <div class="tiny">${x.online ? '<span style="color:#6ee7a2">● online</span>' : '<span style="color:#ff8b95">● offline</span>'} ${ago(x.at)}</div></td>
         <td><input data-k="label" value="${esc(x.label_admin)}" placeholder="${esc(x.label)}" style="min-width:130px"></td>
         <td><input type="checkbox" data-k="visible" ${x.visible ? 'checked' : ''}></td>

@@ -398,9 +398,32 @@
         <li><b>Selesai</b>Dalam ±5 menit laporan pertama masuk dan tampil di kartu lisensi Anda. Nama di papan tampil singkat (misal "Budi S****"); minta admin jika ingin disamarkan.</li>
       </ol></div>`;
 
+  // Automatic EA updates on the member's own VPS (agent in licence mode): steps, the 3 files, last status
+  const vpsAutoBox = (l, multi) => {
+    const dl = (f, name) => `<a class="btn btn-outline btn-sm" href="/api/licenses/${l.id}/agent?f=${f}">⬇ ${name}</a>`;
+    const mt = l.platform === 'mt4' ? 'MetaTrader 4' : 'MetaTrader 5';
+    const agents = l.vps_agents || [];
+    const st = agents.length ? agents.map((a) => {
+      const on = Date.now() / 1000 - a.updated_at < 600;
+      const cur = l.build && a.build_id === l.build.id;
+      return `<div class="tiny" style="margin-top:6px">${on ? '<span style="color:#6ee7a2">● terhubung</span>' : '<span style="color:#ff8b95">● tidak melapor</span>'}
+        <b>${esc(a.host)}</b> · EA ${a.version ? 'v' + esc(a.version) : '-'}${a.build_id ? ` (build #${a.build_id})` : ''} ${cur ? '<span class="badge b-green">terbaru</span>' : ''}
+        · terakhir ${ago(a.updated_at)}${a.note && a.note !== 'ok' ? `<div class="muted">${esc(a.note)}</div>` : ''}</div>`;
+    }).join('') : '<div class="tiny muted" style="margin-top:6px">Status: <b>belum terhubung</b></div>';
+    return `<div class="summary" style="margin-top:14px"><div class="small"><b style="color:var(--gold)">🔄 Update otomatis VPS</b></div>
+      <p class="tiny muted" style="margin:4px 0 0">Setiap file EA baru (perpanjangan, versi baru) langsung terpasang di ${mt} VPS Anda, tanpa unduh manual.</p>
+      <ol class="steps-list small"><li>Di VPS, unduh 3 file di bawah ke <b>satu folder</b> (mis. <span class="mono">C:\\GHG-Agent</span>).</li>
+        <li>Klik kanan <b>Pasang-Agen-VPS.bat</b> → <b>Run as administrator</b>.</li>
+        <li>${mt} di VPS harus login di akun <b>${esc(l.account_number)}</b>. Agen memasang EA lalu me-restart ${mt} itu sendiri.</li></ol>
+      <div class="row" style="margin-top:10px;gap:8px">${dl('agent', 'GHG-VPS-Agent.ps1')}${dl('install', 'Pasang-Agen-VPS.bat')}${dl('config', 'config.json')}</div>
+      <p class="tiny muted" style="margin:8px 0 0">config.json berisi kunci lisensi akun ini, jangan dibagikan.${multi ? ` Beberapa akun di satu VPS? Pakai <a href="/api/licenses/${l.id}/agent?f=config&amp;all=1">config.json gabungan semua akun</a>.` : ''}</p>
+      ${st}</div>`;
+  };
+
   // ------------------------------------------------------------------ lisensi
   async function licensesPage() {
     const [{ licenses, changes, renewals }, c] = await Promise.all([api('/licenses'), getCatalog()]);
+    const multi = licenses.filter((l) => l.includes_ea && l.status === 'active' && !l.managed_vps).length > 1;
     const card = (l) => {
       const ch = changes.filter((x) => x.license_id === l.id);
       const renewing = renewals.find((r) => r.license_id === l.id);
@@ -441,6 +464,7 @@
           : '<div class="small">Masa aktif: <b>Selamanya</b></div>'}
           ${l.requires_ib && l.includes_vps ? '<div class="tiny muted" style="margin-top:4px">EA gratis (IB) tidak kedaluwarsa; yang diperpanjang hanya sewa VPS.</div>' : ''}</div>
         <div class="row">${ea}</div>${vps}${l.includes_ea ? reportBox(l) : ''}
+        ${l.includes_ea && l.status === 'active' && !l.managed_vps ? vpsAutoBox(l, multi) : ''}
         <div class="row" style="margin-top:16px">
           ${l.billing === 'monthly' && ['active', 'expired'].includes(l.status) ? (renewing
             ? (renewing.status === 'awaiting_payment'
@@ -460,7 +484,7 @@
         <li><b>Unduh file .ex5</b>Klik "Unduh EA" di atas. File hanya berjalan di nomor akun yang tertera.</li>
         <li><b>Salin ke folder Experts</b>Di MetaTrader 5: File → Open Data Folder → MQL5 → Experts, tempel file .ex5, lalu klik kanan Navigator → Refresh.</li>
         <li><b>Pasang di chart</b>Buka chart pair sesuai paket Anda (lihat keterangan lisensi), seret EA ke chart, centang "Allow Algo Trading", lalu nyalakan tombol Algo Trading.</li>
-        <li><b>Ganti file saat diperbarui</b>Setelah perpanjangan atau ganti akun, unduh file baru dan timpa file lama.</li></ol></div>
+        <li><b>Ganti file saat diperbarui</b>Setelah perpanjangan atau ganti akun, unduh file baru dan timpa file lama. Atau pasang agen <b>Update otomatis VPS</b> (di kartu lisensi) supaya file baru terpasang sendiri.</li></ol></div>
       <div style="margin-top:22px">${monitorGuide()}</div>
       ${licenses.some((l) => l.includes_ea) ? `<div style="margin-top:22px">${reportGuide()}</div>` : ''}`;
     $$('[data-renew]').forEach((b) => b.onclick = () => renewModal(licenses.find((l) => l.id == b.dataset.renew), c));
