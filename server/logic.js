@@ -342,6 +342,22 @@ export async function rebuildAll(env, platform, reason) {
   return results.length;
 }
 
+// Per-licence secret (licenses.report_token), created on first use and stable afterwards. The licence key
+// `lic.<license_id>.<report_token>` built from it is used by the licensed EA (heartbeat) and the member's VPS agent.
+export async function ensureReportToken(env, licenseId) {
+  const lic = await env.DB.prepare('SELECT report_token FROM licenses WHERE id=?').bind(licenseId).first();
+  if (!lic) return '';
+  if (lic.report_token) return lic.report_token;
+  const token = randomToken(24);
+  // two parallel callers: only the first token is kept, both read it back
+  await env.DB.prepare(`UPDATE licenses SET report_token=? WHERE id=? AND (report_token IS NULL OR report_token='')`).bind(token, licenseId).run();
+  const again = await env.DB.prepare('SELECT report_token FROM licenses WHERE id=?').bind(licenseId).first();
+  return (again && again.report_token) || token;
+}
+export const licKey = (licenseId, token) => `lic.${licenseId}.${token}`;
+// exact byte length of a base64 string (the '=' padding is not data)
+export const b64Len = (v) => Math.floor(String(v).length * 3 / 4) - (String(v).endsWith('==') ? 2 : String(v).endsWith('=') ? 1 : 0);
+
 export async function claimBuild(env, builderId, versions = {}) {
   const t = now();
   const s = await getSettings(env);
@@ -367,14 +383,11 @@ export async function claimBuild(env, builderId, versions = {}) {
   const upd = await env.DB.prepare(`UPDATE builds SET status='building', started_at=? WHERE id=? AND status='queued'`).bind(t, job.id).run();
   if (!upd.meta.changes) return null;
   // Secret baked into the EA so its profit reports can be trusted (one per license, stable across rebuilds)
-  let lic = await env.DB.prepare('SELECT report_token FROM licenses WHERE id=?').bind(job.license_id).first();
-  let token = lic && lic.report_token;
-  if (!token) {
-    token = randomToken(24);
-    await env.DB.prepare('UPDATE licenses SET report_token=? WHERE id=?').bind(token, job.license_id).run();
-  }
+  const token = await ensureReportToken(env, job.license_id);
   return { id: job.id, license_id: job.license_id, platform: job.platform, account_number: job.account_number, expires_at: job.expires_at || 0,
-    report_token: token, report_interval: reportInterval(s) };
+    report_token: token, report_interval: reportInterval(s),
+    // licence key for the EA heartbeat (/ea/live, header x-ea-key) = lic.<license_id>.<report_token>
+    lic_key: licKey(job.license_id, token) };
 }
 
 export async function finishBuild(env, base, { id, ok, log, filename, data_b64, ea_version }) {
@@ -387,7 +400,7 @@ export async function finishBuild(env, base, { id, ok, log, filename, data_b64, 
     await emailAdmin(env, base, `Generate EA gagal (build #${id})`, `<pre style="white-space:pre-wrap">${esc(String(log || '').slice(-3000))}</pre>`, '/admin#/lisensi/' + b.license_id);
     return { ok: false };
   }
-  const size = Math.floor(data_b64.length * 3 / 4);
+  const size = b64Len(data_b64);   // exact: the VPS agent checks the downloaded size against it
   const f = await env.DB.prepare(`INSERT INTO files (user_id, kind, name, mime, size, data_b64, created_at) VALUES (NULL,'ea',?,?,?,?,?)`)
     .bind(filename, 'application/octet-stream', size, data_b64, t).run();
   // Older EA files for this license are removed: only the newest build can be downloaded.
@@ -418,10 +431,22 @@ export async function finishBuild(env, base, { id, ok, log, filename, data_b64, 
   const lic = await env.DB.prepare('SELECT * FROM licenses WHERE id=?').bind(b.license_id).first();
   if (lic.status === 'active') {
     const user = await getUser(env, lic.user_id);
-    await notify(env, lic.user_id, 'File EA baru siap diunduh', `Akun ${lic.account_number}, berlaku: ${fmtDate(lic.expires_at)}.`, '#/lisensi');
-    await emailUser(env, user, 'File EA baru siap diunduh',
-      `<p>Halo ${esc(user.name)},</p><p>File EA${ea_version ? ` <b>versi ${esc(ea_version)}</b>` : ''} untuk akun <b>${esc(lic.account_number)}</b> sudah dibuat (berlaku: <b>${fmtDate(lic.expires_at)}</b>). Silakan unduh dan ganti file lama di MetaTrader Anda.</p>`,
-      { text: 'Unduh EA', url: `${base}/member#/lisensi` });
+    // The member's VPS agent reported in the last 24 h: it installs the new file by itself within a minute.
+    const agent = await env.DB.prepare('SELECT host FROM ea_vps_lic WHERE license_id=? AND updated_at > ? ORDER BY updated_at DESC LIMIT 1').bind(lic.id, t - DAY).first();
+    const ver = ea_version ? ` <b>versi ${esc(ea_version)}</b>` : '';
+    if (agent) {
+      await notify(env, lic.user_id, 'EA baru dipasang otomatis di VPS', `Akun ${lic.account_number}: agen VPS ${agent.host} memasangnya dalam ±1 menit.`, '#/lisensi');
+      await emailUser(env, user, 'EA baru dipasang otomatis di VPS Anda',
+        `<p>Halo ${esc(user.name)},</p><p>File EA${ver} untuk akun <b>${esc(lic.account_number)}</b> sudah dibuat (berlaku: <b>${fmtDate(lic.expires_at)}</b>).</p>
+         <p>Agen VPS di <b>${esc(agent.host)}</b> akan memasangnya <b>otomatis dalam ±1 menit</b> dan me-restart MetaTrader akun ini, jadi Anda tidak perlu mengunduh apa pun. Status pemasangan tampil di menu <b>Lisensi &amp; VPS</b>.</p>`,
+        { text: 'Lihat Status', url: `${base}/member#/lisensi` });
+    } else {
+      await notify(env, lic.user_id, 'File EA baru siap diunduh', `Akun ${lic.account_number}, berlaku: ${fmtDate(lic.expires_at)}.`, '#/lisensi');
+      await emailUser(env, user, 'File EA baru siap diunduh',
+        `<p>Halo ${esc(user.name)},</p><p>File EA${ver} untuk akun <b>${esc(lic.account_number)}</b> sudah dibuat (berlaku: <b>${fmtDate(lic.expires_at)}</b>). Silakan unduh dan ganti file lama di MetaTrader Anda.</p>
+         <p style="color:#a3a3b2;font-size:13px">Ingin update berikutnya terpasang otomatis? Pasang agen VPS dari menu <b>Lisensi &amp; VPS</b> (bagian "Update otomatis VPS").</p>`,
+        { text: 'Unduh EA', url: `${base}/member#/lisensi` });
+    }
   }
   return { ok: true };
 }

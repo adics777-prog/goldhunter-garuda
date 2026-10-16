@@ -7,7 +7,7 @@ import {
 import {
   getSettings, putSetting, quote, notify, emailUser, emailAdmin, newOrderCode, getUser, getProduct,
   processOrder, completeOrder, queueBuild, claimBuild, rebuildAll, finishBuild, runDaily, orderStatusLabel, pickUniqueCode, ensureUniqueCode, createOrder, changeOrderMonths, getUsdIdr, toIdr, boardName, maskAccount, reportInterval, activeBanks,
-  usdtPay, TRC20_RE,
+  usdtPay, TRC20_RE, ensureReportToken, licKey, b64Len,
 } from '../../server/logic.js';
 import { layout, sendEmail } from '../../server/email.js';
 import { reportPng } from '../../server/report-image.js';
@@ -420,14 +420,20 @@ async function eaDailyReport(env, s, cfg, t, base) {
   if (due) await eaSendReport(env, t, cfg, base);
 }
 
+// Key: the master key (owner's own accounts) or a licence key lic.<id>.<token> compiled into a member's EA
+// (header x-ea-key, or x-lic-key). A licence key only reports its own account; its rows record the owner and start hidden.
 route('POST', '/ea/live', 'public', async ({ request, env, waitUntil, base }) => {
   const s = await getSettings(env);
   const cfg = eaCfg(s);
-  if (!cfg.key || request.headers.get('x-ea-key') !== cfg.key) fail(403, 'Kunci master salah (Admin > Pengaturan > EA Live)');
+  const lk = String(request.headers.get('x-lic-key') || '').trim();
+  const hk = isLicKey(lk) ? lk : String(request.headers.get('x-ea-key') || '').trim();
+  const lic = isLicKey(hk) ? await licAuth(env, hk) : null;
+  if (!lic && (!cfg.key || !ctEq(hk, cfg.key))) fail(403, 'Kunci master salah (Admin > Pengaturan > EA Live)');
   const b = await readJson(request);
   const t = now();
   const login = str(b.login, 20);
   if (!login) fail(400, 'Nomor akun kosong');
+  if (lic && login !== String(lic.account_number)) fail(403, `Akun ${login} tidak cocok dengan lisensi ini (lisensi untuk akun ${lic.account_number})`);
   const side = (x) => x && typeof x === 'object' && int(x.count) > 0
     ? { count: int(x.count), lots: eaNum(x.lots), avg: eaPx(x.avg), tp: eaPx(x.tp), profit: eaNum(x.profit), next_lot: eaNum(x.next_lot), next_price: eaPx(x.next_price), since: int(x.since) || 0, red_px: eaPx(x.red_px) }
     : { count: 0 };
@@ -451,9 +457,10 @@ route('POST', '/ea/live', 'public', async ({ request, env, waitUntil, base }) =>
   const setupName = str(b.setup, 40);
   snap.budget = budget;
   snap.setup = setupName;
-  await env.DB.prepare(`INSERT INTO ea_setups (login, symbol, magic, broker_symbol, server, currency, setup_name, budget, since, created_at, updated_at)
-      VALUES (?,?,?,?,?,?,?,?,?,?,0) ON CONFLICT(login, symbol, magic) DO NOTHING`)
-    .bind(login, sym, snap.magic, snap.symbol, str(b.server, 60), snap.currency, setupName, budget, t, t).run();
+  // member EAs (licence key) start hidden from the public board; the admin can show them in Pengaturan > EA Live
+  await env.DB.prepare(`INSERT INTO ea_setups (login, symbol, magic, broker_symbol, server, currency, setup_name, budget, since, created_at, updated_at, license_id, user_id, visible)
+      VALUES (?,?,?,?,?,?,?,?,?,?,0,?,?,?) ON CONFLICT(login, symbol, magic) DO NOTHING`)
+    .bind(login, sym, snap.magic, snap.symbol, str(b.server, 60), snap.currency, setupName, budget, t, t, lic ? lic.id : null, lic ? lic.user_id : null, lic ? 0 : 1).run();
   const row = await env.DB.prepare('SELECT * FROM ea_setups WHERE login=? AND symbol=? AND magic=?').bind(login, sym, snap.magic).first();
   const totalOk = row.since > 0 && int(b.since_used) === row.since ? 1 : 0;
   const day = wibDay(t);
@@ -465,9 +472,10 @@ route('POST', '/ea/live', 'public', async ({ request, env, waitUntil, base }) =>
   await env.DB.batch([
     env.DB.prepare(`UPDATE ea_setups SET broker_symbol=?, server=?, currency=?, setup_name=?, budget=?, balance=?, equity=?, updated_at=?, data=?, offline_state=0,
         total=CASE WHEN ?=1 THEN ? ELSE total END, acct_total=CASE WHEN ?=1 THEN ? ELSE acct_total END, total_ok=CASE WHEN ?=1 THEN 1 ELSE total_ok END,
-        max_dd_pct=MAX(max_dd_pct, ?), min_float=MIN(min_float, ?), max_layers=MAX(max_layers, ?) WHERE id=?`)
+        max_dd_pct=MAX(max_dd_pct, ?), min_float=MIN(min_float, ?), max_layers=MAX(max_layers, ?),
+        license_id=COALESCE(?, license_id), user_id=COALESCE(?, user_id) WHERE id=?`)
       .bind(snap.symbol, str(b.server, 60), snap.currency, setupName, budget, snap.balance, snap.equity, t, JSON.stringify(snap),
-        totalOk, eaNum(b.total), totalOk, eaNum(b.acct_total), totalOk, dd, symFloat, layers, row.id),
+        totalOk, eaNum(b.total), totalOk, eaNum(b.acct_total), totalOk, dd, symFloat, layers, lic ? lic.id : null, lic ? lic.user_id : null, row.id),
     env.DB.prepare(`INSERT INTO ea_setup_days (setup_id, day, profit, balance, equity, min_equity, max_dd_pct, max_layers, min_float, currency, updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?)
         ON CONFLICT(setup_id, day) DO UPDATE SET profit=excluded.profit, balance=excluded.balance, equity=excluded.equity,
         min_equity=CASE WHEN min_equity > 0 THEN MIN(min_equity, excluded.equity) ELSE excluded.equity END, max_dd_pct=MAX(max_dd_pct, excluded.max_dd_pct),
@@ -495,7 +503,8 @@ route('POST', '/ea/live', 'public', async ({ request, env, waitUntil, base }) =>
     }
   }
   if (row.offline_state === 1) msgs.push(`🟢 <b>${esc(label)} online kembali</b>`);
-  if (cfg.events) for (const m of msgs) waitUntil(eaTg(env, cfg, m, base, row.id));
+  // hidden member EAs never post to the public Telegram channel
+  if (cfg.events && (!lic || row.visible)) for (const m of msgs) waitUntil(eaTg(env, cfg, m, base, row.id));
   waitUntil(eaDailyReport(env, s, cfg, t, base).catch((e) => console.error('ea daily', e)));
   return json({ ok: true, next: 60, since: row.since });
 });
@@ -560,10 +569,11 @@ route('GET', '/admin/ea/setups', 'admin', async ({ env }) => {
   const s = await getSettings(env);
   const cfg = eaCfg(s);
   const t = now();
-  const { results } = await env.DB.prepare('SELECT * FROM ea_setups').all();
+  const { results } = await env.DB.prepare('SELECT s.*, u.name AS owner_name, u.email AS owner_email FROM ea_setups s LEFT JOIN users u ON u.id=s.user_id').all();
   results.sort(EA_SETUP_ORDER);
   return json({ setups: results.map((r) => ({ ...eaSetupView(r, t, cfg), login: r.login, server: r.server, magic: r.magic,
-    label_admin: r.label, visible: r.visible, sort: r.sort, created_at: r.created_at })) });
+    label_admin: r.label, visible: r.visible, sort: r.sort, created_at: r.created_at,
+    license_id: r.license_id || null, owner_name: r.license_id ? r.owner_name || '' : '', owner_email: r.license_id ? r.owner_email || '' : '' })) });
 });
 route('PUT', '/admin/ea/setups/:id', 'admin', async ({ request, env, params }) => {
   const b = await readJson(request);
@@ -1037,8 +1047,6 @@ route('GET', '/admin/content/:id/video', 'admin', async ({ env, params }) => {
 // The builder on the owner's PC publishes a release when #property version changes (or the presets change);
 // the VPS agent (PowerShell) polls GET /vps/release with x-ea-key = ea_master_key, downloads, installs into every
 // MT5 data folder and restarts the terminals, then reports to POST /vps/status.
-// exact byte length of a base64 string (the '=' padding is not data)
-const b64Len = (v) => Math.floor(v.length * 3 / 4) - (v.endsWith('==') ? 2 : v.endsWith('=') ? 1 : 0);
 const vpsRelease = (s) => { try { const r = JSON.parse(s.vps_release || 'null'); return r && r.sha ? r : null; } catch { return null; } };
 async function vpsAuth(env, request) {
   const s = await getSettings(env);
@@ -1046,6 +1054,37 @@ async function vpsAuth(env, request) {
   if (!key || request.headers.get('x-ea-key') !== key) fail(403, 'Kunci master salah (Admin > Pengaturan > EA Live)');
   return s;
 }
+// ---- Licence key `lic.<license_id>.<report_token>`: one key per member licence, used by the licensed EA's heartbeat
+// (/ea/live) and the member's VPS agent (/vps/lic/*). Valid only while the licence is active and not expired.
+// Constant-time compare: no early exit on the first different character.
+function ctEq(a, b) {
+  a = String(a ?? ''); b = String(b ?? '');
+  let d = a.length ^ b.length;
+  for (let i = 0, n = Math.max(a.length, b.length); i < n; i++) d |= (a.charCodeAt(i) | 0) ^ (b.charCodeAt(i) | 0);
+  return d === 0;
+}
+const LIC_KEY_RE = /^lic\.(\d{1,10})\.([A-Za-z0-9_-]{16,64})$/;
+const isLicKey = (k) => String(k || '').trim().startsWith('lic.');
+async function licAuth(env, key) {
+  const m = String(key || '').trim().match(LIC_KEY_RE);
+  if (!m) fail(401, 'Kunci lisensi tidak valid (format lic.<id>.<token>)');
+  const l = await env.DB.prepare('SELECT * FROM licenses WHERE id=?').bind(int(m[1])).first();
+  if (!l || !l.report_token || !ctEq(m[2], l.report_token)) fail(401, 'Kunci lisensi salah');
+  if (l.status !== 'active') fail(403, `Lisensi akun ${l.account_number} tidak aktif (status: ${l.status})`);
+  if (l.expires_at && l.expires_at <= now()) fail(403, `Lisensi akun ${l.account_number} sudah habis masa aktifnya`);
+  return l;
+}
+// Current finished EA file of a licence, with the exact byte size (the agent checks it after downloading)
+async function licCurrentFile(env, l) {
+  if (!l.current_build_id) return null;
+  const b = await env.DB.prepare(`SELECT b.id, b.ea_version, b.platform, b.account_number, b.expires_at, f.id AS file_id, f.name,
+      length(f.data_b64) AS n, substr(f.data_b64, -2) AS tail FROM builds b JOIN files f ON f.id=b.file_id AND f.kind='ea'
+      WHERE b.id=? AND b.license_id=? AND b.status='done'`).bind(l.current_build_id, l.id).first();
+  if (!b) return null;
+  b.size = Math.floor(b.n * 3 / 4) - (b.tail === '==' ? 2 : String(b.tail).endsWith('=') ? 1 : 0);
+  return b;
+}
+const vpsAgents = (rows) => rows.map((r) => { let tm = []; try { tm = JSON.parse(r.terminals || '[]'); } catch { tm = []; } return { ...r, terminals: tm }; });
 route('POST', '/builder/vps-release', 'builder', async ({ request, env }) => {
   const b = await readJson(request);
   const ex5 = String(b.ex5_b64 || '');
@@ -1109,19 +1148,65 @@ route('DELETE', '/admin/vps/:host', 'admin', async ({ env, params }) => {
   await env.DB.prepare('DELETE FROM ea_vps WHERE host=?').bind(decodeURIComponent(params.host)).run();
   return json({ ok: true });
 });
-// Agent files for the VPS; config.json comes with the web address and the master key filled in.
+// Agent files for the VPS (same agent + installer for the admin's master mode and the member's licence mode)
+const agentFile = (name, body, mime) => new Response(body, { headers: { 'content-type': mime, 'content-disposition': `attachment; filename="${name}"`, 'cache-control': 'private, no-store' } });
+function agentScript(f) {
+  if (f === 'agent') return agentFile('GHG-VPS-Agent.ps1', '\ufeff' + AGENT_PS1.replace(/\r?\n/g, '\r\n'), 'text/plain; charset=utf-8');
+  if (f === 'install') return agentFile('Pasang-Agen-VPS.bat', AGENT_BAT.replace(/\r?\n/g, '\r\n'), 'text/plain; charset=utf-8');
+  return null;
+}
+const agentConfig = (base, fields) => agentFile('config.json', JSON.stringify({ web: base || 'https://goldhuntergaruda.com', ...fields,
+  interval_seconds: 60, restart_terminals: true, restart_gap_seconds: 20, extra_data_dirs: [] }, null, 2), 'application/json');
+// Admin: config.json comes with the web address and the master key filled in.
 route('GET', '/admin/vps/download', 'admin', async ({ env, url, base }) => {
   const f = url.searchParams.get('f');
-  const s = await getSettings(env);
-  const file = (name, body, mime) => new Response(body, { headers: { 'content-type': mime, 'content-disposition': `attachment; filename="${name}"`, 'cache-control': 'private, no-store' } });
-  if (f === 'agent') return file('GHG-VPS-Agent.ps1', '\ufeff' + AGENT_PS1.replace(/\r?\n/g, '\r\n'), 'text/plain; charset=utf-8');
-  if (f === 'install') return file('Pasang-Agen-VPS.bat', AGENT_BAT.replace(/\r?\n/g, '\r\n'), 'text/plain; charset=utf-8');
+  const script = agentScript(f);
+  if (script) return script;
   if (f === 'config') {
+    const s = await getSettings(env);
     const key = String(s.ea_master_key || '').trim();
     if (!key) fail(400, 'Buat & simpan kunci master dulu (Pengaturan > EA Live)');
-    return file('config.json', JSON.stringify({ web: base || 'https://goldhuntergaruda.com', key, interval_seconds: 60, restart_terminals: true, restart_gap_seconds: 20, extra_data_dirs: [] }, null, 2), 'application/json');
+    return agentConfig(base, { key });
   }
   fail(404, 'File tidak dikenal');
+});
+
+// ---- Member VPS agent (licence mode): installs the member's own licence-locked EA build on their VPS.
+// GET /vps/lic/release?have=<build_id> -> none | same | the current build + the generic presets of the owner's release
+route('GET', '/vps/lic/release', 'public', async ({ request, env, url }) => {
+  const l = await licAuth(env, request.headers.get('x-lic-key'));
+  const b = await licCurrentFile(env, l);
+  if (!b) return json({ ok: true, none: true, account: l.account_number, platform: l.platform });
+  if (String(url.searchParams.get('have') || '') === String(b.id)) return json({ ok: true, same: true, build_id: b.id, version: b.ea_version || '', account: l.account_number });
+  const rel = vpsRelease(await getSettings(env));
+  return json({ ok: true, build_id: b.id, version: b.ea_version || '', platform: l.platform, account: l.account_number,
+    ex5: { id: b.file_id, name: str(b.name, 120).replace(/[\\/:*?"<>|]/g, '') || `GOLD HUNTER GARUDA_${l.account_number}.${l.platform === 'mt4' ? 'ex4' : 'ex5'}`, size: b.size },
+    presets: rel ? rel.presets : [], expires_at: b.expires_at || 0, license_expires_at: l.expires_at || 0 });
+});
+// only this licence's current EA file or one of the release presets
+route('GET', '/vps/lic/file/:id', 'public', async ({ request, env, params }) => {
+  const l = await licAuth(env, request.headers.get('x-lic-key'));
+  const id = int(params.id);
+  const b = await licCurrentFile(env, l);
+  const f = b && b.file_id === id
+    ? await env.DB.prepare("SELECT name, data_b64 FROM files WHERE id=? AND kind='ea'").bind(id).first()
+    : await env.DB.prepare("SELECT name, data_b64 FROM files WHERE id=? AND kind='vps_preset'").bind(id).first();
+  if (!f) fail(404, 'File tidak ada (sudah diganti build baru?)');
+  return new Response(unb64(f.data_b64), { headers: { 'content-type': 'application/octet-stream', 'cache-control': 'private, no-store' } });
+});
+route('POST', '/vps/lic/status', 'public', async ({ request, env }) => {
+  const l = await licAuth(env, request.headers.get('x-lic-key'));
+  const b = await readJson(request);
+  const host = str(b.host, 60);
+  if (!host) fail(400, 'Nama VPS kosong');
+  const terms = (Array.isArray(b.terminals) ? b.terminals : []).slice(0, 40).map((x) => ({ data: str(x.data, 200), origin: str(x.origin, 200), login: str(x.login, 20),
+    matched: !!x.matched, running: !!x.running }));
+  const t = now();
+  await env.DB.prepare(`INSERT INTO ea_vps_lic (license_id, host, version, build_id, agent, terminals, note, updated_at, installed_at) VALUES (?,?,?,?,?,?,?,?,?)
+      ON CONFLICT(license_id, host) DO UPDATE SET version=excluded.version, build_id=excluded.build_id, agent=excluded.agent, terminals=excluded.terminals,
+      note=excluded.note, updated_at=excluded.updated_at, installed_at=CASE WHEN excluded.installed_at > 0 THEN excluded.installed_at ELSE installed_at END`)
+    .bind(l.id, host, str(b.version, 20), int(b.build_id) || 0, str(b.agent, 12), JSON.stringify(terms), str(b.note, 300), t, b.installed ? t : 0).run();
+  return json({ ok: true });
 });
 
 // ---- Admin: Telegram bot ----
@@ -1342,6 +1427,8 @@ async function licenseView(env, l, forAdmin) {
     vps_pass: l.managed_vps && !forAdmin ? '' : await decrypt(env, l.vps_pass_enc), vps_note: l.vps_note,
     build, build_pending: pending, created_at: l.created_at,
     report: await env.DB.prepare('SELECT currency, balance, equity, profit_day, profit_week, profit_month, positions, updated_at, started_at, total_profit, total_ok FROM ea_stats WHERE license_id=?').bind(l.id).first(),
+    // member VPS agents installing this licence's EA automatically (newest heartbeat first)
+    vps_agents: l.includes_ea ? vpsAgents((await env.DB.prepare('SELECT host, version, build_id, agent, terminals, note, updated_at, installed_at FROM ea_vps_lic WHERE license_id=? ORDER BY updated_at DESC LIMIT 10').bind(l.id).all()).results) : [],
   };
   if (forAdmin) { out.board_show = l.board_show; out.board_hide_name = l.board_hide_name; }
   if (forAdmin) {
@@ -1363,6 +1450,27 @@ route('GET', '/licenses', 'member', async ({ env, user }) => {
   const { results: renewals } = await env.DB.prepare(`SELECT id, license_id, code, status, total, pay_deadline FROM orders WHERE user_id=? AND kind='renew'
       AND status IN ('awaiting_payment','awaiting_verification','processing')`).bind(user.id).all();
   return json({ licenses, changes, renewals });
+});
+
+// Member: VPS agent files for one licence (?f=agent|install|config). config.json carries the licence key;
+// ?all=1 puts every active EA licence of the member into one config (several accounts on one VPS).
+route('GET', '/licenses/:id/agent', 'member', async ({ env, user, params, url, base }) => {
+  const l = await env.DB.prepare(LICENSE_SQL + ' WHERE l.id=? AND l.user_id=?').bind(int(params.id), user.id).first();
+  if (!l) fail(404, 'Lisensi tidak ditemukan');
+  if (!l.includes_ea) fail(400, 'Paket ini tidak berisi EA');
+  const f = url.searchParams.get('f');
+  const script = agentScript(f);
+  if (script) return script;
+  if (f !== 'config') fail(404, 'File tidak dikenal');
+  const entry = async (x) => ({ id: x.id, key: licKey(x.id, await ensureReportToken(env, x.id)), account: x.account_number, platform: x.platform });
+  if (url.searchParams.get('all') === '1') {
+    const { results } = await env.DB.prepare(LICENSE_SQL + ` WHERE l.user_id=? AND p.includes_ea=1 AND l.status='active' ORDER BY l.id`).bind(user.id).all();
+    const list = results.some((x) => x.id === l.id) ? results : [l, ...results];
+    const licenses = [];
+    for (const x of list) licenses.push(await entry(x));
+    return agentConfig(base, { licenses });
+  }
+  return agentConfig(base, { license: await entry(l) });
 });
 
 route('POST', '/licenses/:id/renew', 'member', async ({ request, env, user, params, base }) => {
@@ -1589,8 +1697,10 @@ route('GET', '/admin/licenses', 'admin', async ({ env, url }) => {
   sql += ' ORDER BY (l.expires_at IS NULL), l.expires_at, l.id DESC LIMIT 500';
   const { results } = await env.DB.prepare(sql).bind(...args).all();
   const t = now();
+  const { results: agents } = await env.DB.prepare('SELECT license_id, host, version, build_id, agent, note, updated_at, installed_at FROM ea_vps_lic ORDER BY updated_at DESC').all();
   return json({
     licenses: results.map((l) => ({
+      vps_agents: agents.filter((a) => a.license_id === l.id),
       id: l.id, user_name: l.user_name, user_email: l.user_email, product_name: l.product_name, includes_vps: l.includes_vps,
       platform: l.platform, account_number: l.account_number, broker: l.broker, status: l.status, expires_at: l.expires_at,
       days_left: l.expires_at ? Math.ceil((l.expires_at - t) / DAY) : null, vps_ip: l.vps_ip, current_build_id: l.current_build_id,
@@ -1861,13 +1971,15 @@ route('POST', '/builder/claim', 'builder', async ({ request, env, base, waitUnti
   }
   const rel = vpsRelease(s);
   return json({ job: await claimBuild(env, str(b.builder_id, 60) || 'builder', b.versions && typeof b.versions === 'object' ? b.versions : {}),
-    vps_release: rel ? { version: rel.version, sha: rel.sha, sha_ex5: rel.sha_ex5 || '', sha_presets: rel.sha_presets || '' } : { version: '', sha: '', sha_ex5: '', sha_presets: '' } });
+    vps_release: rel ? { version: rel.version, sha: rel.sha, sha_ex5: rel.sha_ex5 || '', sha_presets: rel.sha_presets || '' } : { version: '', sha: '', sha_ex5: '', sha_presets: '' },
+    // master key compiled into the owner's release EA (heartbeat to /ea/live); '' = not set yet
+    ea_key: String(s.ea_master_key || '').trim() });
 });
 route('POST', '/builder/result', 'builder', async ({ request, env, base }) => {
   const b = await readJson(request);
   return json(await finishBuild(env, base, {
     id: int(b.id), ok: !!b.ok, log: String(b.log || ''), filename: str(b.filename, 120) || 'GoldHunter_Garuda.ex5',
-    data_b64: b.data_b64 || '', ea_version: str(b.ea_version, 20),
+    data_b64: b.data_b64 || '', ea_version: str(b.ea_version || b.version, 20),
   }));
 });
 route('POST', '/cron/daily', 'cron', async ({ env, base }) => json({ ok: true, result: await runDaily(env, base) }));
