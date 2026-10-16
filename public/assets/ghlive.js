@@ -3,7 +3,7 @@ const GHL = (() => {
   const TT = (id, en) => (typeof window.T === 'function' ? window.T(id, en) : id);
   const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
   const loc = () => TT('id-ID', 'en-US');
-  const isCent = (cur) => ['USC', 'USX', 'UST'].includes(String(cur || '').toUpperCase());
+  const isCent = (cur) => ['USC', 'USX', 'UST', 'CNT'].includes(String(cur || '').toUpperCase());
   // account money -> dollars (cent account: 100 USC = $1)
   const toUsd = (v, cur) => (v == null ? null : isCent(cur) ? v / 100 : v);
   const usd = (v, sign = true) => {

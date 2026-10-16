@@ -325,7 +325,7 @@ const eaParse = (txt) => { try { return JSON.parse(txt || '{}') || {}; } catch {
 // admin label wins, then the EA's own name (input), then the pair
 const eaLabel = (r) => r.label || r.setup_name || r.symbol;
 // account currency -> US dollar (cent accounts: 100 USC = $1)
-const eaUsd = (v, cur) => { if (v == null || !Number.isFinite(Number(v))) return null; const c = String(cur || '').toUpperCase(); if (c === 'USC' || c === 'USX' || c === 'UST') return Math.round(v) / 100; if (c === 'USD') return Math.round(v * 100) / 100; return null; };
+const eaUsd = (v, cur) => { if (v == null || !Number.isFinite(Number(v))) return null; const c = String(cur || '').toUpperCase(); if (c === 'USC' || c === 'USX' || c === 'UST' || c === 'CNT') return Math.round(v) / 100; if (c === 'USD') return Math.round(v * 100) / 100; return null; };
 function eaCfg(s) {
   return { key: String(s.ea_master_key || '').trim(), hour: Number.isFinite(Number(s.ea_report_hour)) && s.ea_report_hour !== '' ? int(s.ea_report_hour) : 21,
     minLayers: s.ea_tg_min_layers === '' || s.ea_tg_min_layers == null ? 4 : int(s.ea_tg_min_layers), offlineMin: int(s.ea_offline_min) || 5, tg: s.ea_tg_enabled !== '0',

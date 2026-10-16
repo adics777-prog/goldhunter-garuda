@@ -302,7 +302,7 @@ export function toIdr(amount, currency, rate) {
   const c = String(currency || '').toUpperCase();
   if (c === 'IDR') return amount;
   if (!rate) return null;
-  if (c === 'USC' || c === 'USX' || c === 'UST') return amount / 100 * rate;
+  if (c === 'USC' || c === 'USX' || c === 'UST' || c === 'CNT') return amount / 100 * rate;
   if (c === 'USD') return amount * rate;
   return null;
 }
