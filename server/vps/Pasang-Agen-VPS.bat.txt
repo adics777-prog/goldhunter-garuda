@@ -1,10 +1,12 @@
 @echo off
 rem ============================================================================
 rem  Pasang GHG VPS Agent: update otomatis EA GOLD HUNTER GARUDA + preset di VPS ini.
+rem  Berlaku untuk member (config.json dari menu Lisensi & VPS, berisi kunci lisensi)
+rem  maupun admin (config.json dari Pengaturan > EA Live > VPS, berisi kunci master).
 rem  Taruh file ini, GHG-VPS-Agent.ps1 dan config.json dalam SATU folder, lalu
 rem  klik kanan file ini > Run as administrator.
 rem  Agen berjalan tersembunyi dengan hak administrator (Task Scheduler) supaya bisa
-rem  menutup & membuka MT5, dan otomatis jalan lagi setiap kali Windows login.
+rem  menutup & membuka MetaTrader, dan otomatis jalan lagi setiap kali Windows login.
 rem  Aman dijalankan ulang: agen lama dihentikan dan diganti.
 rem ============================================================================
 cd /d "%~dp0"
@@ -12,7 +14,7 @@ title Pasang GHG VPS Agent
 net session >nul 2>&1
 if errorlevel 1 ( echo. & echo Jalankan sebagai Administrator: klik kanan Pasang-Agen-VPS.bat ^> Run as administrator. & echo. & pause & exit /b 1 )
 if not exist "GHG-VPS-Agent.ps1" ( echo GHG-VPS-Agent.ps1 tidak ada di folder ini. & pause & exit /b 1 )
-if not exist "config.json" ( echo config.json tidak ada. Unduh dari Admin web ^> Pengaturan ^> EA Live ^> VPS. & pause & exit /b 1 )
+if not exist "config.json" ( echo config.json tidak ada. Unduh dari web: member = menu Lisensi ^& VPS, admin = Pengaturan ^> EA Live ^> VPS. & pause & exit /b 1 )
 powershell -NoProfile -ExecutionPolicy Bypass -Command "Get-ChildItem -Path '%~dp0' | Unblock-File"
 echo.
 echo === 1/4 Hentikan agen lama (bila ada) ===
@@ -27,6 +29,6 @@ echo.
 echo === 4/4 Menjalankan agen sekarang ===
 schtasks /Run /TN "GHG VPS Agent"
 echo.
-echo SELESAI. Log ada di agent.log di folder ini. Status VPS tampil di Admin web ^> Pengaturan ^> EA Live.
+echo SELESAI. Log ada di agent.log di folder ini. Status tampil di web: member = menu Lisensi ^& VPS, admin = Pengaturan ^> EA Live.
 echo Untuk berhenti: buka Task Scheduler, hapus task "GHG VPS Agent", lalu restart Windows.
 pause
