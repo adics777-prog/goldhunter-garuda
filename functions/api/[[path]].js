@@ -317,8 +317,9 @@ const eaMoney = (v, cur) => `${Number(v) > 0 ? '+' : (Number(v) < 0 ? '-' : '')}
 const eaPlain = (v) => Math.abs(Number(v) || 0).toLocaleString('id-ID', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 const eaDur = (sec) => { const m = Math.max(0, Math.round(sec / 60)); return m >= 1440 ? `${Math.floor(m / 1440)} hari ${Math.floor((m % 1440) / 60)} jam` : m >= 60 ? `${Math.floor(m / 60)} jam ${m % 60} mnt` : `${m} menit`; };
 const EA_LIVE_KEYS = ['ea_master_key', 'ea_report_hour', 'ea_report_every', 'ea_tg_min_layers', 'ea_offline_min', 'ea_tg_enabled', 'ea_tg_events'];
-const eaSym = (v) => { const x = String(v || '').toUpperCase(); const m = x.match(/^([A-Z]{6})/); return m ? m[1] : x.slice(0, 12); };
-const EA_SYM_NAME = { XAUUSD: 'Emas', BTCUSD: 'Bitcoin', EURUSD: 'EURUSD', USDJPY: 'USDJPY' };
+// broker symbol -> plain name: XAUUSDc / XAUUSDm / EURUSD.pro -> XAUUSD / EURUSD, US500c -> US500
+const eaSym = (v) => { const x = String(v || '').replace(/[.#_-].*$/, '').replace(/[a-z]+$/, '').toUpperCase(); const m = x.match(/^([A-Z]{6})/); return m ? m[1] : x.slice(0, 12); };
+const EA_SYM_NAME = { XAUUSD: 'Emas', BTCUSD: 'Bitcoin', EURUSD: 'EURUSD', USDJPY: 'USDJPY', US500: 'S&P 500' };
 const EA_SYM_ORDER = ['XAUUSD', 'USDJPY', 'BTCUSD', 'EURUSD'];
 const eaSymTitle = (sym) => `${sym}${EA_SYM_NAME[sym] ? ` (${EA_SYM_NAME[sym]})` : ''}`;
 const eaParse = (txt) => { try { return JSON.parse(txt || '{}') || {}; } catch { return {}; } };
