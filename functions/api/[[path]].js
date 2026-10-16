@@ -319,7 +319,7 @@ const eaDur = (sec) => { const m = Math.max(0, Math.round(sec / 60)); return m >
 const EA_LIVE_KEYS = ['ea_master_key', 'ea_report_hour', 'ea_report_every', 'ea_tg_min_layers', 'ea_offline_min', 'ea_tg_enabled', 'ea_tg_events'];
 const eaSym = (v) => { const x = String(v || '').toUpperCase(); const m = x.match(/^([A-Z]{6})/); return m ? m[1] : x.slice(0, 12); };
 const EA_SYM_NAME = { XAUUSD: 'Emas', BTCUSD: 'Bitcoin', EURUSD: 'EURUSD', USDJPY: 'USDJPY' };
-const EA_SYM_ORDER = ['XAUUSD', 'BTCUSD', 'EURUSD', 'USDJPY'];
+const EA_SYM_ORDER = ['XAUUSD', 'USDJPY', 'BTCUSD', 'EURUSD'];
 const eaSymTitle = (sym) => `${sym}${EA_SYM_NAME[sym] ? ` (${EA_SYM_NAME[sym]})` : ''}`;
 const eaParse = (txt) => { try { return JSON.parse(txt || '{}') || {}; } catch { return {}; } };
 // admin label wins, then the EA's own name (input), then the pair

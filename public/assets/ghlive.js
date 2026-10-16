@@ -24,7 +24,7 @@ const GHL = (() => {
   const run = (sec) => ((sec || 0) < 3600 ? TT('baru mulai', 'just started') : `${TT('berjalan', 'running')} ${days(sec)}`);
   const NAME = () => ({ XAUUSD: TT('Emas', 'Gold'), BTCUSD: 'Bitcoin', EURUSD: 'Euro / Dolar', USDJPY: TT('Dolar / Yen', 'Dollar / Yen') });
   const ICON = { XAUUSD: '🥇', BTCUSD: '₿', EURUSD: '💶', USDJPY: '💴' };
-  const PAIRS = ['XAUUSD', 'BTCUSD', 'EURUSD', 'USDJPY'];
+  const PAIRS = ['XAUUSD', 'USDJPY', 'BTCUSD', 'EURUSD'];   // focus pairs first
 
   // small bar chart of daily profit since the start
   function spark(arr, cur) {
