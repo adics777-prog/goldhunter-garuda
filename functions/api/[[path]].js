@@ -473,8 +473,11 @@ route('POST', '/ea/live', 'public', async ({ request, env, waitUntil, base }) =>
   const day = wibDay(t);
   const symFloat = (snap.buy.profit || 0) + (snap.sell.profit || 0);
   const layers = Math.max(snap.buy.count || 0, snap.sell.count || 0);
-  // drawdown: of the EA's own baskets vs its budget, or of the whole account vs the balance
-  const dd = budget > 0 ? Math.round(Math.max(0, -symFloat) / budget * 10000) / 100
+  // drawdown: the EA's own peak-to-trough max DD of the account equity (deposits excluded, EA v2.95+);
+  // older EAs: the EA's baskets vs its budget, or the whole account vs the balance at this moment
+  const ddEa = b.dd_max != null && Number.isFinite(Number(b.dd_max)) ? Math.max(0, Number(b.dd_max)) : null;
+  const dd = ddEa != null && parseFloat(String(b.version || '0')) >= 2.95 ? Math.round(ddEa * 100) / 100
+    : budget > 0 ? Math.round(Math.max(0, -symFloat) / budget * 10000) / 100
     : snap.balance > 0 ? Math.round(Math.max(0, (snap.balance - snap.equity) / snap.balance * 100) * 100) / 100 : 0;
   await env.DB.batch([
     env.DB.prepare(`UPDATE ea_setups SET broker_symbol=?, server=?, currency=?, setup_name=?, budget=?, balance=?, equity=?, updated_at=?, data=?, offline_state=0,
