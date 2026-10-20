@@ -37,7 +37,8 @@ enum ENUM_POSITION_PROPERTY_DOUBLE { POSITION_VOLUME, POSITION_PRICE_OPEN, POSIT
 enum ENUM_POSITION_PROPERTY_STRING { POSITION_SYMBOL, POSITION_COMMENT };
 enum ENUM_DEAL_TYPE { DEAL_TYPE_BUY = 0, DEAL_TYPE_SELL = 1, DEAL_TYPE_BALANCE = 2, DEAL_TYPE_CREDIT = 3, DEAL_TYPE_CHARGE = 4, DEAL_TYPE_CORRECTION = 5, DEAL_TYPE_BONUS = 6 };
 enum ENUM_DEAL_ENTRY { DEAL_ENTRY_IN = 0, DEAL_ENTRY_OUT = 1, DEAL_ENTRY_INOUT = 2, DEAL_ENTRY_OUT_BY = 3 };
-enum ENUM_DEAL_PROPERTY_INTEGER { DEAL_TICKET, DEAL_ORDER, DEAL_TIME, DEAL_TIME_MSC, DEAL_TYPE, DEAL_ENTRY, DEAL_MAGIC, DEAL_POSITION_ID };
+enum ENUM_DEAL_PROPERTY_INTEGER { DEAL_TICKET, DEAL_ORDER, DEAL_TIME, DEAL_TIME_MSC, DEAL_TYPE, DEAL_ENTRY, DEAL_MAGIC, DEAL_POSITION_ID, DEAL_REASON };
+enum ENUM_DEAL_REASON { DEAL_REASON_CLIENT = 0, DEAL_REASON_MOBILE = 1, DEAL_REASON_WEB = 2, DEAL_REASON_EXPERT = 3, DEAL_REASON_SL = 4, DEAL_REASON_TP = 5, DEAL_REASON_SO = 6 };
 enum ENUM_DEAL_PROPERTY_DOUBLE { DEAL_VOLUME, DEAL_PRICE, DEAL_COMMISSION, DEAL_SWAP, DEAL_PROFIT, DEAL_FEE };
 enum ENUM_DEAL_PROPERTY_STRING { DEAL_SYMBOL, DEAL_COMMENT };
 enum ENUM_TRADE_TRANSACTION_TYPE { TRADE_TRANSACTION_DEAL_ADD = 6, TRADE_TRANSACTION_REQUEST = 10 };
@@ -196,7 +197,7 @@ string PositionGetString(const ENUM_POSITION_PROPERTY_STRING p)
 //+------------------------------------------------------------------+
 ulong    g_c4Sel[];             // hasil HistorySelect / HistorySelectByPosition
 ulong    g_c4DT = 0;            // deal yang terakhir dimuat
-long     g_c4DI[8];
+long     g_c4DI[9];
 double   g_c4DD[6];
 string   g_c4DS[2];
 
@@ -223,6 +224,7 @@ bool C4DealLoad(const ulong d)
       g_c4DI[DEAL_ENTRY] = DEAL_ENTRY_IN;
       g_c4DI[DEAL_MAGIC] = 0;
       g_c4DI[DEAL_POSITION_ID] = 0;
+      g_c4DI[DEAL_REASON] = DEAL_REASON_CLIENT;
       g_c4DD[DEAL_VOLUME] = 0.0;
       g_c4DD[DEAL_PRICE] = 0.0;
       g_c4DD[DEAL_COMMISSION] = 0.0;
@@ -247,6 +249,9 @@ bool C4DealLoad(const ulong d)
    g_c4DI[DEAL_ENTRY] = out ? DEAL_ENTRY_OUT : DEAL_ENTRY_IN;
    g_c4DI[DEAL_MAGIC] = OrderMagicNumber();
    g_c4DI[DEAL_POSITION_ID] = t;
+   //--- alasan tutup dari komentar MT4: [tp] / [sl] / so: (stop out); selain itu dianggap EA
+   string oc = OrderComment();
+   g_c4DI[DEAL_REASON] = !out ? DEAL_REASON_EXPERT : (StringFind(oc, "[tp]") >= 0 ? DEAL_REASON_TP : (StringFind(oc, "[sl]") >= 0 ? DEAL_REASON_SL : (StringFind(oc, "so:") >= 0 ? DEAL_REASON_SO : DEAL_REASON_EXPERT)));
    g_c4DD[DEAL_VOLUME] = OrderLots();
    g_c4DD[DEAL_PRICE] = out ? OrderClosePrice() : OrderOpenPrice();
    g_c4DD[DEAL_COMMISSION] = out ? OrderCommission() : 0.0;            // komisi MT4 dibukukan saat posisi tutup
