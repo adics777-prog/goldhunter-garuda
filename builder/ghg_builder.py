@@ -395,6 +395,22 @@ def vps_warn(msg):
         log(msg)
 
 
+def restart_local_mt5(p):
+    """Close this PC's MT5 normally (WM_CLOSE, charts and inputs saved) and open it again - restart_mt5.ps1."""
+    exe = os.path.join(os.path.dirname(p.get('metaeditor') or ''), 'terminal64.exe')
+    if not os.path.exists(exe):
+        return
+    try:
+        r = subprocess.run(['powershell', '-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', os.path.join(HERE, 'restart_mt5.ps1'), '-Exe', exe],
+                           capture_output=True, text=True, timeout=240)
+        for line in (r.stdout or '').strip().splitlines():
+            log(f'PC: {line}')
+        if r.returncode != 0 and r.stderr:
+            log(f'PC: restart MT5 gagal: {r.stderr.strip()[:300]}')
+    except Exception as e:
+        log(f'PC: restart MT5 gagal: {e}')
+
+
 def sync_vps_release(cfg, server):
     """Publish GOLD HUNTER GARUDA (.ex5 + all its presets) for the VPS agents.
     Code is published only when #property version changes (an edit without a version bump never reaches the live
@@ -483,6 +499,9 @@ def sync_vps_release(cfg, server):
         'presets': [{'name': n, 'b64': base64.b64encode(b).decode()} for n, b in presets]})
     VPS_STATE['warned'] = ''
     log(f'VPS: rilis v{version} diterbitkan ({len(data):,} byte + {len(presets)} preset). Agen VPS memasangnya dalam ±1 menit.')
+    # the MT5 on this PC only loads the new EA at start: restart it once per new EA build (not for preset-only releases)
+    if sha_ex5 != (server.get('sha_ex5') or '') and cfg.get('local_restart', True) is not False:
+        restart_local_mt5(p)
 
 
 def sync_content(cfg):
