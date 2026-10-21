@@ -5,17 +5,27 @@
 #    terbaru akun Anda di goldhuntergaruda.com. Build baru: file EA (terkunci di nomor akun) + preset disalin
 #    ke folder data MetaTrader yang login di akun itu (config\common.ini), lalu MetaTrader itu ditutup normal
 #    (chart & input tersimpan) dan dibuka lagi. Status tampil di menu Lisensi & VPS member area.
+#    Tiap ~10 menit profil chart aktif MetaTrader itu (chart, EA + semua input) dan baris [Experts] common.ini
+#    di-backup ke web (hanya bila berubah). Bila VPS mati: installer 1 file (member area) memulihkannya di VPS baru.
 #  - MODE MASTER (admin, config berisi "key" = kunci master EA): rilis .ex5 + preset disalin ke SETIAP
 #    folder data MT5, lalu semua MT5 di-restart. Status tampil di Admin > Pengaturan > EA Live > VPS.
 #  Jalankan sekali:  Pasang-Agen-VPS.bat   (otomatis jalan lagi setiap Windows login)
 #  Uji tanpa menyalin / me-restart:  powershell -ExecutionPolicy Bypass -File GHG-VPS-Agent.ps1 -DryRun -Once
+#  Pasang di VPS baru (dipakai installer 1 file):  GHG-VPS-Agent.ps1 -Setup [-Only <id lisensi>]
+#    = tutup MetaTrader akun berlisensi, pasang EA + preset, pulihkan backup profil terakhir sebagai profil
+#      "GHG Restore", nyalakan Algo Trading + WebRequest (+ daftar URL dari backup), buka MetaTrader lagi.
+#    Kode keluar: 0 selesai, 2 MetaTrader belum login di akun lisensi, 3 file EA belum ada di web, 1 gagal.
+#  MT4: update EA + backup/pulih profil (folder profiles\<profil>, profiles\lastprofile.ini) didukung; setelan
+#  [Experts] (Algo Trading / WebRequest) hanya untuk MT5 - di MT4 atur sekali lewat Tools > Options.
 # =====================================================================================
-param([switch]$Once, [switch]$DryRun)
-$AgentVersion = '1.2'
+param([switch]$Once, [switch]$DryRun, [switch]$Setup, [string]$Only = '')
+$AgentVersion = '1.3'
 $ErrorActionPreference = 'Stop'
 $Here = Split-Path -Parent $MyInvocation.MyCommand.Path
 $LogFile = Join-Path $Here 'agent.log'
 $StateFile = Join-Path $Here 'state.json'
+$SetupResultFile = Join-Path $Here 'setup-result.json'
+$RestoreProfile = 'GHG Restore'
 [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
 
 function Log([string]$m) {
@@ -29,7 +39,10 @@ function Log([string]$m) {
 
 # satu agen saja per Windows
 $mutex = New-Object System.Threading.Mutex($false, 'Global\GHG-VPS-Agent')
-if (-not $mutex.WaitOne(0)) { Log 'Agen sudah berjalan, keluar.'; exit 0 }
+if (-not $mutex.WaitOne(0)) {
+  if ($Setup) { Log 'Agen GHG lain sedang berjalan di PC ini. Hentikan dulu (installer melakukannya otomatis), lalu ulangi.'; exit 1 }
+  Log 'Agen sudah berjalan, keluar.'; exit 0
+}
 
 $cfgPath = Join-Path $Here 'config.json'
 if (-not (Test-Path $cfgPath)) { Log 'config.json tidak ada. Unduh dari web: member = menu Lisensi & VPS, admin = Pengaturan > EA Live > VPS.'; exit 1 }
@@ -39,6 +52,8 @@ $Key = ([string]$Cfg.key).Trim()
 $Every = 60; if ($Cfg.interval_seconds) { $Every = [Math]::Max(30, [int]$Cfg.interval_seconds) }
 $Restart = $true; if ($null -ne $Cfg.restart_terminals) { $Restart = [bool]$Cfg.restart_terminals }
 $Gap = 20; if ($Cfg.restart_gap_seconds) { $Gap = [Math]::Max(5, [int]$Cfg.restart_gap_seconds) }
+# backup profil chart tiap x menit (0 = mati)
+$ProfEvery = 10; if ($null -ne $Cfg.profile_backup_minutes) { $ProfEvery = [int]$Cfg.profile_backup_minutes; if ($ProfEvery -gt 0) { $ProfEvery = [Math]::Max(2, $ProfEvery) } }
 $UA = 'GHG-VPS-Agent/' + $AgentVersion
 $Headers = @{ 'x-ea-key' = $Key; 'User-Agent' = $UA }
 
@@ -55,10 +70,106 @@ foreach ($l in @($Cfg.license) + @($Cfg.licenses)) {
 $LicMode = $Lics.Count -gt 0
 if (-not $LicMode -and -not $Key) { Log 'config.json tidak berisi "license" maupun "key". Unduh ulang config.json dari web.'; exit 1 }
 
+# ---------------------------------------------------------------- Win32 + chart file helpers
+# GhgWin: jendela utama MetaTrader (kelas MetaQuotes::MetaTrader::5.00 / 4.00) untuk ditutup normal (WM_CLOSE);
+# Process.MainWindowHandle MetaTrader 5 = 0, jadi CloseMainWindow() tidak bisa dipakai.
+# GhgChr: membaca / menulis file chart (*.chr) apa adanya (encoding & BOM sama), membuang objek tersembunyi /
+# buatan EA GOLD HUNTER (GHG_*) dari backup (EA menggambarnya lagi), mengganti nama EA ke file berlisensi saat pulih.
+if (-not ('GhgWin' -as [type])) {
+  Add-Type -TypeDefinition @"
+using System; using System.IO; using System.Text; using System.Collections.Generic; using System.Runtime.InteropServices;
+public class GhgWin {
+  public delegate bool EnumProc(IntPtr h, IntPtr l);
+  [DllImport("user32.dll")] public static extern bool EnumWindows(EnumProc f, IntPtr l);
+  [DllImport("user32.dll")] public static extern int GetClassName(IntPtr h, StringBuilder s, int n);
+  [DllImport("user32.dll")] public static extern uint GetWindowThreadProcessId(IntPtr h, out uint p);
+  [DllImport("user32.dll")] public static extern bool PostMessage(IntPtr h, uint m, IntPtr w, IntPtr l);
+  public static IntPtr Find(uint pid, string cls) {
+    IntPtr found = IntPtr.Zero;
+    EnumWindows(delegate(IntPtr h, IntPtr l) {
+      uint p; GetWindowThreadProcessId(h, out p);
+      if (p == pid) { StringBuilder sb = new StringBuilder(256); GetClassName(h, sb, 256); if (sb.ToString() == cls) { found = h; return false; } }
+      return true; }, IntPtr.Zero);
+    return found;
+  }
+  public static bool Close(uint pid, string cls) { IntPtr h = Find(pid, cls); if (h == IntPtr.Zero) return false; return PostMessage(h, 0x10, IntPtr.Zero, IntPtr.Zero); }
+}
+public class GhgChr {
+  public static int LastGhg;
+  static Encoding Detect(byte[] b, out bool bom) {
+    bom = true;
+    if (b.Length >= 2 && b[0] == 0xFF && b[1] == 0xFE) return new UnicodeEncoding(false, true);
+    if (b.Length >= 2 && b[0] == 0xFE && b[1] == 0xFF) return new UnicodeEncoding(true, true);
+    if (b.Length >= 3 && b[0] == 0xEF && b[1] == 0xBB && b[2] == 0xBF) return new UTF8Encoding(true);
+    bom = false;
+    if (b.Length >= 4 && b[1] == 0 && b[3] == 0) return new UnicodeEncoding(false, false);
+    return Encoding.Default;
+  }
+  // strip: buang objek hidden=1 / GHG_* (+ perbaiki objects=N); eaName/eaPath tidak kosong: ganti EA GOLD HUNTER GARUDA*
+  // (PowerShell mengirim $null sebagai string kosong)
+  public static byte[] Process(Stream input, bool strip, string eaName, string eaPath) {
+    LastGhg = 0;
+    byte[] head = new byte[4]; int n = input.Read(head, 0, 4); input.Seek(0, SeekOrigin.Begin);
+    byte[] hb = new byte[n]; Array.Copy(head, hb, n);
+    bool bom; Encoding enc = Detect(hb, out bom);
+    StreamReader sr = new StreamReader(input, enc, true);
+    MemoryStream ms = new MemoryStream();
+    Encoding outEnc = enc;
+    if (enc is UnicodeEncoding) outEnc = new UnicodeEncoding(enc.WebName == "unicodeFFFE", bom);
+    else if (enc is UTF8Encoding) outEnc = new UTF8Encoding(bom);
+    StreamWriter sw = new StreamWriter(ms, outEnc); sw.NewLine = "\r\n";
+    List<string> win = null; int winObjIdx = -1, kept = 0;
+    List<string> obj = null; bool skipBlank = false, inExpert = false, inInputs = false, renamed = false;
+    string line;
+    while ((line = sr.ReadLine()) != null) {
+      if (obj != null) {
+        obj.Add(line);
+        if (line == "</object>") {
+          bool keep = !strip;
+          if (strip) { keep = true; foreach (string x in obj) { if (x == "hidden=1" || x.StartsWith("name=GHG_")) { keep = false; break; } } }
+          if (keep) { kept++; foreach (string x in obj) { if (win != null) win.Add(x); else sw.WriteLine(x); } } else skipBlank = true;
+          obj = null;
+        }
+        continue;
+      }
+      if (line == "<object>") { obj = new List<string>(); obj.Add(line); continue; }
+      if (skipBlank) { skipBlank = false; if (line.Length == 0) continue; }
+      if (line == "<expert>") { inExpert = true; renamed = false; }
+      else if (line == "</expert>") { inExpert = false; inInputs = false; }
+      else if (inExpert && line == "<inputs>") inInputs = true;
+      else if (inExpert && line == "</inputs>") inInputs = false;
+      else if (inExpert && !inInputs && line.StartsWith("name=")) {
+        if (line.Substring(5).StartsWith("GOLD HUNTER GARUDA", StringComparison.OrdinalIgnoreCase)) {
+          LastGhg++;
+          if (!string.IsNullOrEmpty(eaName)) { line = "name=" + eaName; renamed = true; }
+        }
+      }
+      else if (inExpert && !inInputs && renamed && !string.IsNullOrEmpty(eaPath) && line.StartsWith("path=")) line = "path=" + eaPath;
+      if (line == "<window>") { win = new List<string>(); winObjIdx = -1; kept = 0; win.Add(line); continue; }
+      if (win != null) {
+        if (winObjIdx < 0 && line.StartsWith("objects=")) winObjIdx = win.Count;
+        win.Add(line);
+        if (line == "</window>") {
+          if (strip && winObjIdx >= 0) win[winObjIdx] = "objects=" + kept;
+          foreach (string x in win) sw.WriteLine(x);
+          win = null;
+        }
+        continue;
+      }
+      sw.WriteLine(line);
+    }
+    if (win != null) foreach (string x in win) sw.WriteLine(x);
+    sw.Flush();
+    return ms.ToArray();
+  }
+}
+"@
+}
+
 # ---------------------------------------------------------------- platform MT5 / MT4
 function Get-Plat([string]$platform) {
-  if ($platform -eq 'mt4') { return @{ mql = 'MQL4'; exe = 'terminal.exe'; proc = 'terminal'; name = 'MT4' } }
-  return @{ mql = 'MQL5'; exe = 'terminal64.exe'; proc = 'terminal64'; name = 'MT5' }
+  if ($platform -eq 'mt4') { return @{ mql = 'MQL4'; exe = 'terminal.exe'; proc = 'terminal'; name = 'MT4'; cls = 'MetaQuotes::MetaTrader::4.00'; ext = '.ex4' } }
+  return @{ mql = 'MQL5'; exe = 'terminal64.exe'; proc = 'terminal64'; name = 'MT5'; cls = 'MetaQuotes::MetaTrader::5.00'; ext = '.ex5' }
 }
 
 # Semua folder data MetaTrader (yang punya MQL5\Experts / MQL4\Experts): %APPDATA%\MetaQuotes\Terminal\<id> + folder portable di config
@@ -80,25 +191,61 @@ function Get-Origin([string]$dataDir, [string]$platform = 'mt5') {
   if (Test-Path (Join-Path $dataDir $Plat.exe)) { return $dataDir }
   return ''
 }
+
+# ---- config\common.ini (MetaTrader 5 menulisnya UTF-16LE): dibaca & ditulis dengan encoding yang sama
+function Read-Ini([string]$path) {
+  $bytes = [IO.File]::ReadAllBytes($path)
+  $enc = New-Object Text.UTF8Encoding($false)
+  if ($bytes.Length -ge 2 -and $bytes[0] -eq 0xFF -and $bytes[1] -eq 0xFE) { $enc = New-Object Text.UnicodeEncoding($false, $true) }
+  elseif ($bytes.Length -ge 2 -and $bytes[0] -eq 0xFE -and $bytes[1] -eq 0xFF) { $enc = New-Object Text.UnicodeEncoding($true, $true) }
+  elseif ($bytes.Length -ge 3 -and $bytes[0] -eq 0xEF -and $bytes[1] -eq 0xBB -and $bytes[2] -eq 0xBF) { $enc = New-Object Text.UTF8Encoding($true) }
+  elseif ($bytes.Length -ge 4 -and $bytes[1] -eq 0 -and $bytes[3] -eq 0) { $enc = New-Object Text.UnicodeEncoding($false, $false) }
+  $text = $enc.GetString($bytes).TrimStart([char]0xFEFF)
+  $lines = New-Object 'System.Collections.Generic.List[string]'
+  foreach ($x in ($text -split "`r?`n")) { $lines.Add($x) }
+  while ($lines.Count -gt 0 -and $lines[$lines.Count - 1] -eq '') { $lines.RemoveAt($lines.Count - 1) }
+  return [pscustomobject]@{ path = $path; enc = $enc; lines = $lines }
+}
+function Write-Ini($ini) {
+  $text = ($ini.lines -join "`r`n") + "`r`n"
+  $body = $ini.enc.GetBytes($text); $pre = $ini.enc.GetPreamble()
+  $all = New-Object byte[] ($pre.Length + $body.Length)
+  [Array]::Copy($pre, 0, $all, 0, $pre.Length); [Array]::Copy($body, 0, $all, $pre.Length, $body.Length)
+  [IO.File]::WriteAllBytes($ini.path, $all)
+}
+# [start, end) baris isi section (tanpa judul); start -1 = section tidak ada
+function Ini-Range($ini, [string]$section) {
+  $s = -1; $e = $ini.lines.Count
+  for ($i = 0; $i -lt $ini.lines.Count; $i++) {
+    $x = $ini.lines[$i].Trim()
+    if ($x -match '^\[(.+)\]$') { if ($s -ge 0) { $e = $i; break }; if ($Matches[1].Trim() -ieq $section) { $s = $i + 1 } }
+  }
+  return @($s, $e)
+}
+function Ini-Get($ini, [string]$section, [string]$key) {
+  $r = Ini-Range $ini $section
+  if ($r[0] -lt 0) { return $null }
+  for ($i = $r[0]; $i -lt $r[1]; $i++) { $x = $ini.lines[$i]; $k = $x.IndexOf('='); if ($k -gt 0 -and $x.Substring(0, $k).Trim() -ieq $key) { return $x.Substring($k + 1).Trim() } }
+  return $null
+}
+function Ini-Lines($ini, [string]$section) {
+  $r = Ini-Range $ini $section; $out = @()
+  if ($r[0] -lt 0) { return $out }
+  for ($i = $r[0]; $i -lt $r[1]; $i++) { if ($ini.lines[$i] -match '^[A-Za-z][A-Za-z0-9_]*=') { $out += $ini.lines[$i].Trim() } }
+  return $out
+}
+function Ini-Set($ini, [string]$section, [string]$key, [string]$value) {
+  $r = Ini-Range $ini $section
+  if ($r[0] -lt 0) { $ini.lines.Add('[' + $section + ']'); $ini.lines.Add($key + '=' + $value); return }
+  for ($i = $r[0]; $i -lt $r[1]; $i++) { $x = $ini.lines[$i]; $k = $x.IndexOf('='); if ($k -gt 0 -and $x.Substring(0, $k).Trim() -ieq $key) { $ini.lines[$i] = $key + '=' + $value; return } }
+  $at = $r[1]; while ($at -gt $r[0] -and $ini.lines[$at - 1].Trim() -eq '') { $at-- }
+  $ini.lines.Insert($at, $key + '=' + $value)
+}
 # Akun yang login di folder data ini: <data>\config\common.ini, [Common] Login=... (UTF-16 atau UTF-8)
 function Get-DataLogin([string]$dataDir) {
   $ini = Join-Path $dataDir 'config\common.ini'
   if (-not (Test-Path $ini)) { return '' }
-  try {
-    $bytes = [IO.File]::ReadAllBytes($ini)
-    if ($bytes.Length -lt 2) { return '' }
-    $enc = [Text.Encoding]::UTF8
-    if ($bytes[0] -eq 0xFF -and $bytes[1] -eq 0xFE) { $enc = [Text.Encoding]::Unicode }
-    elseif ($bytes[0] -eq 0xFE -and $bytes[1] -eq 0xFF) { $enc = [Text.Encoding]::BigEndianUnicode }
-    elseif ($bytes.Length -ge 4 -and $bytes[1] -eq 0 -and $bytes[3] -eq 0) { $enc = [Text.Encoding]::Unicode }
-    $text = $enc.GetString($bytes).TrimStart([char]0xFEFF)
-    $section = ''
-    foreach ($raw in ($text -split "`r?`n")) {
-      $line = $raw.Trim()
-      if ($line -match '^\[(.+)\]$') { $section = $Matches[1].Trim().ToLower(); continue }
-      if ($section -eq 'common' -and $line -match '^Login\s*=\s*(\d+)') { return $Matches[1] }
-    }
-  } catch { }
+  try { $v = Ini-Get (Read-Ini $ini) 'Common' 'Login'; if ($v -match '^(\d+)') { return $Matches[1] } } catch { }
   return ''
 }
 # MetaTrader milik folder instalasi ini. Jalur exe dibaca lewat WMI, lalu Get-Process sebagai cadangan. Bila MetaTrader
@@ -125,8 +272,8 @@ function Get-TerminalProcs([string]$installDir, [string]$platform = 'mt5') {
 function Get-Json([string]$path, $hdr = $Headers) { return Invoke-RestMethod -Uri ($Web + '/api' + $path) -Headers $hdr -TimeoutSec 60 }
 function Get-File([string]$path, [string]$out, $hdr = $Headers) { Invoke-WebRequest -Uri ($Web + '/api' + $path) -Headers $hdr -OutFile $out -UseBasicParsing -TimeoutSec 180 }
 function Post-Json([string]$path, $obj, $hdr = $Headers) {
-  $body = $obj | ConvertTo-Json -Depth 5
-  Invoke-RestMethod -Uri ($Web + '/api' + $path) -Method Post -Headers $hdr -ContentType 'application/json; charset=utf-8' -Body ([Text.Encoding]::UTF8.GetBytes($body)) -TimeoutSec 60 | Out-Null
+  $body = $obj | ConvertTo-Json -Depth 6
+  return Invoke-RestMethod -Uri ($Web + '/api' + $path) -Method Post -Headers $hdr -ContentType 'application/json; charset=utf-8' -Body ([Text.Encoding]::UTF8.GetBytes($body)) -TimeoutSec 120
 }
 function Err-Text($e) {
   $msg = $e.Exception.Message
@@ -137,22 +284,38 @@ function Err-Text($e) {
   return $msg
 }
 function Safe-Name([string]$n) { return ($n -replace '[\\/:*?"<>|]', '').Trim() }
-
-# MetaTrader ditutup normal (seperti klik X) supaya chart, EA & inputnya tersimpan, lalu dibuka lagi dengan argumen yang sama
+function Cmd-Args($p) {
+  $argLine = ''
+  if ($p.CommandLine) { $cl = $p.CommandLine.Trim(); if ($cl.StartsWith('"')) { $i = $cl.IndexOf('"', 1); $argLine = $cl.Substring($i + 1).Trim() } else { $i = $cl.IndexOf(' '); if ($i -gt 0) { $argLine = $cl.Substring($i + 1).Trim() } } }
+  return $argLine
+}
+function Start-Terminal([string]$exe, [string]$argLine) {
+  if ($argLine) { Start-Process -FilePath $exe -ArgumentList $argLine -WorkingDirectory (Split-Path $exe) } else { Start-Process -FilePath $exe -WorkingDirectory (Split-Path $exe) }
+}
+# MetaTrader ditutup normal (WM_CLOSE ke jendela utamanya, seperti klik X) supaya chart, EA & inputnya tersimpan.
+# $force: bila tidak menutup dalam 2 menit, proses dihentikan paksa (hanya dipakai -Setup).
+function Close-Terminal($p, [string]$platform = 'mt5', [bool]$force = $false) {
+  $Plat = Get-Plat $platform
+  $proc = Get-Process -Id $p.ProcessId -ErrorAction SilentlyContinue
+  if (-not $proc) { return $true }
+  if (-not [GhgWin]::Close([uint32]$p.ProcessId, $Plat.cls)) { [void]$proc.CloseMainWindow() }
+  if ($proc.WaitForExit(120000)) { return $true }
+  if (-not $force) { return $false }
+  Log ('  {0} PID {1} tidak menutup dalam 2 menit: dihentikan paksa' -f $Plat.name, $p.ProcessId)
+  Stop-Process -Id $p.ProcessId -Force -ErrorAction SilentlyContinue
+  return $proc.WaitForExit(30000)
+}
+# ditutup normal, lalu dibuka lagi dengan argumen yang sama
 function Restart-Terminal([string]$installDir, [string]$platform = 'mt5') {
   $Plat = Get-Plat $platform
   foreach ($p in (Get-TerminalProcs $installDir $platform)) {
     $exe = $p.ExecutablePath
-    $argLine = ''
-    if ($p.CommandLine) { $cl = $p.CommandLine.Trim(); if ($cl.StartsWith('"')) { $i = $cl.IndexOf('"', 1); $argLine = $cl.Substring($i + 1).Trim() } else { $i = $cl.IndexOf(' '); if ($i -gt 0) { $argLine = $cl.Substring($i + 1).Trim() } } }
+    $argLine = Cmd-Args $p
     if ($DryRun) { Log ("  [uji] akan me-restart {0} PID {1}: {2} {3}" -f $Plat.name, $p.ProcessId, $exe, $argLine); continue }
-    $proc = Get-Process -Id $p.ProcessId -ErrorAction SilentlyContinue
-    if (-not $proc) { continue }
     Log ("  menutup {0} PID {1} ({2})" -f $Plat.name, $p.ProcessId, $installDir)
-    [void]$proc.CloseMainWindow()
-    if (-not $proc.WaitForExit(90000)) { Log ('  {0} tidak menutup dalam 90 detik: dibiarkan (restart manual {0} ini agar EA versi baru aktif)' -f $Plat.name); continue }
+    if (-not (Close-Terminal $p $platform $false)) { Log ('  {0} tidak menutup dalam 2 menit: dibiarkan (restart manual {0} ini agar EA versi baru aktif)' -f $Plat.name); continue }
     Start-Sleep -Seconds 3
-    if ($argLine) { Start-Process -FilePath $exe -ArgumentList $argLine -WorkingDirectory (Split-Path $exe) } else { Start-Process -FilePath $exe -WorkingDirectory (Split-Path $exe) }
+    Start-Terminal $exe $argLine
     Log ('  {0} dibuka lagi' -f $Plat.name)
     Start-Sleep -Seconds $Gap
   }
@@ -161,8 +324,8 @@ function Restart-Terminal([string]$installDir, [string]$platform = 'mt5') {
 # ================================================================ MODE MASTER (admin): semua MT5
 function Send-Status([string]$version, [string]$sha, [string]$note, [bool]$installed) {
   $terms = @()
-  foreach ($d in (Get-DataDirs)) { $org = Get-Origin $d; $terms += @{ data = $d; origin = $org; running = ((Get-TerminalProcs $org).Count -gt 0) } }
-  try { Post-Json '/vps/status' @{ host = $env:COMPUTERNAME; version = $version; sha = $sha; note = $note; installed = $installed; terminals = $terms } }
+  foreach ($d in (Get-DataDirs)) { $org = Get-Origin $d; $terms += @{ data = $d; origin = $org; running = (@(Get-TerminalProcs $org).Count -gt 0) } }
+  try { Post-Json '/vps/status' @{ host = $env:COMPUTERNAME; version = $version; sha = $sha; note = $note; installed = $installed; terminals = $terms } | Out-Null }
   catch { Log ("Status gagal dikirim: " + (Err-Text $_)) }
 }
 
@@ -211,20 +374,20 @@ function Get-LicTerminals($lic) {
 }
 function Send-LicStatus($lic, $st, [string]$note, [bool]$installed) {
   $terms = @()
-  foreach ($t in (Get-LicTerminals $lic)) { $terms += @{ data = $t.data; origin = $t.origin; login = $t.login; matched = [bool]$t.matched; running = ((Get-TerminalProcs $t.origin $lic.platform).Count -gt 0) } }
-  try { Post-Json '/vps/lic/status' @{ host = $env:COMPUTERNAME; agent = $AgentVersion; version = [string]$st.version; build_id = [int]$st.build_id; note = $note; installed = $installed; terminals = $terms } (Lic-Headers $lic) }
+  foreach ($t in (Get-LicTerminals $lic)) { $terms += @{ data = $t.data; origin = $t.origin; login = $t.login; matched = [bool]$t.matched; running = (@(Get-TerminalProcs $t.origin $lic.platform).Count -gt 0) } }
+  try { Post-Json '/vps/lic/status' @{ host = $env:COMPUTERNAME; agent = $AgentVersion; version = [string]$st.version; build_id = [int]$st.build_id; note = $note; installed = $installed; terminals = $terms } (Lic-Headers $lic) | Out-Null }
   catch { Log ("[akun {0}] status gagal dikirim: {1}" -f $lic.account, (Err-Text $_)) }
 }
 
-function Install-LicBuild($lic, $rel) {
-  $Plat = Get-Plat $lic.platform
+# unduh file EA build terbaru + preset ke folder sementara
+function Fetch-LicBuild($lic, $rel) {
   $H = Lic-Headers $lic
   $tmp = Join-Path $env:TEMP ('ghg-lic-' + $lic.id + '-' + $rel.build_id)
   if (Test-Path $tmp) { Remove-Item $tmp -Recurse -Force }
   New-Item -ItemType Directory -Path $tmp | Out-Null
   # nama file tetap dari web (GOLD HUNTER GARUDA_<akun>.ex5) supaya chart tetap menunjuk ke file yang sama
   $name = Safe-Name ([string]$rel.ex5.name)
-  if (-not $name) { $name = 'GOLD HUNTER GARUDA_' + $lic.account + $(if ($lic.platform -eq 'mt4') { '.ex4' } else { '.ex5' }) }
+  if (-not $name) { $name = 'GOLD HUNTER GARUDA_' + $lic.account + (Get-Plat $lic.platform).ext }
   $ea = Join-Path $tmp $name
   Get-File ('/vps/lic/file/' + $rel.ex5.id) $ea $H
   if ((Get-Item $ea).Length -ne [int64]$rel.ex5.size) { throw "Ukuran $name tidak cocok (unduhan rusak)" }
@@ -234,8 +397,25 @@ function Install-LicBuild($lic, $rel) {
     $f = Join-Path $tmp (Safe-Name ([string]$p.name))
     try { Get-File ('/vps/lic/file/' + $p.id) $f $H; $sets += $f } catch { Log ("  preset {0} dilewati: {1}" -f $p.name, (Err-Text $_)) }
   }
+  return [pscustomobject]@{ tmp = $tmp; name = $name; ea = $ea; sets = $sets }
+}
+# salin EA ke <data>\MQLx\Experts, preset ke Presets (+ Profiles\Tester di MT5)
+function Copy-LicBuild($lic, $pkg, $t) {
+  $Plat = Get-Plat $lic.platform
+  $dirs = @((Join-Path $t.data ($Plat.mql + '\Experts')), (Join-Path $t.data ($Plat.mql + '\Presets')))
+  if ($lic.platform -ne 'mt4') { $dirs += (Join-Path $t.data 'MQL5\Profiles\Tester') }
+  if ($DryRun) { Log ("  [uji] akan menyalin {0} + {1} preset ke {2} (login {3})" -f $pkg.name, $pkg.sets.Count, $t.data, $(if ($t.login) { $t.login } else { '?' })); return }
+  foreach ($x in $dirs) { if (-not (Test-Path $x)) { New-Item -ItemType Directory -Path $x -Force | Out-Null } }
+  Copy-Item $pkg.ea $dirs[0] -Force
+  foreach ($f in $pkg.sets) { for ($i = 1; $i -lt $dirs.Count; $i++) { Copy-Item $f $dirs[$i] -Force } }
+  Log ("  {0} + {1} preset -> {2} (login {3})" -f $pkg.name, $pkg.sets.Count, $t.data, $(if ($t.login) { $t.login } else { '?' }))
+}
+
+function Install-LicBuild($lic, $rel) {
+  $Plat = Get-Plat $lic.platform
   $terms = @(Get-LicTerminals $lic)
   if (-not $terms) { throw ('Tidak ada folder data {0} (jalankan {0} sekali dan login akun {1}, atau isi extra_data_dirs di config.json)' -f $Plat.name, $lic.account) }
+  $pkg = Fetch-LicBuild $lic $rel
   $matched = @($terms | Where-Object { $_.matched })
   $targets = $matched
   if ($matched.Count -eq 0) {
@@ -244,35 +424,185 @@ function Install-LicBuild($lic, $rel) {
   }
   $origins = @()
   foreach ($t in $targets) {
-    $dirs = @((Join-Path $t.data ($Plat.mql + '\Experts')), (Join-Path $t.data ($Plat.mql + '\Presets')))
-    if ($lic.platform -ne 'mt4') { $dirs += (Join-Path $t.data 'MQL5\Profiles\Tester') }
-    if ($DryRun) { Log ("  [uji] akan menyalin {0} + {1} preset ke {2} (login {3})" -f $name, $sets.Count, $t.data, $(if ($t.login) { $t.login } else { '?' })) }
-    else {
-      foreach ($x in $dirs) { if (-not (Test-Path $x)) { New-Item -ItemType Directory -Path $x -Force | Out-Null } }
-      Copy-Item $ea $dirs[0] -Force
-      foreach ($f in $sets) { for ($i = 1; $i -lt $dirs.Count; $i++) { Copy-Item $f $dirs[$i] -Force } }
-      Log ("  {0} + {1} preset -> {2} (login {3})" -f $name, $sets.Count, $t.data, $(if ($t.login) { $t.login } else { '?' }))
-    }
+    Copy-LicBuild $lic $pkg $t
     if ($t.matched -and $t.origin -and ($origins -notcontains $t.origin)) { $origins += $t.origin }
   }
   if ($Restart) { foreach ($o in $origins) { Restart-Terminal $o $lic.platform } }
   elseif ($origins.Count) { Log ('  restart_terminals = false: EA versi baru aktif setelah {0} di-restart manual' -f $Plat.name) }
-  Remove-Item $tmp -Recurse -Force -ErrorAction SilentlyContinue
+  Remove-Item $pkg.tmp -Recurse -Force -ErrorAction SilentlyContinue
   return $matched.Count
 }
 
-# state.json mode lisensi: { "lic": { "<license_id>": { "build_id": 12, "version": "2.83" } } }
+# ---------------------------------------------------------------- backup / pulih profil chart
+# Profil aktif: MT5 = <data>\MQL5\Profiles\Charts\<[Charts] ProfileLast di config\common.ini>;
+#               MT4 = <data>\profiles\<isi profiles\lastprofile.ini>.
+function Get-ProfileDir($t, [string]$platform) {
+  if ($platform -eq 'mt4') {
+    $name = 'default'; $lp = Join-Path $t.data 'profiles\lastprofile.ini'
+    if (Test-Path $lp) { $v = ([IO.File]::ReadAllText($lp)).Trim([char]0, [char]0xFEFF, ' ', "`r", "`n"); if ($v) { $name = $v } }
+    return [pscustomobject]@{ name = $name; dir = (Join-Path $t.data ('profiles\' + $name)) }
+  }
+  $name = 'Default'; $ini = Join-Path $t.data 'config\common.ini'
+  if (Test-Path $ini) { $v = Ini-Get (Read-Ini $ini) 'Charts' 'ProfileLast'; if ($v) { $name = $v } }
+  return [pscustomobject]@{ name = $name; dir = (Join-Path $t.data ('MQL5\Profiles\Charts\' + $name)) }
+}
+function Get-ExpertsLines($t, [string]$platform) {
+  if ($platform -eq 'mt4') { return @() }
+  $ini = Join-Path $t.data 'config\common.ini'
+  if (-not (Test-Path $ini)) { return @() }
+  return @(Ini-Lines (Read-Ini $ini) 'Experts')
+}
+# sidik cepat (sha dari nama, ukuran, waktu file + baris [Experts]): file baru dibaca hanya bila berubah
+function Get-ProfileFingerprint($t, [string]$platform) {
+  $p = Get-ProfileDir $t $platform
+  if (-not (Test-Path $p.dir)) { return $null }
+  $parts = @($p.name)
+  foreach ($f in (Get-ChildItem $p.dir -File | Sort-Object Name)) { $parts += ('{0}|{1}|{2}' -f $f.Name, $f.Length, $f.LastWriteTimeUtc.Ticks) }
+  $parts += (Get-ExpertsLines $t $platform)
+  return (Sha-Hex ([Text.Encoding]::UTF8.GetBytes(($parts -join "`n"))))
+}
+function Sha-Hex([byte[]]$b) { $h = [Security.Cryptography.SHA256]::Create(); return (($h.ComputeHash($b) | ForEach-Object { $_.ToString('x2') }) -join '') }
+# isi backup: hanya file di folder profil aktif (tanpa sub-folder) + baris [Experts]; tidak pernah accounts.dat / password
+function Build-ProfileBackup($t, [string]$platform) {
+  $p = Get-ProfileDir $t $platform
+  if (-not (Test-Path $p.dir)) { return $null }
+  $files = @(); $ghg = 0; $ms = New-Object IO.MemoryStream
+  $w = { param([byte[]]$b) $ms.Write($b, 0, $b.Length) }
+  & $w ([Text.Encoding]::UTF8.GetBytes($p.name + "`n"))
+  foreach ($f in (Get-ChildItem $p.dir -File | Sort-Object Name)) {
+    if ($f.Name -notmatch '^[A-Za-z0-9 _.()-]{1,80}$' -or $f.Name.StartsWith('.')) { continue }
+    if ($f.Extension -ieq '.chr') {
+      $fs = [IO.File]::Open($f.FullName, 'Open', 'Read', 'ReadWrite')
+      try { $bytes = [GhgChr]::Process($fs, $true, $null, $null); $ghg += [GhgChr]::LastGhg } finally { $fs.Close() }
+    } else {
+      if ($f.Length -gt 1MB) { continue }
+      $bytes = [IO.File]::ReadAllBytes($f.FullName)
+    }
+    $files += [pscustomobject]@{ name = $f.Name; b64 = [Convert]::ToBase64String($bytes) }
+    & $w ([Text.Encoding]::UTF8.GetBytes($f.Name + "`n")); & $w $bytes
+  }
+  $experts = @(Get-ExpertsLines $t $platform)
+  & $w ([Text.Encoding]::UTF8.GetBytes(($experts -join "`n")))
+  $server = ''
+  $ini = Join-Path $t.data 'config\common.ini'
+  if ($platform -ne 'mt4' -and (Test-Path $ini)) { $server = [string](Ini-Get (Read-Ini $ini) 'Common' 'Server') }
+  return [pscustomobject]@{ profile_name = $p.name; files = $files; experts = $experts; ea_charts = $ghg; sha = (Sha-Hex $ms.ToArray()); server = $server
+    charts = @($files | Where-Object { $_.name -like '*.chr' }).Count; size = ($files | ForEach-Object { $_.b64.Length } | Measure-Object -Sum).Sum }
+}
+# tiap ProfEvery menit: profil MetaTrader akun lisensi -> POST /vps/lic/profile (hanya bila berubah, hanya bila ada EA GHG)
+function Backup-LicProfile($lic, $profMap) {
+  $cands = @(Get-LicTerminals $lic | Where-Object { $_.matched })
+  if (-not $cands) { return }
+  $cands = @($cands | Sort-Object @{ Expression = { @(Get-TerminalProcs $_.origin $lic.platform).Count -gt 0 }; Descending = $true })
+  foreach ($t in $cands) {
+    $fp = Get-ProfileFingerprint $t $lic.platform
+    if (-not $fp) { continue }
+    $last = $profMap[$lic.id]
+    if ($last -and $last.fp -eq $fp) { if ($last.ok) { return } else { continue } }
+    $b = Build-ProfileBackup $t $lic.platform
+    if (-not $b) { continue }
+    if ($b.ea_charts -lt 1) {
+      Log ("[akun {0}] profil '{1}' belum memuat EA GOLD HUNTER GARUDA: tidak di-backup (backup lama di web tetap)" -f $lic.account, $b.profile_name)
+      $profMap[$lic.id] = [pscustomobject]@{ fp = $fp; sha = ''; ok = $false }
+      continue
+    }
+    if ($last -and $last.sha -eq $b.sha) { $profMap[$lic.id] = [pscustomobject]@{ fp = $fp; sha = $b.sha; ok = $true }; Save-LicState; return }
+    if ($DryRun) { Log ("[akun {0}] [uji] akan backup profil '{1}' ({2} chart, {3} dengan EA, {4:N0} KB)" -f $lic.account, $b.profile_name, $b.charts, $b.ea_charts, ($b.size / 1024)); return }
+    try {
+      $r = Post-Json '/vps/lic/profile' @{ host = $env:COMPUTERNAME; agent = $AgentVersion; login = $t.login; server = $b.server; profile_name = $b.profile_name
+        files = $b.files; experts_ini = ($b.experts -join "`n"); sha = $b.sha } (Lic-Headers $lic)
+      Log ("[akun {0}] backup profil '{1}' terkirim ({2} chart, {3} dengan EA GOLD HUNTER GARUDA, {4:N0} KB{5})" -f $lic.account, $b.profile_name, $b.charts, $b.ea_charts, ($b.size / 1024), $(if ($r.same) { ', sama dengan di web' } else { '' }))
+      $profMap[$lic.id] = [pscustomobject]@{ fp = $fp; sha = $b.sha; ok = $true }
+      Save-LicState
+    } catch {
+      $msg = Err-Text $_
+      Log ("[akun {0}] backup profil gagal: {1}" -f $lic.account, $msg)
+      # ditolak server (terlalu besar / akun lain): tidak dicoba ulang sampai profilnya berubah
+      if ($msg -match 'HTTP (400|409|413)') { $profMap[$lic.id] = [pscustomobject]@{ fp = $fp; sha = ''; ok = $false } }
+    }
+    return
+  }
+}
+# pulihkan backup ke profil "GHG Restore" (MetaTrader harus tertutup) dan jadikan profil aktif
+function Restore-LicProfile($lic, $t, $prof, [string]$eaFile) {
+  $Plat = Get-Plat $lic.platform
+  $eaName = [IO.Path]::GetFileNameWithoutExtension($eaFile)
+  $eaPath = $null; if ($lic.platform -ne 'mt4') { $eaPath = 'Experts\' + $eaFile }
+  if ($lic.platform -eq 'mt4') { $dir = Join-Path $t.data ('profiles\' + $RestoreProfile) } else { $dir = Join-Path $t.data ('MQL5\Profiles\Charts\' + $RestoreProfile) }
+  $n = 0; $ghg = 0
+  if ($DryRun) { Log ("  [uji] akan memulihkan {0} file profil '{1}' -> {2}" -f @($prof.files).Count, $prof.profile_name, $dir) }
+  else {
+    if (Test-Path $dir) { Remove-Item $dir -Recurse -Force }
+    New-Item -ItemType Directory -Path $dir -Force | Out-Null
+  }
+  foreach ($f in @($prof.files)) {
+    $name = Safe-Name ([string]$f.name)
+    if (-not $name -or $name.StartsWith('.')) { continue }
+    $bytes = [Convert]::FromBase64String([string]$f.b64)
+    if ($name -like '*.chr') {
+      $ms = New-Object IO.MemoryStream(, $bytes)
+      $bytes = [GhgChr]::Process($ms, $false, $eaName, $eaPath); $ghg += [GhgChr]::LastGhg
+    }
+    if (-not $DryRun) { [IO.File]::WriteAllBytes((Join-Path $dir $name), $bytes) }
+    $n++
+  }
+  if (-not $DryRun) {
+    if ($lic.platform -eq 'mt4') { [IO.File]::WriteAllText((Join-Path $t.data 'profiles\lastprofile.ini'), $RestoreProfile, [Text.Encoding]::Default) }
+    else { $ini = Read-Ini (Join-Path $t.data 'config\common.ini'); Ini-Set $ini 'Charts' 'ProfileLast' $RestoreProfile; Write-Ini $ini }
+  }
+  Log ("  profil '{0}' (backup {1} dari {2}) dipulihkan sebagai '{3}': {4} file, EA {5} di {6} chart" -f $prof.profile_name, (Get-Date ([DateTimeOffset]::FromUnixTimeSeconds([int64]$prof.updated_at).LocalDateTime) -Format 'yyyy-MM-dd HH:mm'), $prof.host, $RestoreProfile, $n, $eaName, $ghg)
+  return $ghg
+}
+# [Experts] common.ini MT5 (MetaTrader tertutup): Algo Trading + WebRequest aktif, daftar URL WebRequest dari backup
+function Set-ExpertsIni($t, $prof) {
+  $iniPath = Join-Path $t.data 'config\common.ini'
+  $url = $null
+  if ($prof -and $prof.experts_ini) { foreach ($x in ([string]$prof.experts_ini -split "`r?`n")) { if ($x -match '^WebRequestUrl=(.+)$') { $url = $Matches[1].Trim() } } }
+  if ($DryRun) { Log ("  [uji] akan menulis [Experts] Enabled=1, WebRequest=1{0} di {1}" -f $(if ($url) { ', WebRequestUrl dari backup' } else { '' }), $iniPath); return [bool]$url }
+  $ini = Read-Ini $iniPath
+  Ini-Set $ini 'Experts' 'Enabled' '1'
+  Ini-Set $ini 'Experts' 'WebRequest' '1'
+  if ($url) { Ini-Set $ini 'Experts' 'WebRequestUrl' $url }
+  Write-Ini $ini
+  Log ("  [Experts] Algo Trading = ON, WebRequest = ON{0}" -f $(if ($url) { ', daftar URL WebRequest dari backup' } else { ' (daftar URL belum ada di backup)' }))
+  return [bool]$url
+}
+# baris log terminal (logs\yyyymmdd.log, UTF-16) sejak waktu tertentu yang memuat EA
+function Wait-EaLoaded($t, [string]$eaName, [datetime]$since, [int]$seconds = 60) {
+  $log = Join-Path $t.data ('logs\' + (Get-Date -Format 'yyyyMMdd') + '.log')
+  $until = (Get-Date).AddSeconds($seconds)
+  while ((Get-Date) -lt $until) {
+    Start-Sleep -Seconds 5
+    if (-not (Test-Path $log)) { continue }
+    try {
+      $fs = [IO.File]::Open($log, 'Open', 'Read', 'ReadWrite'); $sr = New-Object IO.StreamReader($fs, [Text.Encoding]::Unicode, $true); $all = $sr.ReadToEnd(); $sr.Close()
+      $hits = @($all -split "`r?`n" | Where-Object { $_ -match [regex]::Escape($eaName) -and $_ -match 'loaded successfully' -and $_ -match '\t(\d\d:\d\d:\d\d)\.' -and ([datetime]::ParseExact($Matches[1], 'HH:mm:ss', $null) -ge $since.AddSeconds(-2)) })
+      if ($hits.Count) { return $hits }
+    } catch { }
+  }
+  return @()
+}
+# MetaTrader terpasang di PC ini (hanya untuk pesan bila belum login)
+function Find-Installs([string]$platform) {
+  $Plat = Get-Plat $platform; $out = @()
+  foreach ($root in @($env:ProgramFiles, ${env:ProgramFiles(x86)})) { if ($root -and (Test-Path $root)) { $out += @(Get-ChildItem $root -Directory -ErrorAction SilentlyContinue | Where-Object { Test-Path (Join-Path $_.FullName $Plat.exe) } | ForEach-Object { $_.FullName }) } }
+  return $out
+}
+
+# state.json mode lisensi: { "lic": { "<id>": { "build_id": 12, "version": "2.83" } }, "prof": { "<id>": { "fp": "...", "sha": "...", "ok": true } } }
+$script:LicMap = @{}; $script:ProfMap = @{}
 function Load-LicState {
-  $map = @{}
+  $script:LicMap = @{}; $script:ProfMap = @{}
   if (Test-Path $StateFile) {
     try {
       $j = Get-Content $StateFile -Raw | ConvertFrom-Json
-      if ($j.lic) { foreach ($p in $j.lic.PSObject.Properties) { $map[$p.Name] = [pscustomobject]@{ build_id = [string]$p.Value.build_id; version = [string]$p.Value.version } } }
+      if ($j.lic) { foreach ($p in $j.lic.PSObject.Properties) { $script:LicMap[$p.Name] = [pscustomobject]@{ build_id = [string]$p.Value.build_id; version = [string]$p.Value.version } } }
+      if ($j.prof) { foreach ($p in $j.prof.PSObject.Properties) { $script:ProfMap[$p.Name] = [pscustomobject]@{ fp = [string]$p.Value.fp; sha = [string]$p.Value.sha; ok = [bool]$p.Value.ok } } }
     } catch { }
   }
-  return $map
+  return $script:LicMap
 }
-function Save-LicState($map) { @{ lic = $map } | ConvertTo-Json -Depth 5 | Set-Content -Path $StateFile -Encoding UTF8 }
+function Save-LicState($map = $script:LicMap) { if ($DryRun) { return }; @{ lic = $map; prof = $script:ProfMap } | ConvertTo-Json -Depth 5 | Set-Content -Path $StateFile -Encoding UTF8 }
 
 function Check-Lic($lic, $map, $last) {
   $st = $map[$lic.id]
@@ -299,25 +629,121 @@ function Check-Lic($lic, $map, $last) {
   }
 }
 
+# ================================================================ -Setup: pasang di PC / VPS baru (installer 1 file)
+function Setup-Lic($lic) {
+  $Plat = Get-Plat $lic.platform
+  $H = Lic-Headers $lic
+  $res = [ordered]@{ account = $lic.account; platform = $lic.platform; code = 1; message = ''; ea = ''; version = ''; data = ''; terminal = ''
+    restored = $false; backup_at = 0; backup_host = ''; ea_charts = 0; webrequest_urls = $false; loaded = @() }
+  $rel = Get-Json '/vps/lic/release?have=' $H
+  if ($rel.account -and [string]$rel.account -ne $lic.account) { Log ("[akun {0}] lisensi kini untuk akun {1} (dari web)" -f $lic.account, $rel.account); $lic.account = [string]$rel.account; $res.account = $lic.account }
+  $terms = @(Get-LicTerminals $lic)
+  $matched = @($terms | Where-Object { $_.matched })
+  if (-not $matched) {
+    $inst = @(Find-Installs $lic.platform)
+    $logins = @($terms | Where-Object { $_.login } | ForEach-Object { $_.login }) -join ', '
+    if (-not $inst -and -not $terms) {
+      $res.message = ('{0} belum terpasang di PC ini. Pasang {0} dari broker Anda, buka, login akun {1} dengan password TRADING (bukan investor) dan centang "Save password", lalu jalankan installer ini lagi.' -f $Plat.name, $lic.account)
+    } else {
+      $res.message = ('{0} di PC ini belum login di akun {1}{2}. Buka {0}, menu File > Login to Trade Account, isi akun {1} + password TRADING (bukan investor), centang "Save password", tunggu terhubung, tutup {0}, lalu jalankan installer ini lagi.' -f $Plat.name, $lic.account, $(if ($logins) { ' (yang login: ' + $logins + ')' } else { '' }))
+    }
+    $res.code = 2; Log ('BELUM SIAP: ' + $res.message); return $res
+  }
+  if ($rel.none) { $res.code = 3; $res.message = 'File EA akun ini belum ada di web (pesanan belum selesai atau EA sedang dibuat). Agen memasangnya otomatis begitu file EA siap.'; Log $res.message; return $res }
+  # MetaTrader yang sedang berjalan didahulukan; lalu yang common.ini-nya paling baru
+  $t = @($matched | Sort-Object @{ Expression = { @(Get-TerminalProcs $_.origin $lic.platform).Count -gt 0 }; Descending = $true }, @{ Expression = { (Get-Item (Join-Path $_.data 'config\common.ini')).LastWriteTimeUtc }; Descending = $true })[0]
+  $res.data = $t.data; $res.terminal = $t.origin
+  if (-not $t.origin -or -not (Test-Path (Join-Path $t.origin $Plat.exe))) { $res.message = ('Folder instalasi {0} untuk {1} tidak ditemukan (origin.txt)' -f $Plat.name, $t.data); Log $res.message; return $res }
+  if (-not (Test-Path (Join-Path $t.data 'config\accounts.dat'))) { Log ('  PERHATIAN: password akun belum tersimpan di {0} ini (centang "Save password" saat login), EA tidak bisa trading tanpa login.' -f $Plat.name) }
+  Log ("[akun {0}] SETUP {1}: {2} | data {3}" -f $lic.account, $Plat.name, $t.origin, $t.data)
+  $prof = $null
+  try { $prof = Get-Json '/vps/lic/profile' $H; if ($prof.none) { $prof = $null } } catch { Log ('  backup profil tidak bisa diambil: ' + (Err-Text $_)) }
+  if ($prof -and $lic.platform -ne [string]$prof.platform -and $prof.platform) { Log ('  backup profil dari {0}, lisensi {1}: tidak dipulihkan' -f $prof.platform, $lic.platform); $prof = $null }
+  if ($prof) { Log ("  backup profil terakhir: '{0}' dari {1}, {2} chart ({3} dengan EA)" -f $prof.profile_name, $prof.host, $prof.charts, $prof.ea_charts) } else { Log '  belum ada backup profil di web' }
+  $pkg = Fetch-LicBuild $lic $rel
+  $res.ea = $pkg.name; $res.version = [string]$rel.version
+  # 1) tutup MetaTrader ini (normal, paksa bila menggantung > 2 menit)
+  $run = @(Get-TerminalProcs $t.origin $lic.platform)
+  $argLine = ''
+  foreach ($p in $run) {
+    if (-not $argLine) { $argLine = Cmd-Args $p }
+    if ($DryRun) { Log ("  [uji] akan menutup {0} PID {1}" -f $Plat.name, $p.ProcessId); continue }
+    Log ("  menutup {0} PID {1}..." -f $Plat.name, $p.ProcessId)
+    if (-not (Close-Terminal $p $lic.platform $true)) { $res.message = ('{0} tidak bisa ditutup. Tutup {0} secara manual lalu jalankan installer lagi.' -f $Plat.name); Log $res.message; return $res }
+  }
+  if (-not $argLine -and $t.origin -eq $t.data) { $argLine = '/portable' }
+  if (-not $DryRun -and @(Get-TerminalProcs $t.origin $lic.platform).Count) { $res.message = ('{0} masih berjalan. Tutup {0} lalu jalankan installer lagi.' -f $Plat.name); Log $res.message; return $res }
+  Start-Sleep -Seconds $(if ($run.Count -and -not $DryRun) { 3 } else { 0 })
+  # 2) EA + preset ke semua folder data akun ini
+  foreach ($m in $matched) { Copy-LicBuild $lic $pkg $m }
+  # 3) profil + [Experts]
+  if ($prof -and @($prof.files).Count) {
+    $res.ea_charts = Restore-LicProfile $lic $t $prof $pkg.name
+    $res.restored = $true; $res.backup_at = [int64]$prof.updated_at; $res.backup_host = [string]$prof.host
+  }
+  if ($lic.platform -ne 'mt4') { $res.webrequest_urls = Set-ExpertsIni $t $prof }
+  # 4) buka lagi
+  $since = Get-Date
+  $exe = Join-Path $t.origin $Plat.exe
+  if ($DryRun) { Log ("  [uji] akan membuka {0} {1}" -f $exe, $argLine) }
+  else { Start-Terminal $exe $argLine; Log ("  {0} dibuka: {1} {2}" -f $Plat.name, $exe, $argLine) }
+  if (-not $DryRun) {
+    $script:LicMap[$lic.id] = [pscustomobject]@{ build_id = [string]$rel.build_id; version = [string]$rel.version }
+    $script:ProfMap.Remove($lic.id)
+    Save-LicState
+    Send-LicStatus $lic $script:LicMap[$lic.id] ('setup ' + (Get-Date -Format 'yyyy-MM-dd HH:mm') + $(if ($res.restored) { ', profil dipulihkan' } else { ', belum ada backup profil' })) $true
+    if ($res.restored -and $res.ea_charts -gt 0) {
+      $res.loaded = @(Wait-EaLoaded $t ([IO.Path]::GetFileNameWithoutExtension($pkg.name)) $since 75 | ForEach-Object { ($_ -split "`t")[-1] })
+      foreach ($x in $res.loaded) { Log ('  ' + $Plat.name + ': ' + $x) }
+    }
+  }
+  Remove-Item $pkg.tmp -Recurse -Force -ErrorAction SilentlyContinue
+  $res.code = 0
+  if ($res.restored) { $res.message = ('EA {0} v{1} terpasang, setup terakhir ({2} chart, EA di {3} chart) dipulihkan.' -f $pkg.name, $rel.version, $prof.charts, $res.ea_charts) }
+  else { $res.message = ('EA {0} v{1} terpasang. Belum ada backup setup di web: pasang EA di chart sekali (drag dari Navigator), agen mem-backup-nya otomatis.' -f $pkg.name, $rel.version) }
+  Log ('SELESAI: ' + $res.message)
+  return $res
+}
+
 # ================================================================ start
 $IsAdmin = ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
+if ($Only) { $Lics = @($Lics | Where-Object { $_.id -eq $Only }); if (-not $Lics) { Log ("Lisensi #{0} tidak ada di config.json" -f $Only); exit 1 } }
 $modeText = if ($LicMode) { 'lisensi: ' + (($Lics | ForEach-Object { $_.account + ' ' + $_.platform.ToUpper() }) -join ', ') } else { 'master (semua MT5)' }
-Log ("GHG VPS Agent {0} aktif -> {1} (mode {2}, cek tiap {3} detik, restart MetaTrader: {4}, hak admin: {5}{6})" -f $AgentVersion, $Web, $modeText, $Every, $Restart, $IsAdmin, $(if ($DryRun) { ', MODE UJI' } else { '' }))
+Log ("GHG VPS Agent {0} aktif -> {1} (mode {2}, cek tiap {3} detik, restart MetaTrader: {4}, backup profil tiap {5} menit, hak admin: {6}{7}{8})" -f $AgentVersion, $Web, $modeText, $Every, $Restart, $ProfEvery, $IsAdmin, $(if ($Setup) { ', SETUP' } else { '' }), $(if ($DryRun) { ', MODE UJI' } else { '' }))
+
+if ($Setup) {
+  if (-not $LicMode) { Log '-Setup hanya untuk config.json member (berisi "license"). Mode master: pakai Pasang-Agen-VPS.bat.'; exit 1 }
+  [void](Load-LicState)
+  $results = @(); $code = 0
+  foreach ($lic in $Lics) {
+    try { $r = Setup-Lic $lic } catch { $r = [ordered]@{ account = $lic.account; platform = $lic.platform; code = 1; message = 'Gagal: ' + (Err-Text $_) }; Log ("[akun {0}] {1}" -f $lic.account, $r.message) }
+    $results += [pscustomobject]$r
+    if ($r.code -ne 0 -and ($code -eq 0 -or $r.code -lt $code)) { $code = $r.code }
+  }
+  try { ConvertTo-Json -InputObject @($results) -Depth 5 | Set-Content -Path $SetupResultFile -Encoding UTF8 } catch { }
+  exit $code
+}
 
 if ($LicMode) {
   foreach ($lic in $Lics) {
     $Plat = Get-Plat $lic.platform
     $terms = @(Get-LicTerminals $lic)
     if (-not $terms) { Log ("  [akun {0}] belum ada folder data {1} di VPS ini" -f $lic.account, $Plat.name) }
-    foreach ($t in $terms) { Log ("  [akun {0}] {1}: {2} | data {3} | login {4}{5} | berjalan: {6}" -f $lic.account, $Plat.name, $t.origin, $t.data, $(if ($t.login) { $t.login } else { '?' }), $(if ($t.matched) { ' (COCOK)' } else { '' }), ((Get-TerminalProcs $t.origin $lic.platform).Count -gt 0)) }
+    foreach ($t in $terms) { Log ("  [akun {0}] {1}: {2} | data {3} | login {4}{5} | berjalan: {6}" -f $lic.account, $Plat.name, $t.origin, $t.data, $(if ($t.login) { $t.login } else { '?' }), $(if ($t.matched) { ' (COCOK)' } else { '' }), (@(Get-TerminalProcs $t.origin $lic.platform).Count -gt 0)) }
     if ($terms -and -not ($terms | Where-Object { $_.matched })) { Log ("  [akun {0}] PERHATIAN: belum ada {1} yang login di akun ini. Login akun {0} di {1}, lalu agen memasang & me-restart otomatis." -f $lic.account, $Plat.name) }
   }
   $licState = Load-LicState
   $lastStatus = @{}
+  $lastProf = @{}
   while ($true) {
     foreach ($lic in $Lics) {
       try { Check-Lic $lic $licState $lastStatus }
       catch { Log ("[akun {0}] Gagal: {1}" -f $lic.account, (Err-Text $_)) }
+      if ($ProfEvery -gt 0 -and (-not $lastProf[$lic.id] -or ((Get-Date) - $lastProf[$lic.id]).TotalMinutes -ge $ProfEvery)) {
+        $lastProf[$lic.id] = Get-Date
+        try { Backup-LicProfile $lic $script:ProfMap }
+        catch { Log ("[akun {0}] backup profil gagal: {1}" -f $lic.account, (Err-Text $_)) }
+      }
     }
     if ($Once) { break }
     Start-Sleep -Seconds $Every
@@ -325,7 +751,7 @@ if ($LicMode) {
   exit 0
 }
 
-foreach ($d in (Get-DataDirs)) { $o = Get-Origin $d; Log ("  MT5: {0} | data {1} | berjalan: {2}" -f $o, $d, ((Get-TerminalProcs $o).Count -gt 0)) }
+foreach ($d in (Get-DataDirs)) { $o = Get-Origin $d; Log ("  MT5: {0} | data {1} | berjalan: {2}" -f $o, $d, (@(Get-TerminalProcs $o).Count -gt 0)) }
 function Load-State { if (Test-Path $StateFile) { try { $j = Get-Content $StateFile -Raw | ConvertFrom-Json; if ($null -ne $j.sha) { return $j } } catch { } } return [pscustomobject]@{ sha = ''; version = '' } }
 function Save-State($st) { $st | ConvertTo-Json | Set-Content -Path $StateFile -Encoding UTF8 }
 $state = Load-State
