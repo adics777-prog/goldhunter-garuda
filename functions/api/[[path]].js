@@ -14,6 +14,11 @@ import { reportPng } from '../../server/report-image.js';
 import AGENT_PS1 from '../../server/vps/GHG-VPS-Agent.ps1.txt';
 import AGENT_BAT from '../../server/vps/Pasang-Agen-VPS.bat.txt';
 import INSTALLER_PS1 from '../../server/vps/GHG-Installer.ps1.txt';
+// Current agent version, read from the script itself so every release tells older agents to self-update.
+const AGENT_VERSION = (AGENT_PS1.match(/\$AgentVersion\s*=\s*'([^']+)'/) || [])[1] || '';
+const AGENT_PS1_BODY = '﻿' + AGENT_PS1.replace(/\r?\n/g, '\r\n');
+const agentUpdate = { agent_version: AGENT_VERSION, agent_url: '/vps/agent' };
+const licAgentUpdate = { agent_version: AGENT_VERSION, agent_url: '/vps/lic/agent' };
 
 const routes = [];
 const route = (method, path, auth, handler) => {
@@ -1126,9 +1131,14 @@ route('POST', '/builder/vps-release', 'builder', async ({ request, env }) => {
 });
 route('GET', '/vps/release', 'public', async ({ request, env, url }) => {
   const rel = vpsRelease(await vpsAuth(env, request));
-  if (!rel) return json({ ok: true, none: true });
-  if (url.searchParams.get('have') === rel.sha) return json({ ok: true, same: true, version: rel.version, sha: rel.sha });
-  return json({ ok: true, ...rel });
+  if (!rel) return json({ ok: true, none: true, ...agentUpdate });
+  if (url.searchParams.get('have') === rel.sha) return json({ ok: true, same: true, version: rel.version, sha: rel.sha, ...agentUpdate });
+  return json({ ok: true, ...rel, ...agentUpdate });
+});
+// The agent script itself, so a running agent can self-update (master key).
+route('GET', '/vps/agent', 'public', async ({ request, env }) => {
+  await vpsAuth(env, request);
+  return new Response(AGENT_PS1_BODY, { headers: { 'content-type': 'text/plain; charset=utf-8', 'cache-control': 'private, no-store' } });
 });
 route('GET', '/vps/file/:id', 'public', async ({ request, env, params }) => {
   await vpsAuth(env, request);
@@ -1152,8 +1162,11 @@ route('POST', '/vps/status', 'public', async ({ request, env }) => {
 route('GET', '/admin/vps', 'admin', async ({ env }) => {
   const s = await getSettings(env);
   const { results } = await env.DB.prepare('SELECT * FROM ea_vps ORDER BY host').all();
-  return json({ release: vpsRelease(s), key_set: !!String(s.ea_master_key || '').trim(),
-    agents: results.map((r) => { let tm = []; try { tm = JSON.parse(r.terminals || '[]'); } catch { tm = []; } return { ...r, terminals: tm }; }) });
+  const profs = await env.DB.prepare('SELECT login, server, platform, host, profile_name, charts, ea_charts, size, updated_at, experts_ini FROM ea_vps_master_profile ORDER BY login, server').all();
+  return json({ release: vpsRelease(s), key_set: !!String(s.ea_master_key || '').trim(), agent_version: AGENT_VERSION,
+    agents: results.map((r) => { let tm = []; try { tm = JSON.parse(r.terminals || '[]'); } catch { tm = []; } return { ...r, terminals: tm }; }),
+    profiles: profs.results.map((p) => ({ login: p.login, server: p.server, platform: p.platform, host: p.host, profile_name: p.profile_name,
+      charts: p.charts, ea_charts: p.ea_charts, size: p.size, updated_at: p.updated_at, has_webrequest_urls: /^WebRequestUrl=/m.test(p.experts_ini || '') })) });
 });
 route('DELETE', '/admin/vps/:host', 'admin', async ({ env, params }) => {
   await env.DB.prepare('DELETE FROM ea_vps WHERE host=?').bind(decodeURIComponent(params.host)).run();
@@ -1256,12 +1269,17 @@ route('GET', '/admin/vps/download', 'admin', async ({ env, url, base }) => {
 route('GET', '/vps/lic/release', 'public', async ({ request, env, url }) => {
   const l = await licAuth(env, request.headers.get('x-lic-key'));
   const b = await licCurrentFile(env, l);
-  if (!b) return json({ ok: true, none: true, account: l.account_number, platform: l.platform });
-  if (String(url.searchParams.get('have') || '') === String(b.id)) return json({ ok: true, same: true, build_id: b.id, version: b.ea_version || '', account: l.account_number });
+  if (!b) return json({ ok: true, none: true, account: l.account_number, platform: l.platform, ...licAgentUpdate });
+  if (String(url.searchParams.get('have') || '') === String(b.id)) return json({ ok: true, same: true, build_id: b.id, version: b.ea_version || '', account: l.account_number, ...licAgentUpdate });
   const rel = vpsRelease(await getSettings(env));
   return json({ ok: true, build_id: b.id, version: b.ea_version || '', platform: l.platform, account: l.account_number,
     ex5: { id: b.file_id, name: str(b.name, 120).replace(/[\\/:*?"<>|]/g, '') || `GOLD HUNTER GARUDA_${l.account_number}.${l.platform === 'mt4' ? 'ex4' : 'ex5'}`, size: b.size },
-    presets: rel ? rel.presets : [], expires_at: b.expires_at || 0, license_expires_at: l.expires_at || 0 });
+    presets: rel ? rel.presets : [], expires_at: b.expires_at || 0, license_expires_at: l.expires_at || 0, ...licAgentUpdate });
+});
+// the agent script (licence key), so a running member agent can self-update
+route('GET', '/vps/lic/agent', 'public', async ({ request, env }) => {
+  await licAuth(env, request.headers.get('x-lic-key'));
+  return new Response(AGENT_PS1_BODY, { headers: { 'content-type': 'text/plain; charset=utf-8', 'cache-control': 'private, no-store' } });
 });
 // only this licence's current EA file or one of the release presets
 route('GET', '/vps/lic/file/:id', 'public', async ({ request, env, params }) => {
@@ -1303,17 +1321,11 @@ function chrHasGhg(b64data) {
     return /<expert>\s*name=GOLD HUNTER GARUDA/i.test(text);
   } catch { return false; }
 }
-route('POST', '/vps/lic/profile', 'public', async ({ request, env }) => {
-  const l = await licAuth(env, request.headers.get('x-lic-key'));
-  if (int(request.headers.get('content-length')) > PROFILE_MAX_B64 + 200000) fail(413, 'Backup profil terlalu besar');
-  const b = await readJson(request);
-  const login = str(b.login, 20);
-  if (login !== String(l.account_number)) fail(409, `Profil dari akun ${login || '?'} ditolak: lisensi ini untuk akun ${l.account_number}`);
+// Validate an uploaded profile (shared by licence and master mode): plain file names, at least one .chr, size cap,
+// no credential lines in [Experts]. Returns the cleaned fields or throws a 4xx.
+function parseProfileUpload(b) {
   const sha = str(b.sha, 80);
   if (!/^[0-9a-f]{64}$/i.test(sha)) fail(400, 'sha tidak valid');
-  const old = await env.DB.prepare('SELECT sha FROM ea_vps_profile WHERE license_id=?').bind(l.id).first();
-  const t = now();
-  if (old && old.sha === sha) return json({ ok: true, same: true });
   const files = [];
   let total = 0;
   for (const f of (Array.isArray(b.files) ? b.files : []).slice(0, 120)) {
@@ -1328,14 +1340,26 @@ route('POST', '/vps/lic/profile', 'public', async ({ request, env }) => {
   // only key=value lines of [Experts]; anything that looks like a credential is dropped
   const experts = String(b.experts_ini || '').split(/\r?\n/).map((x) => x.trim())
     .filter((x) => /^[A-Za-z][A-Za-z0-9_]{0,40}=[^\r\n]{0,8000}$/.test(x) && !PROFILE_SECRET_RE.test(x.split('=')[0])).slice(0, 40).join('\n');
-  const size = files.reduce((n, f) => n + b64Len(f.b64), 0);
-  const eaCharts = files.filter((f) => /\.chr$/i.test(f.name) && chrHasGhg(f.b64)).length;
+  return { sha, files, experts, size: files.reduce((n, f) => n + b64Len(f.b64), 0),
+    charts: files.filter((f) => /\.chr$/i.test(f.name)).length,
+    eaCharts: files.filter((f) => /\.chr$/i.test(f.name) && chrHasGhg(f.b64)).length };
+}
+route('POST', '/vps/lic/profile', 'public', async ({ request, env }) => {
+  const l = await licAuth(env, request.headers.get('x-lic-key'));
+  if (int(request.headers.get('content-length')) > PROFILE_MAX_B64 + 200000) fail(413, 'Backup profil terlalu besar');
+  const b = await readJson(request);
+  const login = str(b.login, 20);
+  if (login !== String(l.account_number)) fail(409, `Profil dari akun ${login || '?'} ditolak: lisensi ini untuk akun ${l.account_number}`);
+  const old = await env.DB.prepare('SELECT sha FROM ea_vps_profile WHERE license_id=?').bind(l.id).first();
+  const p = parseProfileUpload(b);
+  const t = now();
+  if (old && old.sha === p.sha) return json({ ok: true, same: true });
   await env.DB.prepare(`INSERT INTO ea_vps_profile (license_id, platform, login, server, host, profile_name, files, experts_ini, charts, ea_charts, size, sha, updated_at)
       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?) ON CONFLICT(license_id) DO UPDATE SET platform=excluded.platform, login=excluded.login, server=excluded.server,
       host=excluded.host, profile_name=excluded.profile_name, files=excluded.files, experts_ini=excluded.experts_ini, charts=excluded.charts,
       ea_charts=excluded.ea_charts, size=excluded.size, sha=excluded.sha, updated_at=excluded.updated_at`)
     .bind(l.id, l.platform === 'mt4' ? 'mt4' : 'mt5', login, str(b.server, 80), str(b.host, 60), str(b.profile_name, 80).replace(/[\\/:*?"<>|]/g, ''),
-      JSON.stringify(files), experts, files.filter((f) => /\.chr$/i.test(f.name)).length, eaCharts, size, sha, t).run();
+      JSON.stringify(p.files), p.experts, p.charts, p.eaCharts, p.size, p.sha, t).run();
   return json({ ok: true, updated_at: t });
 });
 // latest backup (?meta=1: without the files)
@@ -1347,6 +1371,48 @@ route('GET', '/vps/lic/profile', 'public', async ({ request, env, url }) => {
   if (url.searchParams.get('meta') === '1') return json(meta);
   let files = []; try { files = JSON.parse(p.files || '[]'); } catch { files = []; }
   return json({ ...meta, files, experts_ini: p.experts_ini });
+});
+
+// ---- Master-mode profile backups (owner's VPS, master key). One row per account login + server + platform.
+route('POST', '/vps/profile', 'public', async ({ request, env, url }) => {
+  await vpsAuth(env, request);
+  if (int(request.headers.get('content-length')) > PROFILE_MAX_B64 + 200000) fail(413, 'Backup profil terlalu besar');
+  const b = await readJson(request);
+  const login = str(b.login || url.searchParams.get('login'), 20);
+  if (!/^\d{3,20}$/.test(login)) fail(400, 'Login akun tidak valid');
+  const server = str(b.server, 80);
+  const platform = b.platform === 'mt4' ? 'mt4' : 'mt5';
+  const old = await env.DB.prepare('SELECT sha FROM ea_vps_master_profile WHERE login=? AND server=? AND platform=?').bind(login, server, platform).first();
+  const p = parseProfileUpload(b);
+  const t = now();
+  if (old && old.sha === p.sha) return json({ ok: true, same: true });
+  await env.DB.prepare(`INSERT INTO ea_vps_master_profile (login, server, platform, host, profile_name, files, experts_ini, charts, ea_charts, size, sha, updated_at)
+      VALUES (?,?,?,?,?,?,?,?,?,?,?,?) ON CONFLICT(login, server, platform) DO UPDATE SET host=excluded.host, profile_name=excluded.profile_name,
+      files=excluded.files, experts_ini=excluded.experts_ini, charts=excluded.charts, ea_charts=excluded.ea_charts, size=excluded.size, sha=excluded.sha, updated_at=excluded.updated_at`)
+    .bind(login, server, platform, str(b.host, 60), str(b.profile_name, 80).replace(/[\\/:*?"<>|]/g, ''),
+      JSON.stringify(p.files), p.experts, p.charts, p.eaCharts, p.size, p.sha, t).run();
+  return json({ ok: true, updated_at: t });
+});
+// one login's backup (for -Setup restore): ?login=&server=&platform=; best server match, then any server for the login
+route('GET', '/vps/profile', 'public', async ({ request, env, url }) => {
+  await vpsAuth(env, request);
+  const login = str(url.searchParams.get('login'), 20);
+  if (!login) fail(400, 'login kosong');
+  const server = str(url.searchParams.get('server'), 80);
+  const platform = url.searchParams.get('platform') === 'mt4' ? 'mt4' : 'mt5';
+  let p = server ? await env.DB.prepare('SELECT * FROM ea_vps_master_profile WHERE login=? AND server=? AND platform=?').bind(login, server, platform).first() : null;
+  if (!p) p = await env.DB.prepare('SELECT * FROM ea_vps_master_profile WHERE login=? AND platform=? ORDER BY updated_at DESC LIMIT 1').bind(login, platform).first();
+  if (!p) return json({ ok: true, none: true });
+  const meta = { ok: true, ...profileMeta(p), platform: p.platform, sha: p.sha };
+  if (url.searchParams.get('meta') === '1') return json(meta);
+  let files = []; try { files = JSON.parse(p.files || '[]'); } catch { files = []; }
+  return json({ ...meta, files, experts_ini: p.experts_ini });
+});
+// all backed-up logins with meta (agent -Setup, admin page)
+route('GET', '/vps/profiles', 'public', async ({ request, env }) => {
+  await vpsAuth(env, request);
+  const { results } = await env.DB.prepare('SELECT login, server, platform, host, profile_name, charts, ea_charts, size, updated_at, experts_ini FROM ea_vps_master_profile ORDER BY login, server').all();
+  return json({ ok: true, profiles: results.map((p) => ({ ...profileMeta(p), platform: p.platform, experts_ini: undefined })) });
 });
 
 // ---- Admin: Telegram bot ----
