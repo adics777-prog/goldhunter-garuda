@@ -397,7 +397,7 @@ def vps_warn(msg):
 
 def restart_local_mt5(p):
     """Close this PC's MT5 normally (WM_CLOSE, charts and inputs saved) and open it again - restart_mt5.ps1."""
-    exe = os.path.join(os.path.dirname(p.get('metaeditor') or ''), 'terminal64.exe')
+    exe = os.path.normpath(os.path.join(os.path.dirname(p.get('metaeditor') or ''), 'terminal64.exe'))   # config uses / separators
     if not os.path.exists(exe):
         return
     try:
