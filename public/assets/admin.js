@@ -937,6 +937,15 @@
           <td class="tiny nowrap">${ago(a.updated_at)}</td><td class="tiny">${esc(a.note)}</td>
           <td><button type="button" class="btn btn-ghost btn-sm" data-vdel="${esc(a.host)}" title="Hapus dari daftar">🗑</button></td></tr>`;
       }).join('')}</tbody></table></div>` : '<div class="small muted">Belum ada VPS yang melapor.</div>');
+    // Backed-up account setups (master mode): the admin installer restores these on a new VPS
+    const profs = d.profiles || [];
+    box.innerHTML += `<div class="small" style="margin-top:16px;margin-bottom:6px"><b style="color:var(--gold)">💾 Backup setup akun (untuk pindah VPS)</b>
+      <span class="tiny muted">Agen mem-backup profil tiap akun yang berjalan. Installer admin memulihkan semuanya di VPS baru.</span></div>`
+      + (profs.length ? `<div class="table-wrap"><table><thead><tr><th>Akun</th><th>Server</th><th>Profil</th><th>Chart</th><th>Backup terakhir</th><th>VPS</th></tr></thead><tbody>
+      ${profs.map((p) => `<tr><td><b>${esc(p.login)}</b> <span class="tiny muted">${esc((p.platform || 'mt5').toUpperCase())}</span></td><td class="small">${esc(p.server || '-')}</td>
+        <td class="small">${esc(p.profile_name || '-')}</td><td class="small">${p.charts} chart · EA di ${p.ea_charts}${p.has_webrequest_urls ? ' · URL✓' : ''}</td>
+        <td class="tiny nowrap">${fmtDateTime(p.updated_at)}<div class="muted">${ago(p.updated_at)}</div></td><td class="tiny">${esc(p.host)}</td></tr>`).join('')}</tbody></table></div>`
+        : '<div class="small muted">Belum ada backup setup akun. Agen 1.4+ mem-backup otomatis tiap 10 menit.</div>');
     $$('[data-vdel]', box).forEach((b) => b.onclick = async () => {
       if (!confirm('Hapus VPS ini dari daftar? (Agennya tetap berjalan dan akan muncul lagi bila masih aktif.)')) return;
       try { await api('/admin/vps/' + encodeURIComponent(b.dataset.vdel), { method: 'DELETE' }); vpsBox(); } catch (err) { toast(err.message, 'err'); }
@@ -1102,7 +1111,7 @@
         <div class="card" style="grid-column:1/-1" data-tab="live"><h3>🖥️ VPS: update otomatis EA &amp; preset</h3>
           <p class="help" style="margin-top:0">Naikkan <span class="mono">#property version</span> di GOLD HUNTER GARUDA.mq5 → builder di PC Anda meng-compile dan menerbitkan rilis (EA + semua preset) → agen di setiap VPS memasangnya ke semua MT5 dan me-restart MT5 (chart &amp; input tersimpan). Perubahan tanpa naik versi tidak diterbitkan; preset yang berubah tetap diterbitkan.</p>
           <ol class="small" style="margin:0 0 12px 18px;line-height:1.8">
-            <li>Paling mudah: <a href="/api/admin/vps/installer"><b>⬇ installer 1 file</b></a> (GHG-Installer-Admin.cmd), jalankan di VPS lalu klik Yes. Atau manual:</li>
+            <li><b>Pindah VPS?</b> <a href="/api/admin/vps/installer"><b>⬇ installer 1 file</b></a> (GHG-Installer-Admin.cmd): pasang ke-3 MT5 dari broker &amp; login tiap akun di VPS baru, jalankan installer sekali → EA + setup SEMUA akun (chart, input, WebRequest) dipulihkan otomatis. Atau manual:</li>
             <li>Unduh 3 file ini, taruh di <b>satu folder</b> di VPS (mis. <span class="mono">C:\\GHG-Agent</span>): <a href="/api/admin/vps/download?f=agent">GHG-VPS-Agent.ps1</a> · <a href="/api/admin/vps/download?f=install">Pasang-Agen-VPS.bat</a> · <a href="/api/admin/vps/download?f=config">config.json</a> (berisi kunci master, jangan dibagikan).</li>
             <li>Di VPS klik dua kali <b>Pasang-Agen-VPS.bat</b>: uji koneksi, lalu agen jalan tersembunyi dan otomatis jalan lagi setiap Windows login.</li>
             <li>Pasang tiap MT5 + EA sekali secara manual (Load preset). Rilis berikutnya masuk sendiri; status VPS tampil di bawah.</li></ol>
