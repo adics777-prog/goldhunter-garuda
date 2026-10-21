@@ -2,8 +2,9 @@
 #  GHG Installer - dijalankan oleh GHG-Installer-<akun>.cmd (hak administrator), jangan dijalankan sendiri.
 #  1. hentikan agen GHG lama (+ shortcut Startup lama)
 #  2. tulis GHG-VPS-Agent.ps1 + config.json (digabung dengan config.json lama: beberapa akun di 1 VPS tetap jalan)
-#  3. member: agen -Setup  = pasang EA + preset, pulihkan setup terakhir (profil chart + EA + input), Algo Trading &
-#     WebRequest aktif, buka MetaTrader lagi.  admin (kunci master): uji koneksi saja (-Once -DryRun).
+#  3. agen -Setup  = pasang EA + preset, pulihkan setup terakhir (profil chart + EA + input), Algo Trading &
+#     WebRequest aktif, buka MetaTrader lagi.  Member: satu akun berlisensi.  Admin (kunci master): SEMUA MT5 yang
+#     login di akun yang backup-nya ada di web (owner pindah VPS: 3 broker sekaligus).
 #  Task Scheduler "GHG VPS Agent" didaftarkan oleh file .cmd sesudah ini (sama persis dengan Pasang-Agen-VPS.bat).
 #  Kode keluar: 0 selesai, 2 MetaTrader belum login (task tidak didaftarkan), 3 file EA belum ada di web, 1 gagal.
 # =====================================================================================
@@ -61,39 +62,49 @@ Say ('ditulis: ' + $agentPath)
 Say ('ditulis: ' + $cfgPath + ' (berisi kunci, jangan dibagikan)')
 
 Say ''
-Say $(if ($member) { '=== 3/3 Pasang EA + pulihkan setup terakhir ===' } else { '=== 3/3 Uji koneksi ke web (tanpa menyalin apa pun) ===' }) 'Cyan'
+Say '=== 3/3 Pasang EA + pulihkan setup terakhir ===' 'Cyan'
 $resFile = Join-Path $Dir 'setup-result.json'
 if (Test-Path $resFile) { Remove-Item $resFile -Force }
 if ($member) { & powershell.exe -NoProfile -ExecutionPolicy Bypass -File $agentPath -Setup -Only ([string]$lic.id) }
-else { & powershell.exe -NoProfile -ExecutionPolicy Bypass -File $agentPath -Once -DryRun }
+else { & powershell.exe -NoProfile -ExecutionPolicy Bypass -File $agentPath -Setup }
 $rc = $LASTEXITCODE
-if (-not $member) { exit 0 }
 
-$r = $null
-try { $r = @(Get-Content $resFile -Raw -Encoding UTF8 | ConvertFrom-Json)[0] } catch { }
+$results = @()
+# PS 5.1: piping a JSON array straight into @() nests it; assign first, then wrap.
+try { $parsed = Get-Content $resFile -Raw -Encoding UTF8 | ConvertFrom-Json; $results = @($parsed) } catch { }
 Say ''
 Say '================ RINGKASAN ================' 'Yellow'
-if ($rc -eq 0 -and $r) {
-  Say ('BERHASIL: ' + $r.message) 'Green'
-  Say ('  MetaTrader : ' + $r.terminal)
-  Say ('  Folder data: ' + $r.data)
-  if ($r.restored) {
-    Say ('  Setup dipulihkan dari backup ' + (Get-Date ([DateTimeOffset]::FromUnixTimeSeconds([int64]$r.backup_at).LocalDateTime) -Format 'dd-MM-yyyy HH:mm') + ' (VPS ' + $r.backup_host + ') sebagai profil "GHG Restore"')
-    if (@($r.loaded).Count) { Say ('  EA aktif di chart: ' + (@($r.loaded) -join ' | ')) 'Green' }
-    else { Say '  Cek di MetaTrader: tab Experts harus menampilkan "GOLD HUNTER GARUDA ... loaded successfully".' }
+$needLogin = $false
+foreach ($r in $results) {
+  $head = if ($r.account) { 'Akun ' + $r.account } else { $r.terminal }
+  if ([int]$r.code -eq 0) {
+    Say ('BERHASIL: ' + $head) 'Green'
+    if ($r.terminal) { Say ('  MetaTrader : ' + $r.terminal) }
+    if ($r.data) { Say ('  Folder data: ' + $r.data) }
+    if ($r.restored) {
+      Say ('  Setup dipulihkan dari backup ' + (Get-Date ([DateTimeOffset]::FromUnixTimeSeconds([int64]$r.backup_at).LocalDateTime) -Format 'dd-MM-yyyy HH:mm') + ' (VPS ' + $r.backup_host + ') sebagai profil "GHG Restore"')
+      if (@($r.loaded).Count) { Say ('  EA aktif di chart: ' + (@($r.loaded) -join ' | ')) 'Green' }
+      else { Say '  Cek di MetaTrader: tab Experts harus menampilkan "GOLD HUNTER GARUDA ... loaded successfully".' }
+    } else {
+      Say '  Belum ada backup setup di web untuk akun ini: buka chart, drag EA GOLD HUNTER GARUDA dari Navigator ke chart, atur input, OK.' 'DarkYellow'
+      Say '  Sesudah itu agen mem-backup setup ini otomatis (tiap 10 menit bila berubah).' 'DarkYellow'
+    }
+    if ($r.webrequest_urls -eq $false) { Say '  Bila tab Experts meminta izin WebRequest: Tools > Options > Expert Advisors, centang Allow WebRequest, tambahkan https://goldhuntergaruda.com' 'DarkYellow' }
+  } elseif ([int]$r.code -eq 2) {
+    $needLogin = $true
+    Say ('BELUM LOGIN: ' + $head) 'Red'
+    Say ('  ' + $r.message) 'Red'
+  } elseif ([int]$r.code -eq 3) {
+    Say ('BELUM ADA FILE EA: ' + $head) 'DarkYellow'
+    Say ('  ' + $r.message) 'DarkYellow'
   } else {
-    Say '  Belum ada backup setup di web: buka chart, drag EA GOLD HUNTER GARUDA dari Navigator ke chart, atur input, OK.' 'DarkYellow'
-    Say '  Sesudah itu agen mem-backup setup ini otomatis (tiap 10 menit bila berubah).' 'DarkYellow'
+    Say ('GAGAL: ' + $head) 'Red'
+    Say ('  ' + $r.message) 'Red'
   }
-  Say '  Algo Trading dan WebRequest sudah dinyalakan.'
-  if (-not $r.webrequest_urls) { Say '  Laporan ke web: bila tab Experts meminta izin WebRequest, buka Tools > Options > Expert Advisors, centang Allow WebRequest, tambahkan https://goldhuntergaruda.com' 'DarkYellow' }
-  else { Say '  Daftar URL WebRequest dipulihkan dari backup. Bila EA tetap minta izin WebRequest: Tools > Options > Expert Advisors, tambahkan https://goldhuntergaruda.com' }
-} elseif ($rc -eq 2) {
-  Say ('BELUM SELESAI: ' + $(if ($r) { $r.message } else { 'MetaTrader belum login di akun lisensi.' })) 'Red'
-  Say '  Langkah: 1) buka MetaTrader  2) login akun trading dengan password TRADING + centang Save password  3) jalankan installer ini lagi.' 'Red'
-} elseif ($rc -eq 3) {
-  Say ('BELUM ADA FILE EA: ' + $(if ($r) { $r.message } else { '' })) 'DarkYellow'
-} else {
-  Say ('GAGAL: ' + $(if ($r) { $r.message } else { 'lihat pesan di atas / ' + (Join-Path $Dir 'agent.log') })) 'Red'
+}
+if (-not $results) { Say ('(tidak ada hasil; lihat ' + (Join-Path $Dir 'agent.log') + ')') 'DarkYellow' }
+if ($needLogin) {
+  Say ''
+  Say 'Untuk MetaTrader yang BELUM LOGIN: buka MT5 itu, login akun trading dengan password TRADING + centang Save password, tutup MT5, lalu jalankan installer ini lagi.' 'Yellow'
 }
 exit $rc
