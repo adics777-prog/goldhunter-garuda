@@ -367,7 +367,8 @@
               <td>${buildBadge(b.status)}<div class="tiny muted">${esc(b.reason)}</div></td>
               <td>${b.file_id && b.status === 'done' ? `<a class="small" href="/api/files/${b.file_id}">Unduh</a>` : b.status === 'failed' ? `<a class="small" href="#" data-log="${b.id}">Log</a>` : ''}</td></tr>`).join('')}</tbody></table></div>` : '<div class="muted small">Belum ada build.</div>'}</div>` : ''}
           ${l.includes_ea ? `<div class="card"><h3>Agen VPS (update otomatis)</h3><div class="small">${licAgents({ ...l, current_build_id: l.build && l.build.id }, true)}</div>
-            <p class="tiny muted" style="margin:8px 0 0">Member memasang agen dari menu Lisensi &amp; VPS (config.json berisi kunci lisensi akun ini).</p></div>` : ''}
+            <div class="small" style="margin-top:10px">💾 Backup setup terakhir: ${l.profile_backup ? `<b>${fmtDateTime(l.profile_backup.updated_at)}</b> <span class="muted">(${ago(l.profile_backup.updated_at)})</span> dari <b>${esc(l.profile_backup.host)}</b> · profil "${esc(l.profile_backup.profile_name)}" · ${l.profile_backup.charts} chart, EA di ${l.profile_backup.ea_charts} chart · ${Math.max(1, Math.round(l.profile_backup.size / 1024))} KB${l.profile_backup.has_webrequest_urls ? ' · daftar URL WebRequest ikut' : ''}` : '<span class="muted">belum ada</span>'}</div>
+            <p class="tiny muted" style="margin:8px 0 0">Member memasang agen dari menu Lisensi &amp; VPS: installer 1 file (pasang EA + pulihkan backup setup di VPS baru) atau 3 file manual (config.json berisi kunci lisensi akun ini).</p></div>` : ''}
           ${changes.length ? `<div class="card"><h3>Riwayat ganti akun</h3>${changes.map((c) => `<div class="small" style="padding:6px 0;border-bottom:1px solid var(--line)">${esc(c.old_account)} → <b>${esc(c.new_account)}</b> · ${c.status} · ${fmtDate(c.created_at)}</div>`).join('')}</div>` : ''}
         </div>
       </div>`;
@@ -1101,6 +1102,7 @@
         <div class="card" style="grid-column:1/-1" data-tab="live"><h3>🖥️ VPS: update otomatis EA &amp; preset</h3>
           <p class="help" style="margin-top:0">Naikkan <span class="mono">#property version</span> di GOLD HUNTER GARUDA.mq5 → builder di PC Anda meng-compile dan menerbitkan rilis (EA + semua preset) → agen di setiap VPS memasangnya ke semua MT5 dan me-restart MT5 (chart &amp; input tersimpan). Perubahan tanpa naik versi tidak diterbitkan; preset yang berubah tetap diterbitkan.</p>
           <ol class="small" style="margin:0 0 12px 18px;line-height:1.8">
+            <li>Paling mudah: <a href="/api/admin/vps/installer"><b>⬇ installer 1 file</b></a> (GHG-Installer-Admin.cmd), jalankan di VPS lalu klik Yes. Atau manual:</li>
             <li>Unduh 3 file ini, taruh di <b>satu folder</b> di VPS (mis. <span class="mono">C:\\GHG-Agent</span>): <a href="/api/admin/vps/download?f=agent">GHG-VPS-Agent.ps1</a> · <a href="/api/admin/vps/download?f=install">Pasang-Agen-VPS.bat</a> · <a href="/api/admin/vps/download?f=config">config.json</a> (berisi kunci master, jangan dibagikan).</li>
             <li>Di VPS klik dua kali <b>Pasang-Agen-VPS.bat</b>: uji koneksi, lalu agen jalan tersembunyi dan otomatis jalan lagi setiap Windows login.</li>
             <li>Pasang tiap MT5 + EA sekali secara manual (Load preset). Rilis berikutnya masuk sendiri; status VPS tampil di bawah.</li></ol>

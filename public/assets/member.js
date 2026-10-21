@@ -398,10 +398,12 @@
         <li><b>Selesai</b>Dalam ±5 menit laporan pertama masuk dan tampil di kartu lisensi Anda. Nama di papan tampil singkat (misal "Budi S****"); minta admin jika ingin disamarkan.</li>
       </ol></div>`;
 
-  // Automatic EA updates on the member's own VPS (agent in licence mode): steps, the 3 files, last status
+  // Automatic EA updates + setup backup on the member's own VPS (agent in licence mode): the one-file installer
+  // (also for moving to a new VPS), the 3 manual files, the latest setup backup and each agent's last status
   const vpsAutoBox = (l, multi) => {
     const dl = (f, name) => `<a class="btn btn-outline btn-sm" href="/api/licenses/${l.id}/agent?f=${f}">⬇ ${name}</a>`;
     const mt = l.platform === 'mt4' ? 'MetaTrader 4' : 'MetaTrader 5';
+    const acc = esc(l.account_number);
     const agents = l.vps_agents || [];
     const st = agents.length ? agents.map((a) => {
       const on = Date.now() / 1000 - a.updated_at < 600;
@@ -410,14 +412,23 @@
         <b>${esc(a.host)}</b> · EA ${a.version ? 'v' + esc(a.version) : '-'}${a.build_id ? ` (build #${a.build_id})` : ''} ${cur ? '<span class="badge b-green">terbaru</span>' : ''}
         · terakhir ${ago(a.updated_at)}${a.note && a.note !== 'ok' ? `<div class="muted">${esc(a.note)}</div>` : ''}</div>`;
     }).join('') : '<div class="tiny muted" style="margin-top:6px">Status: <b>belum terhubung</b></div>';
-    return `<div class="summary" style="margin-top:14px"><div class="small"><b style="color:var(--gold)">🔄 Update otomatis VPS</b></div>
-      <p class="tiny muted" style="margin:4px 0 0">Setiap file EA baru (perpanjangan, versi baru) langsung terpasang di ${mt} VPS Anda, tanpa unduh manual.</p>
-      <ol class="steps-list small"><li>Di VPS, unduh 3 file di bawah ke <b>satu folder</b> (mis. <span class="mono">C:\\GHG-Agent</span>).</li>
-        <li>Klik kanan <b>Pasang-Agen-VPS.bat</b> → <b>Run as administrator</b>.</li>
-        <li>${mt} di VPS harus login di akun <b>${esc(l.account_number)}</b>. Agen memasang EA lalu me-restart ${mt} itu sendiri.</li></ol>
-      <div class="row" style="margin-top:10px;gap:8px">${dl('agent', 'GHG-VPS-Agent.ps1')}${dl('install', 'Pasang-Agen-VPS.bat')}${dl('config', 'config.json')}</div>
-      <p class="tiny muted" style="margin:8px 0 0">config.json berisi kunci lisensi akun ini, jangan dibagikan.${multi ? ` Beberapa akun di satu VPS? Pakai <a href="/api/licenses/${l.id}/agent?f=config&amp;all=1">config.json gabungan semua akun</a>.` : ''}</p>
-      ${st}</div>`;
+    const pb = l.profile_backup;
+    const backup = pb
+      ? `<div class="tiny" style="margin-top:8px">💾 Backup setup terakhir: <b>${ago(pb.updated_at)}</b> <span class="muted">(${fmtDateTime(pb.updated_at)})</span> dari <b>${esc(pb.host)}</b> · ${pb.charts} chart, EA di ${pb.ea_charts} chart</div>`
+      : '<div class="tiny muted" style="margin-top:8px">💾 Backup setup: <b>belum ada</b>. Dibuat otomatis oleh agen begitu EA terpasang di chart.</div>';
+    return `<div class="summary" style="margin-top:14px"><div class="small"><b style="color:var(--gold)">🔄 Update otomatis &amp; pindah VPS</b></div>
+      <p class="tiny muted" style="margin:4px 0 10px">EA baru (perpanjangan, versi baru) langsung terpasang di ${mt} VPS Anda, dan setup EA (chart + input) di-backup otomatis. VPS mati? Di VPS baru cukup jalankan installer ini, setup terakhir dipasang lagi.</p>
+      <a class="btn btn-gold btn-block" href="/api/licenses/${l.id}/installer">⬇ Unduh installer (1 file)</a>
+      <ol class="steps-list small"><li>Pasang <b>${mt}</b> dari broker Anda di PC / VPS.</li>
+        <li>Buka ${mt}, login akun <b>${acc}</b> dengan password <b>trading</b>, centang <b>Save password</b>.</li>
+        <li>Jalankan <b>GHG-Installer-${acc}.cmd</b>, klik <b>Yes</b>. Muncul "Windows protected your PC"? Klik <i>More info → Run anyway</i>.</li>
+        <li><b>Selesai.</b> EA terpasang dengan setup terakhir, update otomatis aktif.</li></ol>
+      <details class="tiny" style="margin-top:8px"><summary class="muted" style="cursor:pointer">Pasang manual (3 file)</summary>
+        <p class="muted" style="margin:6px 0">Unduh ke <b>satu folder</b> (mis. <span class="mono">C:\\GHG-Agent</span>), klik kanan <b>Pasang-Agen-VPS.bat</b> → <b>Run as administrator</b>. ${mt} harus login di akun ${acc}.</p>
+        <div class="row" style="gap:8px">${dl('agent', 'GHG-VPS-Agent.ps1')}${dl('install', 'Pasang-Agen-VPS.bat')}${dl('config', 'config.json')}</div>
+        ${multi ? `<p class="muted" style="margin:6px 0 0">Beberapa akun di satu VPS? Jalankan installer tiap akun, atau pakai <a href="/api/licenses/${l.id}/agent?f=config&amp;all=1">config.json gabungan semua akun</a>.</p>` : ''}</details>
+      <p class="tiny muted" style="margin:8px 0 0">Installer &amp; config.json berisi kunci lisensi akun ini, jangan dibagikan.</p>
+      ${backup}${st}</div>`;
   };
 
   // ------------------------------------------------------------------ lisensi
