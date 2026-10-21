@@ -1,0 +1,99 @@
+# =====================================================================================
+#  GHG Installer - dijalankan oleh GHG-Installer-<akun>.cmd (hak administrator), jangan dijalankan sendiri.
+#  1. hentikan agen GHG lama (+ shortcut Startup lama)
+#  2. tulis GHG-VPS-Agent.ps1 + config.json (digabung dengan config.json lama: beberapa akun di 1 VPS tetap jalan)
+#  3. member: agen -Setup  = pasang EA + preset, pulihkan setup terakhir (profil chart + EA + input), Algo Trading &
+#     WebRequest aktif, buka MetaTrader lagi.  admin (kunci master): uji koneksi saja (-Once -DryRun).
+#  Task Scheduler "GHG VPS Agent" didaftarkan oleh file .cmd sesudah ini (sama persis dengan Pasang-Agen-VPS.bat).
+#  Kode keluar: 0 selesai, 2 MetaTrader belum login (task tidak didaftarkan), 3 file EA belum ada di web, 1 gagal.
+# =====================================================================================
+param([Parameter(Mandatory = $true)][string]$Installer, [string]$Dir = 'C:\GHG-Agent')
+$ErrorActionPreference = 'Stop'
+function Say([string]$m, [string]$c = 'Gray') { Write-Host $m -ForegroundColor $c }
+function Block([string[]]$t, [string]$n) {
+  $s = [array]::IndexOf($t, '::BEGIN ' + $n); $e = [array]::IndexOf($t, '::END ' + $n)
+  if ($s -lt 0 -or $e -le $s + 1) { throw "Bagian $n tidak ada di installer (file rusak / terpotong). Unduh ulang installer dari member area." }
+  return [Convert]::FromBase64String((($t[($s + 1)..($e - 1)]) -join ''))
+}
+try {
+  $t = [IO.File]::ReadAllLines($Installer)
+  $agentBytes = Block $t 'AGENT'
+  $new = [Text.Encoding]::UTF8.GetString((Block $t 'CONFIG')) | ConvertFrom-Json
+} catch { Say ('GAGAL: ' + $_.Exception.Message) 'Red'; exit 1 }
+$lic = $new.license
+$member = [bool]($lic -and $lic.id)
+Say ''
+Say ('=== GHG Installer: ' + $(if ($member) { 'akun ' + $lic.account + ' (' + ([string]$lic.platform).ToUpper() + ')' } else { 'VPS admin (kunci master)' }) + ' ===') 'Yellow'
+Say ('Folder agen: ' + $Dir)
+
+Say ''
+Say '=== 1/3 Hentikan agen lama (bila ada) ===' 'Cyan'
+$me = $PID
+Get-CimInstance Win32_Process -Filter "Name='powershell.exe'" | Where-Object { $_.ProcessId -ne $me -and $_.CommandLine -match 'GHG-VPS-Agent\.ps1' -and $_.CommandLine -notmatch 'Get-CimInstance' } | ForEach-Object {
+  Stop-Process -Id $_.ProcessId -Force; Say ('agen lama dihentikan: PID ' + $_.ProcessId) }
+$lnk = [Environment]::GetFolderPath('Startup') + '\GHG VPS Agent.lnk'
+if (Test-Path $lnk) { Remove-Item $lnk -Force; Say 'shortcut Startup lama dihapus' }
+Start-Sleep -Seconds 1
+
+Say ''
+Say '=== 2/3 Tulis agen + config.json ===' 'Cyan'
+New-Item -ItemType Directory -Path $Dir -Force | Out-Null
+$agentPath = Join-Path $Dir 'GHG-VPS-Agent.ps1'
+[IO.File]::WriteAllBytes($agentPath, $agentBytes)
+# config.json lama dipertahankan (extra_data_dirs, akun lain); lisensi ini ditambah / diganti, alamat web diperbarui
+$cfgPath = Join-Path $Dir 'config.json'
+$cfg = [ordered]@{}
+if (Test-Path $cfgPath) {
+  try { $old = Get-Content $cfgPath -Raw -Encoding UTF8 | ConvertFrom-Json; foreach ($p in $old.PSObject.Properties) { $cfg[$p.Name] = $p.Value }; Say 'config.json lama ditemukan: digabung' }
+  catch { Copy-Item $cfgPath ($cfgPath + '.rusak') -Force; Say 'config.json lama rusak: disimpan sebagai config.json.rusak' 'DarkYellow' }
+}
+foreach ($p in $new.PSObject.Properties) { if ($p.Name -notin @('license', 'licenses') -and -not $cfg.Contains($p.Name)) { $cfg[$p.Name] = $p.Value } }
+$cfg['web'] = $new.web
+if ($new.key) { $cfg['key'] = $new.key }
+if ($member) {
+  $list = @(@($cfg['license']) + @($cfg['licenses']) | Where-Object { $_ -and $_.id -and [string]$_.id -ne [string]$lic.id })
+  $cfg.Remove('license'); $cfg.Remove('licenses')
+  if ($list.Count) { $cfg['licenses'] = @($list + $lic); Say ('lisensi lain di config.json tetap aktif: ' + (($list | ForEach-Object { $_.account }) -join ', ')) } else { $cfg['license'] = $lic }
+}
+[IO.File]::WriteAllText($cfgPath, (ConvertTo-Json -InputObject $cfg -Depth 6), (New-Object Text.UTF8Encoding($false)))
+Get-ChildItem -Path $Dir -File | Unblock-File
+Say ('ditulis: ' + $agentPath)
+Say ('ditulis: ' + $cfgPath + ' (berisi kunci, jangan dibagikan)')
+
+Say ''
+Say $(if ($member) { '=== 3/3 Pasang EA + pulihkan setup terakhir ===' } else { '=== 3/3 Uji koneksi ke web (tanpa menyalin apa pun) ===' }) 'Cyan'
+$resFile = Join-Path $Dir 'setup-result.json'
+if (Test-Path $resFile) { Remove-Item $resFile -Force }
+if ($member) { & powershell.exe -NoProfile -ExecutionPolicy Bypass -File $agentPath -Setup -Only ([string]$lic.id) }
+else { & powershell.exe -NoProfile -ExecutionPolicy Bypass -File $agentPath -Once -DryRun }
+$rc = $LASTEXITCODE
+if (-not $member) { exit 0 }
+
+$r = $null
+try { $r = @(Get-Content $resFile -Raw -Encoding UTF8 | ConvertFrom-Json)[0] } catch { }
+Say ''
+Say '================ RINGKASAN ================' 'Yellow'
+if ($rc -eq 0 -and $r) {
+  Say ('BERHASIL: ' + $r.message) 'Green'
+  Say ('  MetaTrader : ' + $r.terminal)
+  Say ('  Folder data: ' + $r.data)
+  if ($r.restored) {
+    Say ('  Setup dipulihkan dari backup ' + (Get-Date ([DateTimeOffset]::FromUnixTimeSeconds([int64]$r.backup_at).LocalDateTime) -Format 'dd-MM-yyyy HH:mm') + ' (VPS ' + $r.backup_host + ') sebagai profil "GHG Restore"')
+    if (@($r.loaded).Count) { Say ('  EA aktif di chart: ' + (@($r.loaded) -join ' | ')) 'Green' }
+    else { Say '  Cek di MetaTrader: tab Experts harus menampilkan "GOLD HUNTER GARUDA ... loaded successfully".' }
+  } else {
+    Say '  Belum ada backup setup di web: buka chart, drag EA GOLD HUNTER GARUDA dari Navigator ke chart, atur input, OK.' 'DarkYellow'
+    Say '  Sesudah itu agen mem-backup setup ini otomatis (tiap 10 menit bila berubah).' 'DarkYellow'
+  }
+  Say '  Algo Trading dan WebRequest sudah dinyalakan.'
+  if (-not $r.webrequest_urls) { Say '  Laporan ke web: bila tab Experts meminta izin WebRequest, buka Tools > Options > Expert Advisors, centang Allow WebRequest, tambahkan https://goldhuntergaruda.com' 'DarkYellow' }
+  else { Say '  Daftar URL WebRequest dipulihkan dari backup. Bila EA tetap minta izin WebRequest: Tools > Options > Expert Advisors, tambahkan https://goldhuntergaruda.com' }
+} elseif ($rc -eq 2) {
+  Say ('BELUM SELESAI: ' + $(if ($r) { $r.message } else { 'MetaTrader belum login di akun lisensi.' })) 'Red'
+  Say '  Langkah: 1) buka MetaTrader  2) login akun trading dengan password TRADING + centang Save password  3) jalankan installer ini lagi.' 'Red'
+} elseif ($rc -eq 3) {
+  Say ('BELUM ADA FILE EA: ' + $(if ($r) { $r.message } else { '' })) 'DarkYellow'
+} else {
+  Say ('GAGAL: ' + $(if ($r) { $r.message } else { 'lihat pesan di atas / ' + (Join-Path $Dir 'agent.log') })) 'Red'
+}
+exit $rc

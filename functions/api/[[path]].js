@@ -13,6 +13,7 @@ import { layout, sendEmail } from '../../server/email.js';
 import { reportPng } from '../../server/report-image.js';
 import AGENT_PS1 from '../../server/vps/GHG-VPS-Agent.ps1.txt';
 import AGENT_BAT from '../../server/vps/Pasang-Agen-VPS.bat.txt';
+import INSTALLER_PS1 from '../../server/vps/GHG-Installer.ps1.txt';
 
 const routes = [];
 const route = (method, path, auth, handler) => {
@@ -1165,9 +1166,78 @@ function agentScript(f) {
   if (f === 'install') return agentFile('Pasang-Agen-VPS.bat', AGENT_BAT.replace(/\r?\n/g, '\r\n'), 'text/plain; charset=utf-8');
   return null;
 }
-const agentConfig = (base, fields) => agentFile('config.json', JSON.stringify({ web: base || 'https://goldhuntergaruda.com', ...fields,
-  interval_seconds: 60, restart_terminals: true, restart_gap_seconds: 20, extra_data_dirs: [] }, null, 2), 'application/json');
+const agentConfig = (base, fields) => agentFile('config.json', JSON.stringify(agentDefaults(base, fields), null, 2), 'application/json');
+// ---- One-file installer GHG-Installer-<account>.cmd: a CMD that elevates itself (UAC), unpacks the agent + config.json
+// (base64 blocks after the batch part, never executed by cmd) into C:\GHG-Agent, runs the agent with -Setup (EA + presets,
+// latest chart-profile backup restored as "GHG Restore", Algo Trading / WebRequest on, MetaTrader opened again) and
+// registers the "GHG VPS Agent" task exactly like Pasang-Agen-VPS.bat. Admin (master key): same without -Setup.
+const crlf = (s) => String(s).replace(/\r?\n/g, '\r\n');
+const b64Block = (name, text) => `::BEGIN ${name}\r\n${b64(new TextEncoder().encode(text)).match(/.{1,76}/g).join('\r\n')}\r\n::END ${name}`;
+const INSTALLER_BAT = String.raw`@echo off
+rem ============================================================================
+rem  GHG Installer __LABEL__ - GOLD HUNTER GARUDA (goldhuntergaruda.com)
+rem  Klik dua kali file ini di PC / VPS yang sudah ada MetaTrader-nya, lalu klik Yes
+rem  saat Windows meminta izin Administrator.
+rem  Memasang agen update otomatis di C:\GHG-Agent, EA berlisensi + preset, memulihkan
+rem  setup EA terakhir (chart, input) dan mendaftarkan task "GHG VPS Agent".
+rem  Berisi kunci lisensi akun ini: JANGAN dibagikan ke orang lain.
+rem ============================================================================
+setlocal
+title GHG Installer __LABEL__
+set "GHG_SELF=%~f0"
+set "GHG_DIR=C:\GHG-Agent"
+net session >nul 2>&1
+if not errorlevel 1 goto run
+if /i "%~1"=="elevated" goto noadmin
+echo Meminta izin Administrator... klik Yes pada jendela Windows.
+powershell -NoProfile -ExecutionPolicy Bypass -Command "Start-Process -FilePath $env:GHG_SELF -ArgumentList 'elevated' -Verb RunAs"
+if errorlevel 1 goto noadmin
+exit /b 0
+:noadmin
+echo.
+echo Installer butuh hak Administrator. Klik kanan file ini ^> Run as administrator.
+echo.
+pause
+exit /b 1
+:run
+set "GHG_BOOT=%TEMP%\ghg-installer-%RANDOM%%RANDOM%.ps1"
+powershell -NoProfile -ExecutionPolicy Bypass -Command "$t=[IO.File]::ReadAllLines($env:GHG_SELF); $s=[array]::IndexOf($t,'::BEGIN BOOT'); $e=[array]::IndexOf($t,'::END BOOT'); [IO.File]::WriteAllBytes($env:GHG_BOOT,[Convert]::FromBase64String(($t[($s+1)..($e-1)] -join '')))"
+if not exist "%GHG_BOOT%" goto broken
+powershell -NoProfile -ExecutionPolicy Bypass -File "%GHG_BOOT%" -Installer "%GHG_SELF%" -Dir "%GHG_DIR%"
+set "GHG_RC=%errorlevel%"
+del "%GHG_BOOT%" >nul 2>&1
+if "%GHG_RC%"=="2" goto finish
+echo.
+echo === Jalan otomatis setiap Windows login, hak tertinggi (Task Scheduler "GHG VPS Agent") ===
+schtasks /Create /F /TN "GHG VPS Agent" /SC ONLOGON /RL HIGHEST /TR "powershell.exe -NoProfile -WindowStyle Hidden -ExecutionPolicy Bypass -File \"%GHG_DIR%\GHG-VPS-Agent.ps1\""
+schtasks /Run /TN "GHG VPS Agent"
+echo.
+echo SELESAI. Agen update otomatis aktif (cek tiap menit, backup setup tiap 10 menit).
+echo Log: %GHG_DIR%\agent.log  -  status tampil di web, menu Lisensi ^& VPS.
+:finish
+echo.
+pause
+exit /b %GHG_RC%
+:broken
+echo Installer rusak / terpotong. Unduh ulang dari member area.
+pause
+exit /b 1
+`;
+function installerCmd(label, cfg) {
+  const bat = INSTALLER_BAT.replace(/__LABEL__/g, String(label).replace(/[^0-9A-Za-z ]/g, ''));
+  return [crlf(bat).trimEnd(), b64Block('BOOT', '\ufeff' + crlf(INSTALLER_PS1)), b64Block('AGENT', '\ufeff' + crlf(AGENT_PS1)),
+    b64Block('CONFIG', JSON.stringify(cfg, null, 2)), ''].join('\r\n');
+}
+const installerFile = (name, body) => new Response(body, { headers: { 'content-type': 'application/octet-stream',
+  'content-disposition': `attachment; filename="${name}"`, 'cache-control': 'private, no-store' } });
+const agentDefaults = (base, fields) => ({ web: base || 'https://goldhuntergaruda.com', ...fields,
+  interval_seconds: 60, restart_terminals: true, restart_gap_seconds: 20, profile_backup_minutes: 10, extra_data_dirs: [] });
 // Admin: config.json comes with the web address and the master key filled in.
+route('GET', '/admin/vps/installer', 'admin', async ({ env, base }) => {
+  const key = String((await getSettings(env)).ea_master_key || '').trim();
+  if (!key) fail(400, 'Buat & simpan kunci master dulu (Pengaturan > EA Live)');
+  return installerFile('GHG-Installer-Admin.cmd', installerCmd('VPS admin', agentDefaults(base, { key })));
+});
 route('GET', '/admin/vps/download', 'admin', async ({ env, url, base }) => {
   const f = url.searchParams.get('f');
   const script = agentScript(f);
@@ -1217,6 +1287,66 @@ route('POST', '/vps/lic/status', 'public', async ({ request, env }) => {
       note=excluded.note, updated_at=excluded.updated_at, installed_at=CASE WHEN excluded.installed_at > 0 THEN excluded.installed_at ELSE installed_at END`)
     .bind(l.id, host, str(b.version, 20), int(b.build_id) || 0, str(b.agent, 12), JSON.stringify(terms), str(b.note, 300), t, b.installed ? t : 0).run();
   return json({ ok: true });
+});
+// ---- Chart profile backup (agent 1.3+): the licensed terminal's active chart profile (charts, EA + inputs) and the
+// [Experts] lines of its common.ini, uploaded when it changes. The one-file installer restores it on a new VPS.
+const PROFILE_MAX_B64 = 1500000;                       // all files together, base64 characters (D1 row limit is 2 MB)
+const PROFILE_FILE_RE = /^[A-Za-z0-9 _.()-]{1,80}$/;  // plain file names only, no folders
+const PROFILE_SECRET_RE = /pass|login|token|secret|key/i;
+const profileMeta = (p) => p ? { updated_at: p.updated_at, host: p.host, login: p.login, server: p.server, profile_name: p.profile_name,
+  charts: p.charts, ea_charts: p.ea_charts, size: p.size, has_webrequest_urls: /^WebRequestUrl=/m.test(p.experts_ini || '') } : null;
+// a chart file (UTF-16LE with BOM in MT5, ANSI / UTF-8 in MT4) with GOLD HUNTER GARUDA attached
+function chrHasGhg(b64data) {
+  try {
+    const u = unb64(b64data);
+    const text = new TextDecoder(u[0] === 0xff && u[1] === 0xfe ? 'utf-16le' : 'utf-8').decode(u);
+    return /<expert>\s*name=GOLD HUNTER GARUDA/i.test(text);
+  } catch { return false; }
+}
+route('POST', '/vps/lic/profile', 'public', async ({ request, env }) => {
+  const l = await licAuth(env, request.headers.get('x-lic-key'));
+  if (int(request.headers.get('content-length')) > PROFILE_MAX_B64 + 200000) fail(413, 'Backup profil terlalu besar');
+  const b = await readJson(request);
+  const login = str(b.login, 20);
+  if (login !== String(l.account_number)) fail(409, `Profil dari akun ${login || '?'} ditolak: lisensi ini untuk akun ${l.account_number}`);
+  const sha = str(b.sha, 80);
+  if (!/^[0-9a-f]{64}$/i.test(sha)) fail(400, 'sha tidak valid');
+  const old = await env.DB.prepare('SELECT sha FROM ea_vps_profile WHERE license_id=?').bind(l.id).first();
+  const t = now();
+  if (old && old.sha === sha) return json({ ok: true, same: true });
+  const files = [];
+  let total = 0;
+  for (const f of (Array.isArray(b.files) ? b.files : []).slice(0, 120)) {
+    const name = str(f && f.name, 80);
+    const data = String((f && f.b64) || '');
+    if (!PROFILE_FILE_RE.test(name) || name.startsWith('.') || !/^[A-Za-z0-9+/]*={0,2}$/.test(data)) fail(400, `Nama / isi file profil tidak valid: ${name}`);
+    total += data.length;
+    files.push({ name, b64: data });
+  }
+  if (!files.some((f) => /\.chr$/i.test(f.name))) fail(400, 'Profil tanpa chart (*.chr)');
+  if (total > PROFILE_MAX_B64) fail(413, `Backup profil terlalu besar (${Math.round(total / 1024)} KB, maks ${Math.round(PROFILE_MAX_B64 / 1024)} KB)`);
+  // only key=value lines of [Experts]; anything that looks like a credential is dropped
+  const experts = String(b.experts_ini || '').split(/\r?\n/).map((x) => x.trim())
+    .filter((x) => /^[A-Za-z][A-Za-z0-9_]{0,40}=[^\r\n]{0,8000}$/.test(x) && !PROFILE_SECRET_RE.test(x.split('=')[0])).slice(0, 40).join('\n');
+  const size = files.reduce((n, f) => n + b64Len(f.b64), 0);
+  const eaCharts = files.filter((f) => /\.chr$/i.test(f.name) && chrHasGhg(f.b64)).length;
+  await env.DB.prepare(`INSERT INTO ea_vps_profile (license_id, platform, login, server, host, profile_name, files, experts_ini, charts, ea_charts, size, sha, updated_at)
+      VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?) ON CONFLICT(license_id) DO UPDATE SET platform=excluded.platform, login=excluded.login, server=excluded.server,
+      host=excluded.host, profile_name=excluded.profile_name, files=excluded.files, experts_ini=excluded.experts_ini, charts=excluded.charts,
+      ea_charts=excluded.ea_charts, size=excluded.size, sha=excluded.sha, updated_at=excluded.updated_at`)
+    .bind(l.id, l.platform === 'mt4' ? 'mt4' : 'mt5', login, str(b.server, 80), str(b.host, 60), str(b.profile_name, 80).replace(/[\\/:*?"<>|]/g, ''),
+      JSON.stringify(files), experts, files.filter((f) => /\.chr$/i.test(f.name)).length, eaCharts, size, sha, t).run();
+  return json({ ok: true, updated_at: t });
+});
+// latest backup (?meta=1: without the files)
+route('GET', '/vps/lic/profile', 'public', async ({ request, env, url }) => {
+  const l = await licAuth(env, request.headers.get('x-lic-key'));
+  const p = await env.DB.prepare('SELECT * FROM ea_vps_profile WHERE license_id=?').bind(l.id).first();
+  if (!p) return json({ ok: true, none: true });
+  const meta = { ok: true, ...profileMeta(p), platform: p.platform, sha: p.sha };
+  if (url.searchParams.get('meta') === '1') return json(meta);
+  let files = []; try { files = JSON.parse(p.files || '[]'); } catch { files = []; }
+  return json({ ...meta, files, experts_ini: p.experts_ini });
 });
 
 // ---- Admin: Telegram bot ----
@@ -1439,6 +1569,8 @@ async function licenseView(env, l, forAdmin) {
     report: await env.DB.prepare('SELECT currency, balance, equity, profit_day, profit_week, profit_month, positions, updated_at, started_at, total_profit, total_ok FROM ea_stats WHERE license_id=?').bind(l.id).first(),
     // member VPS agents installing this licence's EA automatically (newest heartbeat first)
     vps_agents: l.includes_ea ? vpsAgents((await env.DB.prepare('SELECT host, version, build_id, agent, terminals, note, updated_at, installed_at FROM ea_vps_lic WHERE license_id=? ORDER BY updated_at DESC LIMIT 10').bind(l.id).all()).results) : [],
+    // latest chart-profile backup from the agent (restored by the one-file installer on a new VPS)
+    profile_backup: l.includes_ea ? profileMeta(await env.DB.prepare('SELECT updated_at, host, login, server, profile_name, charts, ea_charts, size, experts_ini FROM ea_vps_profile WHERE license_id=?').bind(l.id).first()) : null,
   };
   if (forAdmin) { out.board_show = l.board_show; out.board_hide_name = l.board_hide_name; }
   if (forAdmin) {
@@ -1481,6 +1613,17 @@ route('GET', '/licenses/:id/agent', 'member', async ({ env, user, params, url, b
     return agentConfig(base, { licenses });
   }
   return agentConfig(base, { license: await entry(l) });
+});
+
+// Member: the one-file installer for a new PC / VPS (agent + this licence's config, runs -Setup)
+route('GET', '/licenses/:id/installer', 'member', async ({ env, user, params, base }) => {
+  const l = await env.DB.prepare(LICENSE_SQL + ' WHERE l.id=? AND l.user_id=?').bind(int(params.id), user.id).first();
+  if (!l) fail(404, 'Lisensi tidak ditemukan');
+  if (!l.includes_ea) fail(400, 'Paket ini tidak berisi EA');
+  if (l.status !== 'active') fail(409, 'Lisensi belum / tidak aktif');
+  const account = String(l.account_number).replace(/[^0-9A-Za-z]/g, '') || String(l.id);
+  const cfg = agentDefaults(base, { license: { id: l.id, key: licKey(l.id, await ensureReportToken(env, l.id)), account: l.account_number, platform: l.platform } });
+  return installerFile(`GHG-Installer-${account}.cmd`, installerCmd(`akun ${account}`, cfg));
 });
 
 route('POST', '/licenses/:id/renew', 'member', async ({ request, env, user, params, base }) => {
