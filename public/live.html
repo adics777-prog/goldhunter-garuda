@@ -125,6 +125,32 @@
   let OV = null, DT = null;
   const dur = (sec) => { const m = Math.max(0, Math.round(sec / 60)); return m >= 1440 ? `${Math.floor(m / 1440)}${T('h', 'd')} ${Math.floor((m % 1440) / 60)}${T('j', 'h')}` : m >= 60 ? `${Math.floor(m / 60)}${T('j', 'h')} ${m % 60}m` : `${m} ${T('mnt', 'min')}`; };
 
+  // ---------------------------------------------------------------- setup comparison (best profit % first)
+  function compare(rows) {
+    if (rows.length < 2) return '';
+    const r = rows.slice().sort((a, b) => (b.total_pct == null ? -1e9 : b.total_pct) - (a.total_pct == null ? -1e9 : a.total_pct));
+    const medal = ['🥇', '🥈', '🥉'];
+    const tr = r.map((x, i) => `<tr onclick="location.href='/live?setup=${x.id}'">
+        <td class="c-rank">${medal[i] || i + 1}</td>
+        <td class="c-name"><b>${esc(x.label || x.symbol)}</b><small>${esc((x.label && x.label !== x.symbol ? x.symbol + ' · ' : '') + (x.account || ''))}</small></td>
+        <td class="${cls(x.total_pct)}"><b>${x.total_pct == null ? '-' : pct(x.total_pct)}</b><small>${x.total_usd == null ? '' : usd(x.total_usd)}</small></td>
+        <td class="${x.max_dd_pct ? 'neg' : ''}">${x.max_dd_pct ? '-' + num(x.max_dd_pct, 2) + '%' : '0%'}</td>
+        <td>${num(x.series || 0)}</td>
+        <td>${esc(days(x.running) || '-')}</td></tr>`).join('');
+    return `<div class="cmp-box"><h2 class="ghead">${T('Perbandingan setup', 'Setup comparison')} <span class="small muted" style="font-weight:400">· ${T('profit tertutup terbaik di atas', 'best closed profit on top')}</span></h2>
+      <div class="cmp-scroll"><table class="cmp"><thead><tr><th>#</th><th>${T('Setup', 'Setup')}</th><th>${T('Profit', 'Profit')}</th><th>${T('DD terdalam', 'Max DD')}</th><th>${T('Seri', 'Series')}</th><th>${T('Lama', 'Running')}</th></tr></thead>
+      <tbody>${tr}</tbody></table></div></div>`;
+  }
+  if (!document.getElementById('cmp-css')) {
+    const st = document.createElement('style');
+    st.id = 'cmp-css';
+    st.textContent = `.cmp-box{margin:0 0 18px}.cmp-scroll{overflow-x:auto;border:1px solid var(--line);border-radius:14px;background:var(--card)}
+      .cmp{width:100%;border-collapse:collapse;font-size:.86rem;min-width:520px}.cmp th{text-align:left;color:var(--muted);font-weight:600;font-size:.72rem;text-transform:uppercase;letter-spacing:.4px;padding:10px 12px;border-bottom:1px solid var(--line)}
+      .cmp td{padding:10px 12px;border-bottom:1px solid var(--line);vertical-align:middle}.cmp tr:last-child td{border-bottom:0}.cmp tbody tr{cursor:pointer}.cmp tbody tr:hover{background:rgba(245,197,66,.06)}
+      .cmp td small{display:block;color:var(--muted);font-size:.72rem;font-weight:400}.cmp .c-rank{width:34px;font-size:1.05rem;text-align:center}.cmp .c-name b{font-weight:800}`;
+    document.head.appendChild(st);
+  }
+
   // ---------------------------------------------------------------- overview
   function renderOverview() {
     const d = OV, list = d.setups || [];
@@ -140,7 +166,7 @@
     $('#pairtabs').innerHTML = [['', T('Semua pair', 'All pairs')], ...have.map((p) => [p, `${ICON[p] || ''} ${p}`])].map(([v, l]) => `<button type="button" data-p="${esc(v)}" class="${v === pair ? 'active' : ''}">${esc(l)}</button>`).join('');
     // all EAs side by side in one grid (focus pairs first); a pair tab narrows it to that pair
     const shown = have.filter((p) => !pair || p === pair).flatMap((p) => list.filter((x) => x.symbol === p));
-    $('#groups').innerHTML = `<div class="ghl-cards">${shown.map((x) => card(x)).join('')}</div>`;
+    $('#groups').innerHTML = compare(shown) + `<div class="ghl-cards">${shown.map((x) => card(x)).join('')}</div>`;
   }
 
   // ---------------------------------------------------------------- detail
