@@ -1890,6 +1890,8 @@ route('GET', '/files/:id', 'member', async ({ env, user, params }) => {
           WHERE b.file_id=? AND l.user_id=? AND l.status='active' AND l.current_build_id=b.id`).bind(f.id, user.id).first();
       if (!ok) fail(403, 'File EA hanya bisa diunduh saat lisensi aktif');
     }
+    // every other kind (master release vps_ex5 / presets, setup presets, QR, ...) has its own guarded route
+    if (f.kind !== 'proof' && f.kind !== 'ea') fail(403, 'Tidak diizinkan');
   }
   return new Response(unb64(f.data_b64), {
     headers: {
@@ -1898,6 +1900,112 @@ route('GET', '/files/:id', 'member', async ({ env, user, params }) => {
       'cache-control': 'private, no-store',
     },
   });
+});
+
+// =====================================================================
+// RECOMMENDED SETUPS (one EA, one recommended preset per pair) - /setup, landing, member area, Admin > Setup Rekomendasi
+// =====================================================================
+const REC_RISK = ['low', 'medium', 'high'];
+const REC_SYM_RE = /^[A-Z0-9._-]{3,20}$/;
+// a member may download presets while one of their EA licences is active (sharing profit: also while paused)
+async function hasActiveEaLicence(env, user) {
+  if (!user) return false;
+  if (user.role === 'admin') return true;
+  const r = await env.DB.prepare(`SELECT 1 FROM licenses l JOIN products p ON p.id=l.product_id WHERE l.user_id=? AND p.includes_ea=1
+      AND l.status='active' AND (l.expires_at IS NULL OR l.expires_at > ? OR p.kind='ea_share') LIMIT 1`).bind(user.id, now()).first();
+  return !!r;
+}
+// where the preset of a setup comes from: an uploaded file, else the builder's release preset with that name
+function recPreset(r, rel) {
+  if (r.preset_file_id) return { source: 'upload', file_id: r.preset_file_id, name: r.upload_name || r.preset_name || `${r.symbol}.set` };
+  const p = r.preset_name && rel && Array.isArray(rel.presets) ? rel.presets.find((x) => x.name === r.preset_name) : null;
+  return p ? { source: 'release', file_id: p.id, name: p.name, version: rel.version || '' } : null;
+}
+const recPublic = (r, rel) => {
+  const p = recPreset(r, rel);
+  return { id: r.id, symbol: r.symbol, title: r.title, title_en: r.title_en, style: r.style, style_en: r.style_en, risk: r.risk, account_type: r.account_type,
+    capital_per_lot: r.capital_per_lot, budget: r.budget, timeframe: r.timeframe, summary: r.summary, summary_en: r.summary_en, settings: r.settings,
+    settings_en: r.settings_en, updated_at: r.updated_at, has_preset: !!p, preset_name: p ? p.name : '', preset_version: p && p.version ? p.version : '' };
+};
+const REC_SQL = `SELECT r.*, f.name AS upload_name FROM rec_setups r LEFT JOIN files f ON f.id=r.preset_file_id AND f.kind='setup_preset'`;
+route('GET', '/setups', 'public', async ({ env, user }) => {
+  const s = await getSettings(env);
+  const rel = vpsRelease(s);
+  const { results } = await env.DB.prepare(REC_SQL + ' WHERE r.active=1 ORDER BY r.sort, r.id').all();
+  return json({ setups: results.map((r) => recPublic(r, rel)), logged_in: !!user, can_download: await hasActiveEaLicence(env, user),
+    ea_version: rel ? rel.version || '' : '' });
+});
+route('GET', '/setups/:id/preset', 'member', async ({ env, user, params }) => {
+  const r = await env.DB.prepare(REC_SQL + ' WHERE r.id=?').bind(int(params.id)).first();
+  if (!r || (!r.active && user.role !== 'admin')) fail(404, 'Setup tidak ditemukan');
+  if (!(await hasActiveEaLicence(env, user))) fail(403, 'Preset bisa diunduh selama Anda punya lisensi EA aktif (Sewa, Trial, Free IB atau Sharing Profit)');
+  const p = recPreset(r, vpsRelease(await getSettings(env)));
+  if (!p) fail(404, 'Preset setup ini belum tersedia. Coba lagi nanti atau hubungi admin.');
+  const f = await env.DB.prepare("SELECT name, data_b64 FROM files WHERE id=? AND kind IN ('setup_preset','vps_preset')").bind(p.file_id).first();
+  if (!f) fail(404, 'File preset sedang diperbarui, coba lagi sebentar lagi');
+  const name = String(p.name || f.name).replace(/[\\/:*?"<>|\r\n]/g, '').trim() || 'GOLD HUNTER GARUDA.set';
+  return new Response(unb64(f.data_b64), { headers: {
+    'content-type': 'application/octet-stream',
+    'content-disposition': `attachment; filename="${name.replace(/[^\w. ()-]/g, '_')}"; filename*=UTF-8''${encodeURIComponent(name)}`,
+    'cache-control': 'private, no-store' } });
+});
+route('GET', '/admin/setups', 'admin', async ({ env }) => {
+  const rel = vpsRelease(await getSettings(env));
+  const { results } = await env.DB.prepare(REC_SQL + ' ORDER BY r.sort, r.id').all();
+  return json({ setups: results.map((r) => ({ ...recPublic(r, rel), active: r.active, sort: r.sort, preset_name: r.preset_name, preset_file_id: r.preset_file_id,
+      upload_name: r.upload_name || '', preset_source: (recPreset(r, rel) || {}).source || '' })),
+    release: rel ? { version: rel.version, at: rel.at, presets: (rel.presets || []).map((p) => p.name) } : null });
+});
+async function recSave(env, b, old) {
+  const symbol = str(b.symbol ?? old?.symbol, 20).toUpperCase();
+  if (!REC_SYM_RE.test(symbol)) fail(400, 'Pair tidak valid (contoh XAUUSD)');
+  const num = (v, d) => { const n = Number(v); return Number.isFinite(n) && n >= 0 ? Math.round(n * 100) / 100 : d; };
+  const v = {
+    symbol, title: str(b.title ?? old?.title, 80), title_en: str(b.title_en ?? old?.title_en, 80), style: str(b.style ?? old?.style, 120), style_en: str(b.style_en ?? old?.style_en, 120),
+    risk: REC_RISK.includes(b.risk) ? b.risk : old?.risk || 'medium', account_type: (b.account_type ?? old?.account_type) === 'standard' ? 'standard' : 'cent',
+    capital_per_lot: num(b.capital_per_lot, old?.capital_per_lot || 0), budget: num(b.budget, old?.budget || 0), timeframe: str(b.timeframe ?? old?.timeframe ?? 'M1', 10) || 'M1',
+    summary: str(b.summary ?? old?.summary, 600), summary_en: str(b.summary_en ?? old?.summary_en, 600), settings: str(b.settings ?? old?.settings, 2000), settings_en: str(b.settings_en ?? old?.settings_en, 2000),
+    preset_name: str(b.preset_name ?? old?.preset_name, 120).replace(/[\\/:*?"<>|]/g, ''), active: b.active === undefined ? (old ? old.active : 1) : (b.active ? 1 : 0),
+    sort: int(b.sort ?? old?.sort) ?? 0,
+  };
+  if (!v.title) fail(400, 'Nama setup wajib diisi');
+  let fileId = old ? old.preset_file_id : null;
+  const t = now();
+  // new upload: .set file (UTF-16 as MT5 writes it, or plain text), max ~150 KB
+  if (b.preset_upload && b.preset_upload.data_b64) {
+    const nm = str(b.preset_upload.name, 120).replace(/[\\/:*?"<>|]/g, '');
+    const data = String(b.preset_upload.data_b64);
+    if (!nm.toLowerCase().endsWith('.set')) fail(400, 'File preset harus .set');
+    if (!/^[A-Za-z0-9+/]+={0,2}$/.test(data) || data.length > 200000) fail(400, 'File preset kosong atau terlalu besar (maks 150 KB)');
+    const r = await env.DB.prepare("INSERT INTO files (user_id, kind, name, mime, size, data_b64, created_at) VALUES (NULL, 'setup_preset', ?, 'application/octet-stream', ?, ?, ?)")
+      .bind(nm, b64Len(data), data, t).run();
+    if (fileId) await env.DB.prepare("DELETE FROM files WHERE id=? AND kind='setup_preset'").bind(fileId).run();
+    fileId = r.meta.last_row_id;
+  } else if (b.preset_clear_upload && fileId) {
+    await env.DB.prepare("DELETE FROM files WHERE id=? AND kind='setup_preset'").bind(fileId).run();
+    fileId = null;
+  }
+  const cols = Object.keys(v);
+  if (old) {
+    await env.DB.prepare(`UPDATE rec_setups SET ${cols.map((c) => c + '=?').join(', ')}, preset_file_id=?, updated_at=? WHERE id=?`).bind(...cols.map((c) => v[c]), fileId, t, old.id).run();
+    return old.id;
+  }
+  const r = await env.DB.prepare(`INSERT INTO rec_setups (${cols.join(', ')}, preset_file_id, created_at, updated_at) VALUES (${cols.map(() => '?').join(', ')}, ?, ?, ?)`)
+    .bind(...cols.map((c) => v[c]), fileId, t, t).run();
+  return r.meta.last_row_id;
+}
+route('POST', '/admin/setups', 'admin', async ({ request, env }) => json({ ok: true, id: await recSave(env, await readJson(request), null) }));
+route('PUT', '/admin/setups/:id', 'admin', async ({ request, env, params }) => {
+  const old = await env.DB.prepare('SELECT * FROM rec_setups WHERE id=?').bind(int(params.id)).first();
+  if (!old) fail(404, 'Setup tidak ditemukan');
+  return json({ ok: true, id: await recSave(env, await readJson(request), old) });
+});
+route('DELETE', '/admin/setups/:id', 'admin', async ({ env, params }) => {
+  const old = await env.DB.prepare('SELECT * FROM rec_setups WHERE id=?').bind(int(params.id)).first();
+  if (!old) fail(404, 'Setup tidak ditemukan');
+  if (old.preset_file_id) await env.DB.prepare("DELETE FROM files WHERE id=? AND kind='setup_preset'").bind(old.preset_file_id).run();
+  await env.DB.prepare('DELETE FROM rec_setups WHERE id=?').bind(old.id).run();
+  return json({ ok: true });
 });
 
 route('GET', '/notifications', 'member', async ({ env, user }) => {
