@@ -55,8 +55,6 @@ LICENSE_BLOCK = r'''
 //| LISENSI - disisipkan otomatis oleh GHG Builder (build #{build_id})
 //| Akun: {account}   Berlaku: {expiry_text}
 //+------------------------------------------------------------------+
-#define GHG_LIC_ACCOUNT  {account}
-#define GHG_LIC_EXPIRY   {expiry}
 bool   g_ghgLicWarned = false;
 
 bool GHG_LicenseCheck(const bool atInit)
@@ -89,16 +87,32 @@ bool GHG_LicenseCheck(const bool atInit)
       Alert("GoldHunter Garuda: ", why);
       Print("GoldHunter Garuda: ", why);
      }}
+   if(login == (long)GHG_LIC_ACCOUNT)
+     {{
+      g_licExpired = true;       // masa aktif habis: EA tetap di chart, tidak buka order baru, basket berjalan tetap diurus
+      return(true);
+     }}
    if(!atInit)
-      ExpertRemove();
+      ExpertRemove();            // akun lain: EA tidak boleh jalan
    return(false);
   }}
 '''
 
 
-def inject_license(src, build_id, account, expiry):
+LIC_KINDS = {'ea_rent': 'SEWA', 'vps_ea': 'SEWA + VPS', 'vps_ea_shared': 'SEWA + VPS', 'ea_ib': 'FREE IB', 'ib_vps': 'FREE IB + VPS',
+             'ib_vps_shared': 'FREE IB + VPS', 'ea_lifetime': 'LIFETIME', 'ea_share': 'SHARING PROFIT', 'ea_trial': 'TRIAL'}
+
+
+def inject_license(src, build_id, account, expiry, kind=''):
     expiry_text = 'selamanya' if not expiry else datetime.datetime.utcfromtimestamp(expiry).strftime('%Y-%m-%d %H:%M UTC')
     block = LICENSE_BLOCK.format(build_id=build_id, account=int(account), expiry=int(expiry or 0), expiry_text=expiry_text)
+    label = re.sub(r'[^0-9A-Za-z +]', '', LIC_KINDS.get(str(kind or ''), str(kind or '').upper()))[:24] or 'LISENSI'
+    # macros first (right after the #property lines) so the EA's own code (panel, countdown) can use them
+    defines = (f'#define GHG_LIC_ACCOUNT  {int(account)}\n#define GHG_LIC_EXPIRY   {int(expiry or 0)}\n'
+               f'#define GHG_LIC_KIND     "{label}"\n')
+    props = list(re.finditer(r'^#property[^\n]*\n', src, re.M))
+    at = props[-1].end() if props else 0
+    src = src[:at] + defines + src[at:]
 
     m = re.search(r'^\s*int\s+OnInit\s*\(\s*(void)?\s*\)\s*\{', src, re.M)
     if not m:
@@ -323,7 +337,7 @@ def build(cfg, job):
 
     src = read_text(source)
     version = (re.search(r'#property\s+version\s+"([^"]+)"', src) or [None, ''])[1]
-    licensed = inject_license(src, job['id'], job['account_number'], job.get('expires_at') or 0)
+    licensed = inject_license(src, job['id'], job['account_number'], job.get('expires_at') or 0, job.get('lic_kind') or job.get('product_kind') or '')
     licensed = inject_report(licensed, job, version, cfg.get('report_base') or cfg['api_base'])
     if platform == 'mt4':
         licensed = re.sub(r'(?<!C4)TimeTradeServer\(', 'C4TimeTradeServer(', licensed)   # report code is MQL5
