@@ -2,13 +2,16 @@
 import {
   HttpError, fail, json, readJson, now, DAY, str, int, isEmail, hashPassword, verifyPassword,
   encrypt, decrypt, createSession, destroySession, sessionUser, isAdminEmail, randomToken, sha256,
-  siteUrl, esc, rupiah, fmtDate, unb64, b64, b64url,
+  siteUrl, esc, rupiah, fmtDate, unb64, b64, b64url, addMonths,
 } from '../../server/util.js';
 import {
   getSettings, putSetting, quote, notify, emailUser, emailAdmin, newOrderCode, getUser, getProduct,
   processOrder, completeOrder, queueBuild, claimBuild, rebuildAll, finishBuild, runDaily, orderStatusLabel, pickUniqueCode, ensureUniqueCode, createOrder, changeOrderMonths, getUsdIdr, toIdr, boardName, maskAccount, reportInterval, activeBanks,
-  usdtPay, TRC20_RE, ensureReportToken, licKey, b64Len,
+  TRC20_RE, ensureReportToken, licKey, b64Len, parsePrices, productDurations, durationLabel, trialDays, sharePct, shareDueDays, shareDueFor, NO_UPFRONT,
 } from '../../server/logic.js';
+import { confirmPaid, gatewayReady, usdtOn, usdtBase, usdtLock, usdtScan, gatewayChannels, gatewayCreate, gatewayCheck, gatewayCallback, gatewayView, paymentsTick } from '../../server/payments.js';
+import { PROVIDERS, gwKey, gatewayConfig } from '../../server/gateway/index.js';
+import { runShareBilling, shareMaybeExtend } from '../../server/share.js';
 import { layout, sendEmail } from '../../server/email.js';
 import { reportPng } from '../../server/report-image.js';
 import AGENT_PS1 from '../../server/vps/GHG-VPS-Agent.ps1.txt';
@@ -226,9 +229,14 @@ route('POST', '/me/password', 'member', async ({ request, env, user }) => {
 
 route('GET', '/catalog', 'public', async ({ env }) => {
   const s = await getSettings(env);
-  const { results } = await env.DB.prepare('SELECT id, code, name, kind, billing, includes_ea, includes_vps, requires_ib, managed_vps, price, description, features FROM products WHERE active=1 ORDER BY sort, id').all();
+  const { results } = await env.DB.prepare(`SELECT id, code, name, kind, billing, includes_ea, includes_vps, requires_ib, managed_vps, price, prices, description, features,
+      name_en, description_en, features_en FROM products WHERE active=1 ORDER BY sort, id`).all();
+  // rent: one price per duration (prices); other monthly packages: price per month with the global durations / discounts
+  const products = results.map((p) => ({ ...p, prices: parsePrices(p), durations: p.billing === 'monthly' ? productDurations(p, s) : [] }));
   return json({
-    products: results, durations: s.durations, discounts: s.discounts, mt4_enabled: s.mt4_enabled === '1', vps_spec: s.vps_spec || '',
+    products, durations: s.durations, discounts: s.discounts, mt4_enabled: s.mt4_enabled === '1', vps_spec: s.vps_spec || '',
+    share: { pct: sharePct(s), due_days: shareDueDays(s) }, trial_days: trialDays(s),
+    pay: { bank: activeBanks(s).length > 0, usdt: usdtOn(s), usdt_auto: usdtOn(s) && s.usdt_auto !== '0', gateway: gatewayReady(s) },
     min_capital_usd: Number(s.min_capital_usd || 100),
     profit_est: s.profit_est_enabled === '1' && Number(s.profit_est_min_idr) > 0 && Number(s.profit_est_max_idr) >= Number(s.profit_est_min_idr) && s.profit_est_basis
       ? { min: Number(s.profit_est_min_idr), max: Number(s.profit_est_max_idr), basis: s.profit_est_basis } : null,
@@ -484,7 +492,9 @@ route('POST', '/ea/live', 'public', async ({ request, env, waitUntil, base }) =>
     .bind(login, sym, snap.magic, snap.symbol, str(b.server, 60), snap.currency, setupName, budget, t, t, lic ? lic.id : null, lic ? lic.user_id : null, lic ? 0 : 1).run();
   const row = await env.DB.prepare('SELECT * FROM ea_setups WHERE login=? AND symbol=? AND magic=?').bind(login, sym, snap.magic).first();
   // default start = the EA's first own deal on this account (not the first report), unless the admin set a date
-  const ownStart = int(b.own_start_utc);
+  // sharing profit licences: never before the licence itself (profit made before it is not billed)
+  const ownStart0 = int(b.own_start_utc);
+  const ownStart = ownStart0 > 1e9 && lic && lic.product_kind === 'ea_share' ? Math.max(ownStart0, lic.created_at || 0) : ownStart0;
   if (!row.since_manual && ownStart > 1e9 && ownStart < t && ownStart < row.since - 60) {
     await env.DB.prepare('UPDATE ea_setups SET since=?, total=0, acct_total=0, total_ok=0 WHERE id=?').bind(ownStart, row.id).run();
     row.since = ownStart;
@@ -506,12 +516,21 @@ route('POST', '/ea/live', 'public', async ({ request, env, waitUntil, base }) =>
         license_id=COALESCE(?, license_id), user_id=COALESCE(?, user_id) WHERE id=?`)
       .bind(snap.symbol, str(b.server, 60), snap.currency, setupName, budget, snap.balance, snap.equity, t, JSON.stringify(snap),
         totalOk, eaNum(b.total), totalOk, eaNum(b.acct_total), totalOk, dd, symFloat, layers, lic ? lic.id : null, lic ? lic.user_id : null, row.id),
-    env.DB.prepare(`INSERT INTO ea_setup_days (setup_id, day, profit, balance, equity, min_equity, max_dd_pct, max_layers, min_float, currency, updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?)
+    // total_end = the EA's cumulative closed profit since `since` at the last heartbeat of the day (sharing profit weeks)
+    env.DB.prepare(`INSERT INTO ea_setup_days (setup_id, day, profit, balance, equity, min_equity, max_dd_pct, max_layers, min_float, currency, updated_at, total_end, tot_ok, since_at)
+        VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)
         ON CONFLICT(setup_id, day) DO UPDATE SET profit=excluded.profit, balance=excluded.balance, equity=excluded.equity,
         min_equity=CASE WHEN min_equity > 0 THEN MIN(min_equity, excluded.equity) ELSE excluded.equity END, max_dd_pct=MAX(max_dd_pct, excluded.max_dd_pct),
-        max_layers=MAX(max_layers, excluded.max_layers), min_float=MIN(min_float, excluded.min_float), currency=excluded.currency, updated_at=excluded.updated_at`)
-      .bind(row.id, day, snap.day, snap.balance, snap.equity, snap.equity, dd, layers, Math.min(0, symFloat), snap.currency, t),
+        max_layers=MAX(max_layers, excluded.max_layers), min_float=MIN(min_float, excluded.min_float), currency=excluded.currency, updated_at=excluded.updated_at,
+        total_end=CASE WHEN excluded.tot_ok=1 THEN excluded.total_end ELSE total_end END, tot_ok=CASE WHEN excluded.tot_ok=1 THEN 1 ELSE tot_ok END,
+        since_at=CASE WHEN excluded.tot_ok=1 THEN excluded.since_at ELSE since_at END`)
+      .bind(row.id, day, snap.day, snap.balance, snap.equity, snap.equity, dd, layers, Math.min(0, symFloat), snap.currency, t, eaNum(b.total), totalOk, row.since),
   ]);
+  // sharing licence close to (or past) its weekly due date and nothing unpaid: move it to the next week (hourly at most)
+  if (lic && lic.product_kind === 'ea_share' && (lic.status === 'expired' || (lic.expires_at && lic.expires_at - t < 2 * DAY))) {
+    waitUntil((async () => { if (await eaClaim(env, 'share_ext_' + lic.id, Math.floor(t / 3600))) await shareMaybeExtend(env, base, lic.id, 'Sharing profit: EA melapor, minggu berikutnya'); })()
+      .catch((e) => console.error('share extend', e)));
+  }
   const label = eaLabel({ ...row, setup_name: setupName || row.setup_name });
   const msgs = [];
   const evs = Array.isArray(b.events) ? b.events.slice(0, 50) : [];
@@ -1105,10 +1124,13 @@ const isLicKey = (k) => String(k || '').trim().startsWith('lic.');
 async function licAuth(env, key) {
   const m = String(key || '').trim().match(LIC_KEY_RE);
   if (!m) fail(401, 'Kunci lisensi tidak valid (format lic.<id>.<token>)');
-  const l = await env.DB.prepare('SELECT * FROM licenses WHERE id=?').bind(int(m[1])).first();
+  const l = await env.DB.prepare('SELECT l.*, p.kind AS product_kind FROM licenses l JOIN products p ON p.id=l.product_id WHERE l.id=?').bind(int(m[1])).first();
   if (!l || !l.report_token || !ctEq(m[2], l.report_token)) fail(401, 'Kunci lisensi salah');
-  if (l.status !== 'active') fail(403, `Lisensi akun ${l.account_number} tidak aktif (status: ${l.status})`);
-  if (l.expires_at && l.expires_at <= now()) fail(403, `Lisensi akun ${l.account_number} sudah habis masa aktifnya`);
+  // sharing profit: a paused licence (unpaid invoice / no report) keeps reporting, so its profit stays measurable;
+  // the EA itself stops opening new orders at the expiry compiled into it
+  const share = l.product_kind === 'ea_share' && ['active', 'expired'].includes(l.status);
+  if (l.status !== 'active' && !share) fail(403, `Lisensi akun ${l.account_number} tidak aktif (status: ${l.status})`);
+  if (l.expires_at && l.expires_at <= now() && !share) fail(403, `Lisensi akun ${l.account_number} sudah habis masa aktifnya`);
   return l;
 }
 // Current finished EA file of a licence, with the exact byte size (the agent checks it after downloading)
@@ -1569,9 +1591,23 @@ route('POST', '/orders', 'member', async ({ request, env, user, base }) => {
   if (!p || !p.active) fail(400, 'Produk tidak tersedia');
   const acc = parseAccount(b, p, s);
   if (p.kind === 'ea_ib') {
-    const dup = await env.DB.prepare(`SELECT 1 FROM orders WHERE product_id=? AND account_number=? AND broker=? AND status IN ('awaiting_verification','processing','completed')`)
-      .bind(p.id, acc.account_number, acc.broker).first();
+    const dup = await env.DB.prepare(`SELECT 1 FROM orders o JOIN products p ON p.id=o.product_id WHERE p.kind='ea_ib' AND o.account_number=? AND o.broker=?
+        AND o.status IN ('awaiting_verification','processing','completed')`).bind(acc.account_number, acc.broker).first();
     if (dup) fail(409, 'Akun ini sudah pernah diajukan untuk EA gratis');
+  }
+  if (p.kind === 'ea_trial') {
+    // one trial per trading account (any member) and per member (any account)
+    const dup = await env.DB.prepare(`SELECT o.account_number, o.user_id FROM orders o JOIN products p ON p.id=o.product_id WHERE p.kind='ea_trial'
+        AND (o.account_number=? OR o.user_id=?) AND o.status NOT IN ('rejected','cancelled','expired') LIMIT 1`).bind(acc.account_number, user.id).first();
+    if (dup) fail(409, dup.user_id === user.id && dup.account_number !== acc.account_number
+      ? 'Trial hanya bisa sekali per member. Lanjutkan dengan Sewa EA atau Sharing Profit.'
+      : `Akun ${acc.account_number} sudah pernah memakai trial. Lanjutkan dengan Sewa EA atau Sharing Profit.`);
+  }
+  if (p.kind === 'ea_share') {
+    if (!b.agree_share) fail(400, 'Centang persetujuan sharing profit dulu');
+    const dup = await env.DB.prepare(`SELECT 1 FROM licenses l JOIN products p ON p.id=l.product_id WHERE p.kind='ea_share' AND l.account_number=?
+        AND l.status IN ('processing','active','expired')`).bind(acc.account_number).first();
+    if (dup) fail(409, `Akun ${acc.account_number} sudah memakai Sharing Profit`);
   }
   if (p.requires_ib && p.includes_vps) {
     const dup = await env.DB.prepare(`SELECT 1 FROM orders WHERE product_id=? AND account_number=? AND kind='new' AND status IN ('awaiting_payment','awaiting_verification','processing')`)
@@ -1582,23 +1618,94 @@ route('POST', '/orders', 'member', async ({ request, env, user, base }) => {
     kind: 'new', product_id: p.id, months: int(b.months), ...acc,
     trading_pass_enc: p.managed_vps ? await encrypt(env, String(b.trading_password)) : null,
   });
-  return json({ ok: true, id });
+  // trial and sharing profit are approved automatically: licence + EA build right away
+  const auto = p.billing === 'trial' || p.billing === 'share';
+  if (auto) await processOrder(env, base, id, { auto: true });
+  return json({ ok: true, id, auto });
 });
 
 route('GET', '/orders', 'member', async ({ env, user }) => {
   const { results } = await env.DB.prepare(`SELECT o.id, o.code, o.kind, o.status, o.total, o.months, o.platform, o.account_number, o.broker, o.created_at, o.pay_deadline, o.license_id,
-      p.name AS product_name, p.billing FROM orders o JOIN products p ON p.id=o.product_id WHERE o.user_id=? ORDER BY o.id DESC`).bind(user.id).all();
+      o.pay_method, o.amount_usd, p.name AS product_name, p.billing, p.kind AS product_kind FROM orders o JOIN products p ON p.id=o.product_id WHERE o.user_id=? ORDER BY o.id DESC`).bind(user.id).all();
   return json({ orders: results.map((o) => ({ ...o, status_label: orderStatusLabel(o.status) })) });
 });
 
-route('GET', '/orders/:id', 'member', async ({ env, user, params, waitUntil }) => {
-  const o = await env.DB.prepare(`SELECT o.*, p.name AS product_name, p.billing, p.includes_ea, p.includes_vps, p.requires_ib, p.managed_vps, p.kind AS product_kind
-      FROM orders o JOIN products p ON p.id=o.product_id WHERE o.id=? AND o.user_id=?`).bind(int(params.id), user.id).first();
-  if (!o) fail(404, 'Pesanan tidak ditemukan');
-  delete o.trading_pass_enc;
+// Everything the invoice page needs: the order, every payment method that is switched on, the sharing report
+async function orderPayView(env, o, waitUntil) {
   const s = await getSettings(env);
-  return json({ order: { ...o, status_label: orderStatusLabel(o.status) }, banks: activeBanks(s), whatsapp: s.whatsapp || '',
-    usdt: await usdtPay(env, s, o.total, waitUntil) });
+  delete o.trading_pass_enc;
+  const open = o.status === 'awaiting_payment' && o.total > 0;
+  let usdt = null;
+  if (usdtOn(s)) {
+    const locked = o.pay_method === 'usdt' && o.usdt_amount > 0;
+    const pre = locked ? { amount: o.usdt_amount, rate: o.usdt_rate } : open ? await usdtBase(env, o, waitUntil) : { amount: 0, rate: 0 };
+    usdt = { network: 'TRC20', address: s.usdt_address, qr: !!s.usdt_qr_file_id, amount: pre.amount, rate: pre.rate, locked, auto: s.usdt_auto !== '0', tx: o.usdt_tx || '' };
+  }
+  const gc = await gatewayConfig(env, s);
+  const cur = gatewayView(o);
+  const gateway = gc.on ? { provider: gc.id, name: gc.name, channels: open ? await gatewayChannels(env, s) : [], current: cur && cur.provider === gc.id ? cur : null, sandbox: !gc.production } : null;
+  let report = null;
+  if (o.share_report_id) {
+    report = await env.DB.prepare('SELECT * FROM share_reports WHERE id=?').bind(o.share_report_id).first();
+    if (report) { try { report.rows = JSON.parse(report.rows || '[]'); } catch { report.rows = []; } }
+  }
+  ['usdt_rate', 'gateway_data', 'gateway_seq', 'checked_at', 'reminded_at'].forEach((k) => delete o[k]);
+  return { order: { ...o, status_label: orderStatusLabel(o.status) }, banks: activeBanks(s), whatsapp: s.whatsapp || '', usdt, gateway, report,
+    durations: o.kind === 'renew' && o.months ? productDurations(await getProduct(env, o.product_id), s) : [] };
+}
+const ORDER_SQL = `SELECT o.*, p.name AS product_name, p.billing, p.includes_ea, p.includes_vps, p.requires_ib, p.managed_vps, p.kind AS product_kind, p.price AS product_price, p.prices AS product_prices
+      FROM orders o JOIN products p ON p.id=o.product_id`;
+
+route('GET', '/orders/:id', 'member', async ({ env, user, params, waitUntil }) => {
+  const o = await env.DB.prepare(ORDER_SQL + ' WHERE o.id=? AND o.user_id=?').bind(int(params.id), user.id).first();
+  if (!o) fail(404, 'Pesanan tidak ditemukan');
+  return json(await orderPayView(env, o, waitUntil));
+});
+
+// Member picks / switches the payment method of an unpaid order or invoice: bank | usdt | gateway (+ channel)
+route('POST', '/orders/:id/method', 'member', async ({ request, env, user, params, base, waitUntil }) => {
+  const b = await readJson(request);
+  const o = await env.DB.prepare('SELECT * FROM orders WHERE id=? AND user_id=?').bind(int(params.id), user.id).first();
+  if (!o) fail(404, 'Pesanan tidak ditemukan');
+  if (o.status !== 'awaiting_payment' || !o.total) fail(409, 'Metode hanya bisa diganti selama tagihan belum dibayar');
+  const s = await getSettings(env);
+  const method = str(b.method, 12);
+  if (method === 'bank') {
+    await env.DB.prepare(`UPDATE orders SET pay_method='bank' WHERE id=?`).bind(o.id).run();
+  } else if (method === 'usdt') {
+    if (!usdtOn(s)) fail(400, 'Pembayaran USDT belum aktif');
+    await usdtLock(env, o, waitUntil);
+  } else if (method === 'gateway') {
+    const channel = str(b.channel, 30).toUpperCase();
+    const cur = gatewayView(o);
+    // same provider + channel and the transaction is still valid: keep it (same pay code / QR)
+    if (o.gateway_ref && cur && cur.provider === s.gateway_provider && o.gateway_method === channel && cur.expired_time > now() + 300) {
+      await env.DB.prepare(`UPDATE orders SET pay_method='gateway' WHERE id=?`).bind(o.id).run();
+    } else await gatewayCreate(env, base, s, o, channel);
+  } else fail(400, 'Metode pembayaran tidak dikenal');
+  return json({ ok: true });
+});
+
+// "Saya sudah bayar": look for the payment now (USDT on chain, gateway status). Optional tx = TRC20 transaction id.
+route('POST', '/orders/:id/check', 'member', async ({ request, env, user, params, base }) => {
+  const b = await readJson(request);
+  let o = await env.DB.prepare('SELECT * FROM orders WHERE id=? AND user_id=?').bind(int(params.id), user.id).first();
+  if (!o) fail(404, 'Pesanan tidak ditemukan');
+  const tx = str(b.tx, 80).replace(/^0x/i, '');
+  if (tx && !/^[0-9a-fA-F]{64}$/.test(tx)) fail(400, 'TX hash tidak valid (64 karakter heksadesimal)');
+  let note = '';
+  if (o.status === 'awaiting_payment' && o.total > 0 && (now() - (o.checked_at || 0) >= 15 || tx)) {
+    await env.DB.prepare('UPDATE orders SET checked_at=? WHERE id=?').bind(now(), o.id).run();
+    const s = await getSettings(env);
+    if (o.pay_method === 'usdt') {
+      const r = await usdtScan(env, base, { orderId: o.id, txid: tx.toLowerCase() });
+      if (r.error) note = 'Blockchain belum bisa dicek: ' + r.error;
+    } else if (o.pay_method === 'gateway') {
+      try { await gatewayCheck(env, base, s, o); } catch (e) { note = String(e.message || e); }
+    }
+    o = await env.DB.prepare('SELECT * FROM orders WHERE id=?').bind(o.id).first();
+  }
+  return json({ ok: true, status: o.status, status_label: orderStatusLabel(o.status), paid: !!o.paid_via || !['awaiting_payment'].includes(o.status), note });
 });
 
 route('POST', '/orders/:id/confirm', 'member', async ({ request, env, user, params, base }) => {
@@ -1618,7 +1725,7 @@ route('POST', '/orders/:id/confirm', 'member', async ({ request, env, user, para
   const f = await env.DB.prepare(`INSERT INTO files (user_id, kind, name, mime, size, data_b64, created_at) VALUES (?, 'proof', ?, ?, ?, ?, ?)`)
     .bind(user.id, str(proof.name, 100) || 'bukti', proof.mime, size, proof.data_b64, t).run();
   if (o.proof_file_id) await env.DB.prepare('DELETE FROM files WHERE id=?').bind(o.proof_file_id).run();
-  await env.DB.prepare(`UPDATE orders SET status='awaiting_verification', proof_file_id=?, payer_name=?, payer_bank=?, member_note=?, confirmed_at=?, admin_note='' WHERE id=?`)
+  await env.DB.prepare(`UPDATE orders SET status='awaiting_verification', pay_method=CASE WHEN pay_method='' THEN 'bank' ELSE pay_method END, proof_file_id=?, payer_name=?, payer_bank=?, member_note=?, confirmed_at=?, admin_note='' WHERE id=?`)
     .bind(f.meta.last_row_id, payer_name, payer_bank, note, t, o.id).run();
   await notify(env, user.id, `Bukti transfer ${o.code} diterima`, 'Terima kasih! Admin segera mengecek pembayaran dan memproses pesanan Anda.', '#/pesanan/' + o.id);
   await emailUser(env, user, `Bukti transfer ${o.code} diterima, segera dicek admin`,
@@ -1629,7 +1736,7 @@ route('POST', '/orders/:id/confirm', 'member', async ({ request, env, user, para
     '/admin#/pesanan/' + o.id);
   // Auto mode (off by default while payments are manual transfers; a payment gateway will call the same path).
   const p = await getProduct(env, o.product_id);
-  if (s.auto_process_paid === '1' && !p.requires_ib) await processOrder(env, base, o.id, { paid: true });
+  if (s.auto_process_paid === '1' && !p.requires_ib && o.kind !== 'share') await processOrder(env, base, o.id, { paid: true });
   return json({ ok: true });
 });
 
@@ -1642,7 +1749,8 @@ route('POST', '/orders/:id/months', 'member', async ({ request, env, user, param
 });
 
 route('POST', '/orders/:id/cancel', 'member', async ({ env, user, params }) => {
-  const r = await env.DB.prepare(`UPDATE orders SET status='cancelled' WHERE id=? AND user_id=? AND status IN ('awaiting_payment','awaiting_verification') AND proof_file_id IS NULL`)
+  // sharing invoices cannot be cancelled (the licence stays paused until they are paid)
+  const r = await env.DB.prepare(`UPDATE orders SET status='cancelled' WHERE id=? AND user_id=? AND kind<>'share' AND paid_via='' AND status IN ('awaiting_payment','awaiting_verification') AND proof_file_id IS NULL`)
     .bind(int(params.id), user.id).run();
   if (!r.meta.changes) fail(409, 'Pesanan tidak bisa dibatalkan (pembayaran sudah dikonfirmasi atau sudah diproses)');
   return json({ ok: true });
@@ -1669,6 +1777,14 @@ async function licenseView(env, l, forAdmin) {
     // latest chart-profile backup from the agent (restored by the one-file installer on a new VPS)
     profile_backup: l.includes_ea ? profileMeta(await env.DB.prepare('SELECT updated_at, host, login, server, profile_name, charts, ea_charts, size, experts_ini FROM ea_vps_profile WHERE license_id=?').bind(l.id).first()) : null,
   };
+  if (l.billing === 'share') {
+    // weekly reports (newest first) + open invoices
+    const { results: reps } = await env.DB.prepare(`SELECT r.id, r.period_start, r.period_end, r.rows, r.profit_usd, r.commission_pct, r.commission_usd, r.commission_idr, r.status, r.note, r.order_id,
+        o.code AS order_code, o.status AS order_status, o.total AS order_total FROM share_reports r LEFT JOIN orders o ON o.id=r.order_id
+        WHERE r.license_id=? ORDER BY r.period_start DESC LIMIT ${forAdmin ? 26 : 8}`).bind(l.id).all();
+    out.share = { reports: reps.map((r) => { let rows = []; try { rows = JSON.parse(r.rows || '[]'); } catch {} return { ...r, rows }; }),
+      next_period_start: l.share_next || 0 };
+  }
   if (forAdmin) { out.board_show = l.board_show; out.board_hide_name = l.board_hide_name; }
   if (forAdmin) {
     out.trading_pass = await decrypt(env, l.trading_pass_enc);
@@ -1686,7 +1802,7 @@ route('GET', '/licenses', 'member', async ({ env, user }) => {
   for (const l of results) licenses.push(await licenseView(env, l, false));
   const { results: changes } = await env.DB.prepare(`SELECT id, license_id, old_account, new_account, status, admin_note, created_at, decided_at
       FROM account_changes WHERE user_id=? ORDER BY id DESC`).bind(user.id).all();
-  const { results: renewals } = await env.DB.prepare(`SELECT id, license_id, code, status, total, pay_deadline FROM orders WHERE user_id=? AND kind='renew'
+  const { results: renewals } = await env.DB.prepare(`SELECT id, license_id, code, kind, status, total, pay_deadline FROM orders WHERE user_id=? AND kind IN ('renew','share')
       AND status IN ('awaiting_payment','awaiting_verification','processing')`).bind(user.id).all();
   return json({ licenses, changes, renewals });
 });
@@ -1814,10 +1930,15 @@ route('GET', '/admin/stats', 'admin', async ({ env }) => {
   const ib = await one(`SELECT COUNT(*) n FROM orders o JOIN products p ON p.id=o.product_id WHERE p.requires_ib=1 AND o.status IN ('awaiting_payment','awaiting_verification','processing')`);
   const ibUnchecked = await one(`SELECT COUNT(*) n FROM orders o JOIN products p ON p.id=o.product_id WHERE p.requires_ib=1 AND o.ib_status='' AND o.status IN ('awaiting_payment','awaiting_verification')`);
   const s = await getSettings(env);
-  let builder = null, daily = null;
+  const shareUnpaid = await one(`SELECT COUNT(*) n, COALESCE(SUM(total),0) amt FROM orders WHERE kind='share' AND status IN ('awaiting_payment','awaiting_verification')`);
+  const shareOverdue = await one(`SELECT COUNT(*) n FROM orders WHERE kind='share' AND status='awaiting_payment' AND pay_deadline < ?`, t);
+  let builder = null, daily = null, usdtScanLast = null;
   try { builder = JSON.parse(s.builder_seen || 'null'); } catch {}
   try { daily = JSON.parse(s.daily_last_run || 'null'); } catch {}
+  try { usdtScanLast = JSON.parse(s.usdt_scan_last || 'null'); } catch {}
   return json({
+    share_unpaid: shareUnpaid.n, share_unpaid_amount: shareUnpaid.amt, share_overdue: shareOverdue.n, prices_placeholder: s.prices_placeholder === '1',
+    usdt_on: usdtOn(s), usdt_auto: s.usdt_auto !== '0', usdt_scan: usdtScanLast, gateway_on: gatewayReady(s), gateway_name: (PROVIDERS[s.gateway_provider] || {}).name || '',
     awaiting_payment: pay.n, awaiting_verification: ver.n, processing: proc.n, active_licenses: act.n, expiring_7d: soon.n,
     ib_open: ib.n, ib_unchecked: ibUnchecked.n, pending_changes: chg.n, members: members.n, builds_pending: queued.n, builds_failed_7d: failed.n, revenue_30d: revenue.n,
     builder, daily, now: t, auto_rebuild: s.auto_rebuild_on_version !== '0',
@@ -1829,15 +1950,20 @@ route('GET', '/admin/orders', 'admin', async ({ env, url }) => {
   const status = url.searchParams.get('status') || '';
   const group = url.searchParams.get('group') || '';
   const q = str(url.searchParams.get('q'), 60);
-  let sql = `SELECT o.id, o.code, o.kind, o.status, o.total, o.months, o.platform, o.account_number, o.broker, o.broker_server, o.created_at,
-      o.confirmed_at, o.ib_status, o.proof_file_id, p.name AS product_name, p.billing, p.requires_ib, p.includes_vps,
+  const kind = url.searchParams.get('kind') || '', method = url.searchParams.get('method') || '', pkind = url.searchParams.get('pkind') || '';
+  let sql = `SELECT o.id, o.code, o.kind, o.status, o.total, o.months, o.platform, o.account_number, o.broker, o.broker_server, o.created_at, o.pay_deadline,
+      o.confirmed_at, o.ib_status, o.proof_file_id, o.pay_method, o.paid_via, o.amount_usd, o.usdt_amount, p.name AS product_name, p.billing, p.requires_ib, p.includes_vps, p.kind AS product_kind,
       u.name AS user_name, u.email AS user_email, u.phone AS user_phone
       FROM orders o JOIN products p ON p.id=o.product_id JOIN users u ON u.id=o.user_id WHERE 1=1`;
   const args = [];
   if (group === 'ib') sql += ' AND p.requires_ib=1';
   if (group === 'paid') sql += ' AND p.requires_ib=0';
+  if (['new', 'renew', 'share'].includes(kind)) { sql += ' AND o.kind=?'; args.push(kind); }
+  if (['bank', 'usdt', 'gateway'].includes(method)) { sql += ' AND (o.pay_method=? OR o.paid_via=?)'; args.push(method, method); }
+  if (/^[a-z_]{2,20}$/.test(pkind)) { sql += ' AND p.kind=?'; args.push(pkind); }
+  if (status === 'overdue') { sql += ` AND o.status='awaiting_payment' AND o.pay_deadline < ?`; args.push(now()); }
   if (status === 'open') sql += ` AND o.status IN ('awaiting_payment','awaiting_verification','processing')`;
-  else if (status) { sql += ' AND o.status=?'; args.push(status); }
+  else if (status && status !== 'overdue') { sql += ' AND o.status=?'; args.push(status); }
   if (q) { sql += ' AND (o.code LIKE ? OR o.account_number LIKE ? OR u.email LIKE ? OR u.name LIKE ?)'; args.push(...Array(4).fill(`%${q}%`)); }
   sql += ' ORDER BY o.id DESC LIMIT 300';
   const { results } = await env.DB.prepare(sql).bind(...args).all();
@@ -1858,7 +1984,14 @@ route('GET', '/admin/orders/:id', 'admin', async ({ env, params }) => {
     if (l) license = await licenseView(env, l, true);
     builds = (await env.DB.prepare('SELECT id, status, file_id, ea_version, reason, created_at, finished_at, account_number, expires_at FROM builds WHERE license_id=? ORDER BY id DESC LIMIT 10').bind(o.license_id).all()).results;
   }
-  return json({ order: { ...o, status_label: orderStatusLabel(o.status) }, proof, license, builds });
+  let report = null;
+  if (o.share_report_id) {
+    report = await env.DB.prepare('SELECT * FROM share_reports WHERE id=?').bind(o.share_report_id).first();
+    if (report) { try { report.rows = JSON.parse(report.rows || '[]'); } catch { report.rows = []; } }
+  }
+  o.gateway = gatewayView(o);
+  delete o.gateway_data;
+  return json({ order: { ...o, status_label: orderStatusLabel(o.status) }, proof, license, builds, report });
 });
 
 // IB check for free-EA orders: admin looks the account up in the broker partner portal.
@@ -1888,9 +2021,11 @@ route('POST', '/admin/orders/:id/ib', 'admin', async ({ request, env, params, ba
 route('POST', '/admin/orders/:id/paid', 'admin', async ({ env, params, base }) => {
   const o = await env.DB.prepare('SELECT o.*, p.billing FROM orders o JOIN products p ON p.id=o.product_id WHERE o.id=?').bind(int(params.id)).first();
   if (!o) fail(404, 'Order tidak ditemukan');
-  if (o.billing === 'free') fail(400, 'Order gratis tidak perlu pembayaran');
-  const licenseId = await processOrder(env, base, o.id, { paid: true });
-  return json({ ok: true, license_id: licenseId });
+  if (!o.total) fail(400, 'Order gratis tidak perlu pembayaran');
+  // same path as automatic payments: new / renewal -> processed, sharing invoice -> licence moves to the next week
+  const r = await confirmPaid(env, base, o.id, { via: 'bank', ref: 'admin' });
+  if (r.already) fail(409, 'Order ini sudah dibayar / diproses');
+  return json({ ok: true, ...r });
 });
 
 // Proof cannot be accepted (wrong amount, unreadable...): member uploads a new one.
@@ -2018,6 +2153,31 @@ route('POST', '/admin/licenses/:id/build', 'admin', async ({ env, params }) => {
   return json({ ok: true, build_id: id });
 });
 
+// Admin extends any licence by days and / or months (from its expiry, or from now when already expired).
+// The EA carries the expiry, so a new file is built (the member's VPS agent installs it by itself).
+route('POST', '/admin/licenses/:id/extend', 'admin', async ({ request, env, params, base }) => {
+  const b = await readJson(request);
+  const l = await env.DB.prepare(LICENSE_SQL + ' WHERE l.id=?').bind(int(params.id)).first();
+  if (!l) fail(404, 'Lisensi tidak ditemukan');
+  if (!l.expires_at) fail(400, 'Lisensi ini tidak punya masa habis (selamanya), tidak perlu diperpanjang');
+  if (!['active', 'expired', 'processing'].includes(l.status)) fail(409, 'Lisensi yang dinonaktifkan tidak bisa diperpanjang; ubah statusnya dulu');
+  const days = Math.max(0, Math.min(3650, int(b.days) || 0)), months = Math.max(0, Math.min(60, int(b.months) || 0));
+  if (!days && !months) fail(400, 'Isi jumlah hari atau bulan');
+  const t = now();
+  const exp = addMonths(Math.max(t, l.expires_at), months) + days * DAY;
+  await env.DB.prepare(`UPDATE licenses SET expires_at=?, status=CASE WHEN status='expired' THEN 'active' ELSE status END, reminder_exp=NULL, reminders_sent='', updated_at=? WHERE id=?`)
+    .bind(exp, t, l.id).run();
+  const what = [months ? `${months} bulan` : '', days ? `${days} hari` : ''].filter(Boolean).join(' + ');
+  const buildId = l.includes_ea ? await queueBuild(env, l.id, `Diperpanjang admin +${what}`) : null;
+  const user = await getUser(env, l.user_id);
+  await notify(env, l.user_id, `Masa aktif akun ${l.account_number} diperpanjang`, `+${what}, berlaku s/d ${fmtDate(exp)}.${buildId ? ' File EA baru sedang dibuat.' : ''}`, '#/lisensi');
+  await emailUser(env, user, `Masa aktif akun ${l.account_number} diperpanjang`,
+    `<p>Halo ${esc(user.name)},</p><p>Admin memperpanjang <b>${esc(l.product_name)}</b> untuk akun <b>${esc(l.account_number)}</b> sebanyak <b>${esc(what)}</b>. Berlaku sampai <b>${fmtDate(exp)}</b>.</p>
+     ${buildId ? '<p>File EA baru dengan masa aktif ini sedang dibuat. Agen VPS memasangnya otomatis; tanpa agen, unduh ulang file EA di menu <b>Lisensi &amp; VPS</b>.</p>' : ''}`,
+    { text: 'Buka Lisensi', url: `${base}/member#/lisensi` });
+  return json({ ok: true, expires_at: exp, build_id: buildId });
+});
+
 route('GET', '/admin/changes', 'admin', async ({ env, url }) => {
   const status = url.searchParams.get('status') || 'pending';
   const { results } = await env.DB.prepare(`SELECT c.id, c.license_id, c.old_account, c.new_account, c.new_server, c.reason, c.status, c.admin_note, c.created_at, c.decided_at,
@@ -2097,41 +2257,69 @@ route('GET', '/admin/products', 'admin', async ({ env }) => {
   const { results } = await env.DB.prepare('SELECT * FROM products ORDER BY sort, id').all();
   return json({ products: results });
 });
+const PRODUCT_KINDS = ['ea_rent', 'ea_ib', 'ea_share', 'ea_trial', 'ib_vps', 'ib_vps_shared', 'ea_lifetime', 'vps_ea', 'vps_ea_shared', 'vps', 'vps_shared'];
 function productFields(b) {
-  const kind = ['ea_ib', 'ib_vps', 'ib_vps_shared', 'ea_lifetime', 'ea_rent', 'vps_ea', 'vps_ea_shared', 'vps', 'vps_shared'].includes(b.kind) ? b.kind : fail(400, 'Jenis produk tidak valid');
-  const billing = { ea_ib: 'free', ea_lifetime: 'lifetime' }[kind] || 'monthly';
-  const price = int(b.price);
-  if (billing !== 'free' && !(price > 0)) fail(400, 'Harga harus lebih dari 0');
+  const kind = PRODUCT_KINDS.includes(b.kind) ? b.kind : fail(400, 'Jenis produk tidak valid');
+  const billing = { ea_ib: 'free', ea_lifetime: 'lifetime', ea_share: 'share', ea_trial: 'trial' }[kind] || 'monthly';
+  // rent: own price per duration (months -> Rupiah); the 1-month price (else the cheapest per month) is the base price
+  let prices = '';
+  if (billing === 'monthly' && b.prices && typeof b.prices === 'object') {
+    const t = parsePrices({ prices: b.prices });
+    if (t) prices = JSON.stringify(t);
+  }
+  let price = int(b.price);
+  if (prices) { const t = JSON.parse(prices); price = t[1] || Math.round(Math.min(...Object.entries(t).map(([m, v]) => v / Number(m)))); }
+  const free = ['free', 'share', 'trial'].includes(billing);
+  if (!free && !(price > 0)) fail(400, 'Harga harus lebih dari 0');
   return [str(b.name, 80) || fail(400, 'Nama produk wajib'), kind, billing, ['vps', 'vps_shared'].includes(kind) ? 0 : 1, ['vps_ea', 'vps', 'vps_shared', 'ib_vps', 'ib_vps_shared', 'vps_ea_shared'].includes(kind) ? 1 : 0,
-    ['ea_ib', 'ib_vps', 'ib_vps_shared'].includes(kind) ? 1 : 0, kind.endsWith('_shared') ? 1 : 0, billing === 'free' ? 0 : price, str(b.description, 600), str(b.features, 1500), b.active ? 1 : 0, int(b.sort) || 0];
+    ['ea_ib', 'ib_vps', 'ib_vps_shared'].includes(kind) ? 1 : 0, kind.endsWith('_shared') ? 1 : 0, free ? 0 : price, prices, str(b.description, 600), str(b.features, 1500),
+    str(b.name_en, 80), str(b.description_en, 600), str(b.features_en, 1500), b.active ? 1 : 0, int(b.sort) || 0];
 }
 route('POST', '/admin/products', 'admin', async ({ request, env }) => {
   const b = await readJson(request);
   const f = productFields(b);
-  await env.DB.prepare(`INSERT INTO products (code, name, kind, billing, includes_ea, includes_vps, requires_ib, managed_vps, price, description, features, active, sort)
-      VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)`).bind(`${f[1]}_${randomToken(4).toLowerCase()}`, ...f).run();
+  await env.DB.prepare(`INSERT INTO products (code, name, kind, billing, includes_ea, includes_vps, requires_ib, managed_vps, price, prices, description, features, name_en, description_en, features_en, active, sort)
+      VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`).bind(`${f[1]}_${randomToken(4).toLowerCase()}`, ...f).run();
+  if (f[8]) await putSetting(env, 'prices_placeholder', '0');
   return json({ ok: true });
 });
 route('PUT', '/admin/products/:id', 'admin', async ({ request, env, params }) => {
   const b = await readJson(request);
   const f = productFields(b);
-  await env.DB.prepare(`UPDATE products SET name=?, kind=?, billing=?, includes_ea=?, includes_vps=?, requires_ib=?, managed_vps=?, price=?, description=?, features=?, active=?, sort=? WHERE id=?`)
-    .bind(...f, int(params.id)).run();
+  await env.DB.prepare(`UPDATE products SET name=?, kind=?, billing=?, includes_ea=?, includes_vps=?, requires_ib=?, managed_vps=?, price=?, prices=?, description=?, features=?,
+      name_en=?, description_en=?, features_en=?, active=?, sort=? WHERE id=?`).bind(...f, int(params.id)).run();
+  if (f[8]) await putSetting(env, 'prices_placeholder', '0');   // the owner saved a price table: the sample prices are gone
   return json({ ok: true });
 });
 
 const EDITABLE_SETTINGS = ['durations', 'discounts', 'bank_list', 'admin_notify_email', 'whatsapp', 'pay_deadline_hours', 'reminder_days', 'mt4_enabled',
   'ib_brokers', 'auto_complete_ea', 'auto_process_paid', 'welcome_email_password', 'email_provider', 'email_from', 'email_from_name', 'vps_spec',
   'min_capital_usd', 'invoice_days_before', 'auto_rebuild_on_version', 'report_interval_min', 'board_enabled', 'board_name_mode', 'board_landing_top', 'board_stale_days', 'profit_est_enabled', 'profit_est_min_idr', 'profit_est_max_idr', 'profit_est_basis',
-  'telegram_enabled', 'telegram_targets', 'telegram_hold', 'usdt_enabled', 'usdt_address',
+  'telegram_enabled', 'telegram_targets', 'telegram_hold', 'usdt_enabled', 'usdt_address', 'usdt_auto',
+  'gateway_provider', 'gateway_enabled', 'gateway_mode', 'share_commission_pct', 'share_due_days', 'share_min_idr', 'trial_days',
   'ea_master_key', 'showcase_logins', 'ea_report_hour', 'ea_report_every', 'ea_tg_min_layers', 'ea_offline_min', 'ea_tg_enabled', 'ea_tg_events'];
-route('GET', '/admin/settings', 'admin', async ({ env }) => {
+route('GET', '/admin/settings', 'admin', async ({ env, base }) => {
   const s = await getSettings(env);
   const out = Object.fromEntries(EDITABLE_SETTINGS.map((k) => [k, s[k] ?? '']));
   out.email_api_key_set = !!s.email_api_key_enc;
   out.telegram_bot_token_set = !!s.telegram_bot_token_enc;
   out.telegram_hold = tgHeld(s) ? '1' : '0';
   out.usdt_qr_set = !!s.usdt_qr_file_id;
+  // payment secrets: only "saved" + the last 4 characters ever reach the browser
+  const hint = async (v) => { if (!v) return ''; const x = await decrypt(env, v); return x && x !== '(gagal didekripsi)' ? '••••' + x.slice(-4) : '(tersimpan)'; };
+  out.trongrid_api_key_set = !!s.trongrid_api_key_enc;
+  // automatic gateway: every provider with its credential fields (plain values, or saved + hint for secrets)
+  out.gateway_providers = [];
+  for (const p of Object.values(PROVIDERS)) {
+    const fields = [];
+    for (const f of p.fields) {
+      const v = s[gwKey(p.id, f)] || '';
+      fields.push({ key: f.key, label: f.label, secret: !!f.secret, placeholder: f.placeholder || '', value: f.secret ? '' : v, set: !!v, hint: f.secret ? await hint(v) : '' });
+    }
+    out.gateway_providers.push({ id: p.id, name: p.name, implemented: !!p.implemented, docs: p.docs || '', note: p.note || '', fields, callback_url: `${base}/api/pay/gateway/${p.id}/callback` });
+  }
+  out.gateway_ready = gatewayReady(s);
+  try { out.usdt_scan_last = JSON.parse(s.usdt_scan_last || 'null'); } catch { out.usdt_scan_last = null; }
   out._env = { email_provider: env.EMAIL_PROVIDER || 'log', email_from: env.EMAIL_FROM || '', site_url: env.SITE_URL || '',
     builder_token_set: !!env.BUILDER_TOKEN, cron_secret_set: !!env.CRON_SECRET, data_key_set: !!env.DATA_KEY };
   return json(out);
@@ -2156,7 +2344,13 @@ route('PUT', '/admin/settings', 'admin', async ({ request, env }) => {
       for (const x of v) if (!/^(-?\d+|@[A-Za-z0-9_]{4,})$/.test(x.chat_id)) fail(400, `Chat ID "${x.chat_id}" tidak valid (angka seperti -1001234567890 atau @namachannel)`);
     }
     if (k === 'usdt_address' && v && !TRC20_RE.test(str(v, 60))) fail(400, 'Alamat USDT TRC20 tidak valid (34 karakter, diawali huruf T)');
-    if (k === 'usdt_enabled' || k === 'telegram_hold') v = v === '1' || v === true ? '1' : '0';
+    if (['usdt_enabled', 'telegram_hold', 'usdt_auto', 'gateway_enabled'].includes(k)) v = v === '1' || v === true ? '1' : '0';
+    if (k === 'gateway_mode') v = v === 'production' ? 'production' : 'sandbox';
+    if (k === 'gateway_provider' && v && !PROVIDERS[v]) fail(400, 'Penyedia pembayaran tidak dikenal');
+    if (k === 'share_commission_pct') { v = Number(v); if (!(v >= 0 && v <= 90)) fail(400, 'Komisi sharing profit harus 0 - 90%'); v = String(Math.round(v * 100) / 100); }
+    if (k === 'share_due_days') { v = int(v); if (!(v >= 1 && v <= 14)) fail(400, 'Jatuh tempo tagihan sharing 1 - 14 hari'); v = String(v); }
+    if (k === 'share_min_idr') v = String(Math.max(0, int(v) || 0));
+    if (k === 'trial_days') { v = int(v); if (!(v >= 1 && v <= 60)) fail(400, 'Lama trial 1 - 60 hari'); v = String(v); }
     if (k === 'showcase_logins') {
       const L = String(v || '').split(/[\s,;]+/).map((x) => x.trim()).filter(Boolean);
       const bad = L.filter((x) => !/^[0-9A-Za-z_-]{1,20}$/.test(x));
@@ -2170,6 +2364,33 @@ route('PUT', '/admin/settings', 'admin', async ({ request, env }) => {
   }
   if (typeof b.email_api_key === 'string' && b.email_api_key.trim()) await putSetting(env, 'email_api_key_enc', await encrypt(env, b.email_api_key.trim()));
   if (b.email_api_key_clear) await env.DB.prepare(`DELETE FROM settings WHERE key='email_api_key_enc'`).run();
+  // TronGrid key + gateway credentials: secrets encrypted like the other secrets, only replaced when typed, cleared on request
+  if (typeof b.trongrid_api_key === 'string' && b.trongrid_api_key.trim()) {
+    if (!/^[A-Za-z0-9-]{10,100}$/.test(b.trongrid_api_key.trim())) fail(400, 'API key TronGrid tidak valid');
+    await putSetting(env, 'trongrid_api_key_enc', await encrypt(env, b.trongrid_api_key.trim()));
+  }
+  if (b.trongrid_api_key_clear) await env.DB.prepare(`DELETE FROM settings WHERE key='trongrid_api_key_enc'`).run();
+  // b.gateway_creds = { <provider>: { <field>: value } }, b.gateway_clear = { <provider>: [field, ...] }
+  const creds = b.gateway_creds && typeof b.gateway_creds === 'object' ? b.gateway_creds : {};
+  for (const [pid, vals] of Object.entries(creds)) {
+    const p = PROVIDERS[pid];
+    if (!p || !vals || typeof vals !== 'object') continue;
+    for (const f of p.fields) {
+      if (typeof vals[f.key] !== 'string') continue;
+      const v = vals[f.key].trim();
+      if (f.secret && !v) continue;                       // empty secret = keep the saved one
+      if (v && f.re && !f.re.test(v)) fail(400, `${p.name}: ${f.label} tidak valid`);
+      if (f.secret) await putSetting(env, gwKey(pid, f), await encrypt(env, v));
+      else await putSetting(env, gwKey(pid, f), v);
+    }
+  }
+  const clear = b.gateway_clear && typeof b.gateway_clear === 'object' ? b.gateway_clear : {};
+  for (const [pid, keys] of Object.entries(clear)) {
+    const p = PROVIDERS[pid];
+    if (!p || !Array.isArray(keys)) continue;
+    for (const f of p.fields) if (keys.includes(f.key)) await env.DB.prepare('DELETE FROM settings WHERE key=?').bind(gwKey(pid, f)).run();
+  }
+  if (Object.keys(creds).length || b.gateway_provider !== undefined || b.gateway_mode !== undefined) await env.DB.prepare(`DELETE FROM settings WHERE key='gateway_channels'`).run();
   if (typeof b.telegram_bot_token === 'string' && b.telegram_bot_token.trim()) {
     const tok = b.telegram_bot_token.trim();
     if (!/^\d+:[A-Za-z0-9_-]{30,}$/.test(tok)) fail(400, 'Format token bot tidak valid (contoh 123456789:AAH...)');
@@ -2209,7 +2430,28 @@ route('POST', '/admin/rebuild-all', 'admin', async ({ env }) => {
   return json({ ok: true, queued: n });
 });
 
-route('POST', '/admin/run-daily', 'admin', async ({ env, base }) => json({ ok: true, result: await runDaily(env, base) }));
+route('POST', '/admin/run-daily', 'admin', async ({ env, base }) => json({ ok: true, result: await dailyJob(env, base) }));
+// Admin tools: gateway connection test (loads the channels), USDT scan now, weekly sharing run now
+route('POST', '/admin/gateway/test', 'admin', async ({ env }) => {
+  const s = await getSettings(env);
+  const p = PROVIDERS[s.gateway_provider];
+  if (!p) fail(400, 'Pilih penyedia pembayaran otomatis lalu Simpan dulu');
+  if (!p.implemented) fail(400, `${p.name} belum diimplementasikan (menunggu dokumentasi API resmi)`);
+  const c = await gatewayConfig(env, s);
+  if (!c.configured) fail(400, `Isi semua kredensial ${p.name} lalu Simpan dulu`);
+  const channels = await gatewayChannels(env, s, { refresh: true });
+  return json({ ok: true, provider: p.name, mode: c.mode, channels });
+});
+route('POST', '/admin/usdt/scan', 'admin', async ({ env, base }) => json({ ok: true, result: await usdtScan(env, base) }));
+route('POST', '/admin/share/run', 'admin', async ({ env, base }) => json({ ok: true, result: await runShareBilling(env, base) }));
+
+// Daily job (GitHub Action 08:00 WIB, builder poll every 20 h, admin button): weekly sharing profit (on Sunday, catches up
+// when late), renewal invoices, reminders, expiries, payment checks.
+async function dailyJob(env, base) {
+  const share = await runShareBilling(env, base).catch((e) => ({ error: String(e.message || e) }));
+  const pay = await paymentsTick(env, base).catch((e) => ({ error: String(e.message || e) }));
+  return runDaily(env, base, { share, payments: { usdt_matched: (pay.usdt && pay.usdt.matched) || 0, gateway_checked: pay.gateway || 0 } });
+}
 
 // =====================================================================
 // BUILDER (Windows PC with MetaEditor) and CRON
@@ -2224,7 +2466,12 @@ route('POST', '/builder/claim', 'builder', async ({ request, env, base, waitUnti
   try { last = JSON.parse(s.daily_last_run || '{}').at || 0; } catch {}
   if (now() - last > 20 * 3600) {
     await putSetting(env, 'daily_last_run', JSON.stringify({ at: now(), running: true }));
-    waitUntil(runDaily(env, base).catch((e) => console.error('daily', e)));
+    waitUntil(dailyJob(env, base).catch((e) => console.error('daily', e)));
+  }
+  // automatic payments: USDT on chain + gateway status at most every 2 minutes while orders wait for them
+  if (await eaClaim(env, 'payments_tick_slot', Math.floor(now() / 120))) {
+    const open = await env.DB.prepare(`SELECT 1 FROM orders WHERE pay_method IN ('usdt','gateway') AND paid_via='' AND status='awaiting_payment' LIMIT 1`).first();
+    if (open) waitUntil(paymentsTick(env, base).catch((e) => console.error('payments', e)));
   }
   const rel = vpsRelease(s);
   return json({ job: await claimBuild(env, str(b.builder_id, 60) || 'builder', b.versions && typeof b.versions === 'object' ? b.versions : {}),
@@ -2239,4 +2486,13 @@ route('POST', '/builder/result', 'builder', async ({ request, env, base }) => {
     data_b64: b.data_b64 || '', ea_version: str(b.ea_version || b.version, 20),
   }));
 });
-route('POST', '/cron/daily', 'cron', async ({ env, base }) => json({ ok: true, result: await runDaily(env, base) }));
+route('POST', '/cron/daily', 'cron', async ({ env, base }) => json({ ok: true, result: await dailyJob(env, base) }));
+// Every 10 minutes (GitHub Action payments.yml): USDT transfers + gateway transactions of unpaid orders
+route('POST', '/cron/payments', 'cron', async ({ env, base }) => json({ ok: true, result: await paymentsTick(env, base) }));
+
+// Payment notification of the automatic gateway; the provider's adapter verifies it (signature) before anything is paid
+route('POST', '/pay/gateway/:provider/callback', 'public', async ({ request, env, base, params }) => {
+  const raw = await request.text();
+  const [status, body] = await gatewayCallback(env, base, params.provider, raw, request.headers);
+  return json(body, status);
+});

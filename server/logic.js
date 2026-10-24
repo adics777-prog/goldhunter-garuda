@@ -1,9 +1,10 @@
 // Business rules: settings, pricing, orders, licenses, builds, reminders.
 import { now, DAY, fail, addMonths, fmtDate, rupiah, esc, randomToken } from './util.js';
 import { layout, sendEmail } from './email.js';
+import { gatewayReady } from './gateway/index.js';
 
 // ---------- settings ----------
-const JSON_KEYS = ['durations', 'discounts', 'reminder_days', 'ib_brokers', 'bank_list', 'telegram_targets'];
+const JSON_KEYS = ['durations', 'discounts', 'reminder_days', 'ib_brokers', 'bank_list', 'telegram_targets', 'gateway_channels'];
 export async function getSettings(env) {
   const { results } = await env.DB.prepare('SELECT key, value FROM settings').all();
   const s = {};
@@ -29,10 +30,51 @@ export const activeBanks = (s) => (s.bank_list || []).filter((b) => b.active !==
   .map((b) => ({ bank: b.bank, number: b.number, name: b.name || '' }));
 
 // ---------- pricing ----------
+// billing: free (IB) | trial | share (sharing profit, weekly invoices) | lifetime | monthly (rent / VPS)
+export const NO_UPFRONT = ['free', 'trial', 'share'];
+// Rent with its own price per duration: products.prices = {"1":300000,...,"12":...,"18":...,"24":...} (Rupiah)
+export function parsePrices(p) {
+  if (!p || !p.prices) return null;
+  let o;
+  try { o = typeof p.prices === 'string' ? JSON.parse(p.prices) : p.prices; } catch { return null; }
+  const out = {};
+  for (const [m, v] of Object.entries(o || {})) {
+    const mi = parseInt(m, 10), vi = Math.round(Number(v));
+    if (mi >= 1 && mi <= 36 && vi > 0) out[mi] = vi;
+  }
+  return Object.keys(out).length ? out : null;
+}
+// months a product can be ordered / renewed for: its own price table, else the global durations (VPS packages)
+export const productDurations = (p, s) => { const t = parsePrices(p); return t ? Object.keys(t).map(Number).sort((a, b) => a - b) : s.durations; };
+export const durationLabel = (m) => m === 18 ? '1,5 tahun' : m >= 12 && m % 12 === 0 ? `${m / 12} tahun` : `${m} bulan`;
+export const trialDays = (s) => Math.max(1, Math.min(60, Number(s.trial_days) || 7));
+export const shareDueDays = (s) => Math.max(1, Math.min(14, Number(s.share_due_days) || 3));
+export const sharePct = (s) => Math.max(0, Math.min(90, Number(s.share_commission_pct ?? 10) || 0));
+
+// Sharing profit runs in weeks that end on Sunday 00:00 WIB: the Sunday 08:00 WIB cron bills the 7 days before
+// (Sunday..Saturday). shareWeekEnd(t) = first Sunday 00:00 WIB strictly after t.
+const WIB = 7 * 3600;
+export function shareWeekEnd(t) {
+  const local = t + WIB;
+  const day0 = local - (((local % DAY) + DAY) % DAY);
+  const dow = new Date(day0 * 1000).getUTCDay();          // 0 = Sunday
+  return day0 + (((7 - dow) % 7) || 7) * DAY - WIB;
+}
+// EA expiry of a sharing licence = due date of the invoice of the running week: Sunday + N days, 23:59 WIB.
+// Settled (paid / nothing to pay) -> moved to the next week's due date; unpaid -> the EA pauses new orders there.
+export const shareDueFor = (t, s) => shareWeekEnd(t) + shareDueDays(s) * DAY + DAY - 60;
+
 export function quote(product, months, settings) {
-  if (product.billing === 'free') return { months: null, unit_price: 0, discount_pct: 0, subtotal: 0 };
+  if (NO_UPFRONT.includes(product.billing)) return { months: null, unit_price: 0, discount_pct: 0, subtotal: 0 };
   if (product.billing === 'lifetime') {
     return { months: null, unit_price: product.price, discount_pct: 0, subtotal: product.price };
+  }
+  const table = parsePrices(product);
+  if (table) {
+    if (!table[months]) fail(400, 'Durasi sewa tidak tersedia');
+    const gross = product.price * months;
+    const discount_pct = gross > 0 ? Math.max(0, Math.round((1 - table[months] / gross) * 100)) : 0;
+    return { months, unit_price: product.price, discount_pct, subtotal: table[months] };
   }
   if (!settings.durations.includes(months)) fail(400, 'Durasi sewa tidak tersedia');
   const discount_pct = Number(settings.discounts[String(months)] || 0);
@@ -96,12 +138,15 @@ export async function ensureUniqueCode(env, orderId) {
   }
 }
 
-// Admin clicks "Proses" (or "Sudah Bayar"): create/extend the license and queue the EA build.
-export async function processOrder(env, base, orderId, { paid = false } = {}) {
+// Admin clicks "Proses" (or "Sudah Bayar"), or a payment / trial / sharing order is handled automatically (auto = true):
+// create/extend the license and queue the EA build.
+export async function processOrder(env, base, orderId, { paid = false, auto = false } = {}) {
   const o = await env.DB.prepare('SELECT * FROM orders WHERE id=?').bind(orderId).first();
   if (!o) fail(404, 'Order tidak ditemukan');
+  if (o.kind === 'share') fail(409, 'Tagihan sharing profit selesai lewat konfirmasi pembayaran (Sudah Bayar)');
   if (!['awaiting_payment', 'awaiting_verification'].includes(o.status)) fail(409, 'Order ini tidak bisa diproses (status: ' + o.status + ')');
   const p = await getProduct(env, o.product_id);
+  const s = await getSettings(env);
   if (p.requires_ib && o.kind === 'new' && o.ib_status !== 'yes') fail(409, 'Cek dulu akun ini di portal partner, lalu klik "Ya, under IB"');
   const t = now();
   let licenseId = o.license_id;
@@ -115,10 +160,11 @@ export async function processOrder(env, base, orderId, { paid = false } = {}) {
         status=CASE WHEN status='expired' THEN 'processing' ELSE status END, updated_at=? WHERE id=?`)
       .bind(exp, t, licenseId).run();
   } else {
-    const exp = o.months ? addMonths(t, o.months) : null;
+    // rent / VPS = months, trial = trial_days, sharing = due date of the running week's invoice, IB = no expiry
+    const exp = o.months ? addMonths(t, o.months) : p.billing === 'trial' ? t + trialDays(s) * DAY : p.billing === 'share' ? shareDueFor(t, s) : null;
     const r = await env.DB.prepare(`INSERT INTO licenses (user_id, product_id, platform, account_number, broker, broker_server,
-        trading_pass_enc, expires_at, status, created_at, updated_at) VALUES (?,?,?,?,?,?,?,?, 'processing', ?, ?)`)
-      .bind(o.user_id, o.product_id, o.platform, o.account_number, o.broker, o.broker_server, o.trading_pass_enc, exp, t, t).run();
+        trading_pass_enc, expires_at, status, created_at, updated_at, share_next) VALUES (?,?,?,?,?,?,?,?, 'processing', ?, ?, ?)`)
+      .bind(o.user_id, o.product_id, o.platform, o.account_number, o.broker, o.broker_server, o.trading_pass_enc, exp, t, t, p.billing === 'share' ? t : 0).run();
     licenseId = r.meta.last_row_id;
   }
   await env.DB.prepare(`UPDATE orders SET status='processing', license_id=?, processed_at=?,
@@ -127,11 +173,17 @@ export async function processOrder(env, base, orderId, { paid = false } = {}) {
   if (p.includes_ea) await queueBuild(env, licenseId, o.kind === 'renew' ? 'Perpanjangan ' + o.code : 'Order ' + o.code);
 
   const user = await getUser(env, o.user_id);
-  const subj = paid ? `Pembayaran ${o.code} diterima, pesanan diproses` : `Pesanan ${o.code} sedang diproses`;
-  await notify(env, o.user_id, subj, paid ? `Pembayaran ${rupiah(o.total)} sudah kami terima. Admin sedang menyiapkan pesanan Anda.` : 'Admin sedang menyiapkan pesanan Anda.', '#/pesanan/' + o.id);
+  // EA-only orders finish by themselves once the builder has made the file (auto_complete_ea); VPS packages wait for the admin
+  const byItself = p.includes_ea && !p.includes_vps && s.auto_complete_ea === '1';
+  const who = byItself ? 'File EA berlisensi sedang dibuat otomatis (biasanya beberapa menit).' : 'Admin sedang menyiapkan pesanan Anda.';
+  const subj = paid ? `Pembayaran ${o.code} diterima, pesanan diproses`
+    : p.billing === 'trial' ? `Trial ${o.code} disetujui, EA sedang dibuat` : p.billing === 'share' ? `Sharing profit ${o.code} disetujui, EA sedang dibuat` : `Pesanan ${o.code} sedang diproses`;
+  await notify(env, o.user_id, subj, paid ? `Pembayaran ${rupiah(o.total)} sudah kami terima. ${who}` : who, '#/pesanan/' + o.id);
   await emailUser(env, user, subj,
-    `<p>Halo ${esc(user.name)},</p>${paid ? `<p>Pembayaran <b>${rupiah(o.total)}</b> untuk pesanan <b>${esc(o.code)}</b> sudah kami terima. Terima kasih!</p>` : ''}<p>Pesanan <b>${esc(o.code)}</b> (${esc(p.name)}) untuk akun <b>${esc(o.account_number)}</b> sedang diproses oleh admin. Kami akan mengabari Anda lagi begitu selesai.</p>`,
+    `<p>Halo ${esc(user.name)},</p>${paid ? `<p>Pembayaran <b>${rupiah(o.total)}</b> untuk pesanan <b>${esc(o.code)}</b> sudah kami terima${auto ? ' dan terverifikasi otomatis' : ''}. Terima kasih!</p>` : ''}<p>Pesanan <b>${esc(o.code)}</b> (${esc(p.name)}) untuk akun <b>${esc(o.account_number)}</b> sedang diproses. ${who} Kami akan mengabari Anda lagi begitu selesai.</p>`,
     { text: 'Lihat Pesanan', url: `${base}/member#/pesanan/${o.id}` });
+  if (auto && !paid) await emailAdmin(env, base, `${p.name}: ${o.code} aktif otomatis`,
+    `<p>${esc(user.name)} (${esc(user.email)}) memulai <b>${esc(p.name)}</b> untuk akun ${esc(o.broker)} <b>${esc(o.account_number)}</b>. Lisensi dibuat otomatis dan EA masuk antrean compile.</p>`, '/admin#/pesanan/' + o.id);
   return licenseId;
 }
 
@@ -153,11 +205,31 @@ export async function completeOrder(env, base, orderId, adminNote) {
   if (p.includes_ea) parts.push('File EA berlisensi bisa diunduh di menu <b>Lisensi &amp; VPS</b>.');
   if (p.includes_vps && p.managed_vps) parts.push('Akun Anda sudah dipasang di VPS kami dan EA sudah berjalan (VPS dikelola admin). Pantau dari HP lewat aplikasi MetaTrader dengan <b>password investor (akun pantau)</b>; panduannya ada di menu <b>Lisensi &amp; VPS</b>.');
   else if (p.includes_vps) parts.push('VPS pribadi Anda sudah siap. Alamat IP, username dan password Remote Desktop ada di menu <b>Lisensi &amp; VPS</b>; silakan login lalu pasang MetaTrader dan EA.');
+  if (p.billing === 'share') {
+    const s = await getSettings(env);
+    parts.push(`<b>Sharing profit:</b> setiap hari Minggu Anda menerima laporan profit EA minggu itu dan tagihan komisi <b>${sharePct(s)}%</b> dari profit (minggu tanpa profit tidak ditagih). Bayar dalam ${shareDueDays(s)} hari agar EA tidak berhenti membuka posisi baru. Pastikan EA melapor ke web: izinkan WebRequest <b>https://goldhuntergaruda.com</b> di MetaTrader (installer di menu Lisensi sudah mengaturnya).`);
+  }
+  if (p.billing === 'trial') parts.push('Trial berlaku sampai tanggal di atas. Setelah itu EA berhenti membuka posisi baru; lanjutkan dengan <b>Sewa EA</b> atau <b>Sharing Profit</b> dari menu Order.');
   await notify(env, o.user_id, `Pesanan ${o.code} selesai`, `Masa aktif: ${fmtDate(lic.expires_at)}.`, '#/lisensi');
   await emailUser(env, user, `Pesanan ${o.code} selesai`,
     `<p>Halo ${esc(user.name)},</p><p>Pesanan <b>${esc(o.code)}</b> (${esc(p.name)}) untuk akun <b>${esc(o.account_number)}</b> sudah selesai diproses.</p>
      <p>Masa aktif: <b>${fmtDate(lic.expires_at)}</b></p><p>${parts.join('<br>')}</p>${adminNote ? `<p>Catatan admin: ${esc(adminNote)}</p>` : ''}`,
     { text: 'Buka Member Area', url: `${base}/member#/lisensi` });
+}
+
+// Payment instructions in emails: bank transfer with the unique code; USDT (automatic check) and QRIS / Virtual Account
+// get their exact amount / pay code on the member's invoice page (the USDT amount is locked per order there).
+export function payBlockHtml(s, total, uniq) {
+  const banks = activeBanks(s).map((b) => `<li><b>${esc(b.bank)}</b> <span style="font-family:monospace;font-size:16px;color:#f5c542">${esc(b.number)}</span>${b.name ? ` a.n. <b>${esc(b.name)}</b>` : ''}</li>`).join('');
+  const wa = s.whatsapp ? `https://wa.me/${String(s.whatsapp).replace(/\D/g, '').replace(/^0/, '62')}` : '';
+  const other = [s.usdt_enabled === '1' && TRC20_RE.test(s.usdt_address || '') ? '<b>USDT TRC20</b> (dicek otomatis)' : '',
+    gatewayReady(s) ? '<b>QRIS / Virtual Account</b> (otomatis)' : ''].filter(Boolean);
+  return `<p>Transfer bank: kirim <b>tepat</b> sebesar:</p><p style="font-size:24px;font-weight:bold;color:#f5c542;margin:6px 0">${rupiah(total)}</p>
+       <p style="color:#a3a3b2;font-size:13px;margin-top:0">sudah termasuk kode unik <b>${uniq}</b> agar pembayaran Anda mudah dikenali.</p>
+       ${banks ? `<p>Ke rekening berikut:</p><ul>${banks}</ul>` : ''}
+       <p>Setelah transfer, buka halaman <b>Tagihan &amp; Pembayaran</b> dan upload bukti transfer.</p>
+       ${other.length ? `<p>Pilihan lain di halaman tagihan: ${other.join(' atau ')}. Metode bisa diganti kapan saja selama tagihan belum dibayar; pembayaran otomatis langsung memproses pesanan tanpa menunggu admin.</p>` : ''}
+       ${wa ? `<p>Ada kendala? <a href="${wa}" style="color:#f5c542">Chat admin via WhatsApp</a>.</p>` : ''}`;
 }
 
 // Create an order (new purchase, member renewal or automatic monthly invoice).
@@ -169,7 +241,8 @@ export async function createOrder(env, base, user, fields) {
   // Hidden products can still be renewed by existing customers.
   if (!p || (!p.active && fields.kind !== 'renew')) fail(400, 'Produk tidak tersedia');
   const q = quote(p, fields.months, s);
-  const free = p.billing === 'free';
+  // nothing to pay up front: free EA (IB, admin checks), trial and sharing profit (both approved automatically)
+  const free = NO_UPFRONT.includes(p.billing);
   let uniq = free ? 0 : await pickUniqueCode(env);
   const t = now();
   const code = await newOrderCode(env);
@@ -184,6 +257,7 @@ export async function createOrder(env, base, user, fields) {
   if (!free) uniq = await ensureUniqueCode(env, id);
   const total = q.subtotal + uniq;
   if (free) {
+    if (p.billing !== 'free') return id;   // trial / sharing: the caller processes the order right away
     await notify(env, user.id, `Pengajuan ${code} diterima`, `Admin akan mengecek akun ${fields.account_number} terdaftar di bawah IB kami, lalu memproses EA Anda.`, '#/pesanan/' + id);
     await emailUser(env, user, `Pengajuan EA gratis ${code} diterima`,
       `<p>Halo ${esc(user.name)},</p><p>Pengajuan EA gratis untuk akun ${esc(fields.broker)} <b>${esc(fields.account_number)}</b> sudah kami terima. Admin akan mengecek bahwa akun tersebut terdaftar di bawah IB kami, lalu segera memprosesnya.</p>`,
@@ -192,29 +266,21 @@ export async function createOrder(env, base, user, fields) {
       `<p>${esc(user.name)} (${esc(user.email)}) mengajukan EA gratis untuk akun ${esc(fields.broker)} <b>${esc(fields.account_number)}</b>. Cek di portal partner bahwa akun ini di bawah IB Anda, lalu klik Proses.</p>`, '/admin#/pesanan/' + id);
     return id;
   }
-  const usdt = await usdtPay(env, s, total);
-  const banks = activeBanks(s).map((b) => `<li><b>${esc(b.bank)}</b> <span style="font-family:monospace;font-size:16px;color:#f5c542">${esc(b.number)}</span>${b.name ? ` a.n. <b>${esc(b.name)}</b>` : ''}</li>`).join('');
-  const wa = s.whatsapp ? `https://wa.me/${String(s.whatsapp).replace(/\D/g, '').replace(/^0/, '62')}` : '';
-  const payBlock = `<p>Silakan transfer <b>tepat</b> sebesar:</p><p style="font-size:24px;font-weight:bold;color:#f5c542;margin:6px 0">${rupiah(total)}</p>
-       <p style="color:#a3a3b2;font-size:13px;margin-top:0">sudah termasuk 3 digit kode unik <b>${uniq}</b> agar pembayaran Anda mudah dikenali.</p>
-       ${banks ? `<p>Ke salah satu rekening berikut:</p><ul>${banks}</ul>` : ''}
-       ${usdt && usdt.amount ? `<p>Atau bayar dengan <b>USDT jaringan TRC20</b> sebesar <b style="color:#f5c542">${usdt.amount.toFixed(2)} USDT</b> ke alamat:<br><span style="font-family:monospace;font-size:14px;color:#f5c542">${esc(usdt.address)}</span><br><span style="color:#a3a3b2;font-size:12px">Hanya jaringan TRON (TRC20). Kirim lewat jaringan lain = dana tidak bisa kembali.</span></p>` : ''}
-       <p>Setelah transfer, buka halaman <b>Tagihan &amp; Pembayaran</b> dan upload bukti transfer.</p>
-       ${wa ? `<p>Ada kendala? <a href="${wa}" style="color:#f5c542">Chat admin via WhatsApp</a>.</p>` : ''}`;
+  const payBlock = payBlockHtml(s, total, uniq);
   if (fields.invoice) {
     const lic = await env.DB.prepare('SELECT expires_at FROM licenses WHERE id=?').bind(fields.license_id).first();
     const what = p.includes_ea ? (p.includes_vps ? 'sewa VPS + EA' : 'sewa EA') : 'sewa VPS';
     const subj = `Tagihan ${what} akun ${fields.account_number}: ${rupiah(total)}`;
     await notify(env, user.id, subj, `Masa aktif berakhir ${fmtDate(lic && lic.expires_at)}. Bayar sebelum ${fmtDate(deadline)} agar tidak terputus.`, '#/bayar/' + id);
     await emailUser(env, user, subj,
-      `<p>Halo ${esc(user.name)},</p><p>Berikut tagihan perpanjangan <b>${esc(p.name)}</b> (${q.months} bulan) untuk akun <b>${esc(fields.account_number)}</b>. Masa aktif saat ini berakhir <b>${fmtDate(lic && lic.expires_at)}</b>.</p>
-       ${payBlock}<p style="color:#a3a3b2;font-size:13px">Ingin durasi lain (misal 12 bulan, lebih hemat)? Ganti durasinya di halaman tagihan sebelum membayar.</p>`,
+      `<p>Halo ${esc(user.name)},</p><p>Berikut tagihan perpanjangan <b>${esc(p.name)}</b> (${durationLabel(q.months)}) untuk akun <b>${esc(fields.account_number)}</b>. Masa aktif saat ini berakhir <b>${fmtDate(lic && lic.expires_at)}</b>.</p>
+       ${payBlock}<p style="color:#a3a3b2;font-size:13px">Ingin durasi lain (misal 1 tahun, lebih hemat)? Ganti durasinya di halaman tagihan sebelum membayar.</p>`,
       { text: 'Lihat & Bayar Tagihan', url: `${base}/member#/bayar/${id}` });
   } else {
     await notify(env, user.id, `Pesanan ${code} dibuat`, `Silakan transfer ${rupiah(total)} (termasuk kode unik ${uniq}) lalu konfirmasi pembayaran.`
       + (p.requires_ib ? ' Admin juga akan mengecek akun Anda terdaftar di bawah IB kami.' : ''), '#/pesanan/' + id);
     await emailUser(env, user, `Pesanan ${code}: silakan transfer ${rupiah(total)}`,
-      `<p>Halo ${esc(user.name)},</p><p>Terima kasih atas pesanan <b>${esc(code)}</b> (${esc(p.name)}${q.months ? `, ${q.months} bulan` : ''}) untuk akun <b>${esc(fields.account_number)}</b>.</p>${payBlock}`,
+      `<p>Halo ${esc(user.name)},</p><p>Terima kasih atas pesanan <b>${esc(code)}</b> (${esc(p.name)}${q.months ? `, ${durationLabel(q.months)}` : ''}) untuk akun <b>${esc(fields.account_number)}</b>.</p>${payBlock}`,
       { text: 'Konfirmasi Pembayaran', url: `${base}/member#/bayar/${id}` });
   }
   return id;
@@ -226,7 +292,9 @@ export async function changeOrderMonths(env, order, months) {
   const s = await getSettings(env);
   const p = await getProduct(env, order.product_id);
   const q = quote(p, months, s);
-  await env.DB.prepare('UPDATE orders SET months=?, unit_price=?, discount_pct=?, subtotal=?, total=?+unique_code WHERE id=?')
+  // a new amount: the locked USDT amount and any QRIS / VA transaction no longer fit and are made again on demand
+  await env.DB.prepare(`UPDATE orders SET months=?, unit_price=?, discount_pct=?, subtotal=?, total=?+unique_code,
+      usdt_amount=0, usdt_locked_at=0, gateway_ref='', gateway_data='', gateway_method='' WHERE id=?`)
     .bind(q.months, q.unit_price, q.discount_pct, q.subtotal, q.subtotal, order.id).run();
 }
 
@@ -246,7 +314,8 @@ export async function createDueInvoices(env, base) {
   let n = 0;
   for (const l of results) {
     const last = await env.DB.prepare(`SELECT months FROM orders WHERE license_id=? AND status IN ('processing','completed') AND months IS NOT NULL ORDER BY id DESC LIMIT 1`).bind(l.id).first();
-    const months = last && s.durations.includes(last.months) ? last.months : s.durations[0] || 1;
+    const durs = productDurations(await getProduct(env, l.product_id), s);
+    const months = last && durs.includes(last.months) ? last.months : durs[0] || 1;
     const user = await getUser(env, l.user_id);
     if (!user) continue;
     await createOrder(env, base, user, {
@@ -384,7 +453,10 @@ export async function claimBuild(env, builderId, versions = {}) {
   if (!upd.meta.changes) return null;
   // Secret baked into the EA so its profit reports can be trusted (one per license, stable across rebuilds)
   const token = await ensureReportToken(env, job.license_id);
+  // licence type for the EA panel (builder maps it: ea_rent SEWA, ea_ib FREE IB, ea_share SHARING PROFIT, ea_trial TRIAL, vps_ea SEWA + VPS ...)
+  const kind = await env.DB.prepare('SELECT p.kind FROM licenses l JOIN products p ON p.id=l.product_id WHERE l.id=?').bind(job.license_id).first();
   return { id: job.id, license_id: job.license_id, platform: job.platform, account_number: job.account_number, expires_at: job.expires_at || 0,
+    lic_kind: (kind && kind.kind) || '',
     report_token: token, report_interval: reportInterval(s),
     // licence key for the EA heartbeat (/ea/live, header x-ea-key) = lic.<license_id>.<report_token>
     lic_key: licKey(job.license_id, token) };
@@ -451,54 +523,115 @@ export async function finishBuild(env, base, { id, ok, log, filename, data_b64, 
   return { ok: true };
 }
 
-// ---------- daily job: reminders, expiries, cleanup ----------
-export async function runDaily(env, base) {
+/// ---------- daily job: reminders, expiries, cleanup ----------
+// Licence reminders (rent / VPS / trial): H-3 and H-1 (settings.reminder_days), on the expiry day, then one renewal email
+// the day after. Sharing profit licences follow their weekly invoices instead (invoice email + H-1 before the due date).
+// `extra` (e.g. the weekly sharing run) is stored with the result in daily_last_run.
+export async function runDaily(env, base, extra = {}) {
   const t = now();
   const s = await getSettings(env);
   const days = [...s.reminder_days].map(Number).filter((d) => d > 0).sort((a, b) => b - a);
-  const out = { reminders: 0, expired: 0, unpaid_expired: 0, invoices: 0 };
-  // Unpaid invoices past their deadline lapse first, so a fresh invoice can be issued below.
-  out.unpaid_expired = (await env.DB.prepare(`UPDATE orders SET status='expired' WHERE status='awaiting_payment' AND pay_deadline < ?`).bind(t).run()).meta.changes || 0;
+  const out = { reminders: 0, expired: 0, unpaid_expired: 0, invoices: 0, renewal_emails: 0, share_due_reminders: 0, ...extra };
+  const host = esc(base.replace(/^https?:\/\//, ''));
+  const tokens = (l) => (l.reminder_exp === l.expires_at ? String(l.reminders_sent || '').split(',').filter(Boolean) : []);
+  // Unpaid orders past their deadline lapse first, so a fresh invoice can be issued below.
+  // Sharing invoices never lapse: the licence stays paused until they are paid.
+  out.unpaid_expired = (await env.DB.prepare(`UPDATE orders SET status='expired' WHERE status='awaiting_payment' AND kind<>'share' AND pay_deadline < ?`).bind(t).run()).meta.changes || 0;
   out.invoices = await createDueInvoices(env, base);
 
-  const maxDay = days[0] || 7;
+  const maxDay = days[0] || 3;
   const { results: soon } = await env.DB.prepare(`
-    SELECT l.*, p.name AS product_name, p.includes_vps, p.includes_ea, p.requires_ib, u.email, u.name AS user_name
+    SELECT l.*, p.name AS product_name, p.billing, p.includes_vps, p.includes_ea, p.requires_ib, u.email, u.name AS user_name
       FROM licenses l JOIN products p ON p.id=l.product_id JOIN users u ON u.id=l.user_id
-     WHERE p.billing='monthly' AND l.status='active' AND l.expires_at IS NOT NULL AND l.expires_at > ? AND l.expires_at <= ?`)
+     WHERE p.billing IN ('monthly','trial') AND l.status='active' AND l.expires_at IS NOT NULL AND l.expires_at > ? AND l.expires_at <= ?`)
     .bind(t, t + maxDay * DAY).all();
   for (const l of soon) {
     const left = Math.ceil((l.expires_at - t) / DAY);
-    const sent = l.reminder_exp === l.expires_at ? l.reminders_sent.split(',').filter(Boolean).map(Number) : [];
-    const stage = days.filter((d) => left <= d && !sent.includes(d)).pop(); // smallest due stage
+    const sent = tokens(l);
+    const stage = days.filter((d) => left <= d && !sent.includes(String(d))).pop(); // smallest due stage
     if (stage === undefined) continue;
-    const allDue = days.filter((d) => left <= d);
-    const what = !l.includes_ea || (l.includes_vps && l.requires_ib) ? 'sewa VPS' : l.includes_vps ? 'sewa VPS + EA' : 'sewa EA';
+    const allDue = days.filter((d) => left <= d).map(String);
+    const trial = l.billing === 'trial';
+    const what = trial ? 'trial EA' : !l.includes_ea || (l.includes_vps && l.requires_ib) ? 'sewa VPS' : l.includes_vps ? 'sewa VPS + EA' : 'sewa EA';
     const title = `Masa ${what} akun ${l.account_number} tinggal ${left} hari`;
-    const inv = await env.DB.prepare(`SELECT id, total FROM orders WHERE license_id=? AND kind='renew' AND status='awaiting_payment' ORDER BY id DESC LIMIT 1`).bind(l.id).first();
-    await notify(env, l.user_id, title, inv ? `Berakhir ${fmtDate(l.expires_at)}. Tagihan ${rupiah(inv.total)} menunggu pembayaran.` : `Berakhir ${fmtDate(l.expires_at)}. Klik Perpanjang di menu Lisensi & VPS.`, inv ? '#/bayar/' + inv.id : '#/lisensi');
+    const inv = trial ? null : await env.DB.prepare(`SELECT id, total FROM orders WHERE license_id=? AND kind='renew' AND status='awaiting_payment' ORDER BY id DESC LIMIT 1`).bind(l.id).first();
+    await notify(env, l.user_id, title, inv ? `Berakhir ${fmtDate(l.expires_at)}. Tagihan ${rupiah(inv.total)} menunggu pembayaran.`
+      : trial ? `Trial berakhir ${fmtDate(l.expires_at)}. Lanjutkan dengan Sewa EA atau Sharing Profit di menu Order.` : `Berakhir ${fmtDate(l.expires_at)}. Klik Perpanjang di menu Lisensi & VPS.`,
+      inv ? '#/bayar/' + inv.id : trial ? '#/order' : '#/lisensi');
     await emailUser(env, { email: l.email }, title,
-      `<p>Halo ${esc(l.user_name)},</p><p>Masa ${what} (<b>${esc(l.product_name)}</b>) untuk akun <b>${esc(l.account_number)}</b> tinggal <b>${left} hari</b> lagi dan berakhir pada <b>${fmtDate(l.expires_at)}</b>.</p>
-       ${inv ? `<p>Tagihan perpanjangan <b>${rupiah(inv.total)}</b> sudah tersedia. Login ke <a href="${base}/masuk">${esc(base.replace(/^https?:\/\//, ''))}</a>, buka menu <b>Tagihan &amp; Pembayaran</b>, transfer sesuai nominal lalu upload bukti.</p>`
-             : `<p>Untuk memperpanjang, login ke <a href="${base}/masuk">${esc(base.replace(/^https?:\/\//, ''))}</a>, buka menu <b>Lisensi &amp; VPS</b>, lalu klik <b>Perpanjang</b> pada akun yang terdaftar.</p>`}`,
-      inv ? { text: 'Bayar Tagihan', url: `${base}/member#/bayar/${inv.id}` } : { text: 'Perpanjang Sekarang', url: `${base}/member#/lisensi` });
+      `<p>Halo ${esc(l.user_name)},</p><p>Masa ${what} (<b>${esc(l.product_name)}</b>) untuk akun <b>${esc(l.account_number)}</b> tinggal <b>${left} hari</b> lagi dan berakhir pada <b>${fmtDate(l.expires_at)}</b>. Setelah itu EA berhenti membuka posisi baru (posisi yang berjalan tetap diurus sampai selesai).</p>
+       ${inv ? `<p>Tagihan perpanjangan <b>${rupiah(inv.total)}</b> sudah tersedia. Login ke <a href="${base}/masuk">${host}</a>, buka menu <b>Tagihan &amp; Pembayaran</b>, lalu bayar dengan metode pilihan Anda.</p>`
+         : trial ? `<p>Ingin lanjut? Pilih <b>Sewa EA</b> atau <b>Sharing Profit</b> (tanpa biaya di depan, komisi ${sharePct(s)}% dari profit mingguan) di menu <b>Order</b>.</p>`
+         : `<p>Untuk memperpanjang, login ke <a href="${base}/masuk">${host}</a>, buka menu <b>Lisensi &amp; VPS</b>, lalu klik <b>Perpanjang</b> pada akun yang terdaftar.</p>`}`,
+      inv ? { text: 'Bayar Tagihan', url: `${base}/member#/bayar/${inv.id}` } : trial ? { text: 'Lihat Paket', url: `${base}/member#/order` } : { text: 'Perpanjang Sekarang', url: `${base}/member#/lisensi` });
     await env.DB.prepare('UPDATE licenses SET reminder_exp=?, reminders_sent=? WHERE id=?')
       .bind(l.expires_at, [...new Set([...sent, ...allDue])].join(','), l.id).run();
     out.reminders++;
   }
 
+  // Sharing invoices: one reminder about a day before the due date (the EA pauses new orders at that moment)
+  const { results: dueShare } = await env.DB.prepare(`SELECT o.*, u.email, u.name AS user_name FROM orders o JOIN users u ON u.id=o.user_id
+      WHERE o.kind='share' AND o.status='awaiting_payment' AND o.reminded_at=0 AND o.pay_deadline > ? AND o.pay_deadline <= ?`).bind(t, t + DAY + 3 * 3600).all();
+  for (const o of dueShare) {
+    const title = `Tagihan sharing profit ${o.code} jatuh tempo ${fmtDate(o.pay_deadline)}`;
+    await notify(env, o.user_id, title, `Bayar ${rupiah(o.total)} agar EA akun ${o.account_number} tidak berhenti membuka posisi baru.`, '#/bayar/' + o.id);
+    await emailUser(env, { email: o.email }, title,
+      `<p>Halo ${esc(o.user_name)},</p><p>Tagihan komisi sharing profit <b>${esc(o.code)}</b> untuk akun <b>${esc(o.account_number)}</b> sebesar <b>${rupiah(o.total)}</b> jatuh tempo <b>${fmtDate(o.pay_deadline)} 23:59 WIB</b>.</p>
+       <p>Bila belum dibayar sampai saat itu, EA berhenti membuka posisi baru (posisi berjalan tetap diurus) sampai tagihan lunas.</p>`,
+      { text: 'Bayar Tagihan', url: `${base}/member#/bayar/${o.id}` });
+    await env.DB.prepare('UPDATE orders SET reminded_at=? WHERE id=?').bind(t, o.id).run();
+    out.share_due_reminders++;
+  }
+
   const { results: gone } = await env.DB.prepare(`
-    SELECT l.*, p.name AS product_name, u.email, u.name AS user_name
+    SELECT l.*, p.name AS product_name, p.billing, u.email, u.name AS user_name
       FROM licenses l JOIN products p ON p.id=l.product_id JOIN users u ON u.id=l.user_id
      WHERE l.status='active' AND l.expires_at IS NOT NULL AND l.expires_at <= ?`).bind(t).all();
   for (const l of gone) {
-    await env.DB.prepare(`UPDATE licenses SET status='expired', updated_at=? WHERE id=?`).bind(t, l.id).run();
-    const title = `Masa aktif akun ${l.account_number} sudah berakhir`;
-    await notify(env, l.user_id, title, 'Perpanjang agar EA aktif kembali.', '#/lisensi');
-    await emailUser(env, { email: l.email }, title,
-      `<p>Halo ${esc(l.user_name)},</p><p>Masa aktif <b>${esc(l.product_name)}</b> untuk akun <b>${esc(l.account_number)}</b> berakhir pada ${fmtDate(l.expires_at)}. EA akan berhenti membuka posisi baru.</p>`,
-      { text: 'Perpanjang', url: `${base}/member#/lisensi` });
+    await env.DB.prepare(`UPDATE licenses SET status='expired', reminder_exp=?, reminders_sent=?, updated_at=? WHERE id=?`)
+      .bind(l.expires_at, [...new Set([...tokens(l), '0'])].join(','), t, l.id).run();
+    let title = `Masa aktif akun ${l.account_number} sudah berakhir`, body = 'Perpanjang agar EA aktif kembali.', link = '#/lisensi', cta = { text: 'Perpanjang', url: `${base}/member#/lisensi` };
+    let html = `<p>Masa aktif <b>${esc(l.product_name)}</b> untuk akun <b>${esc(l.account_number)}</b> berakhir pada ${fmtDate(l.expires_at)}. EA berhenti membuka posisi baru (posisi yang berjalan tetap diurus sampai selesai).</p>`;
+    if (l.billing === 'share') {
+      const inv = await env.DB.prepare(`SELECT id, code, total FROM orders WHERE license_id=? AND kind='share' AND status IN ('awaiting_payment','awaiting_verification') ORDER BY id LIMIT 1`).bind(l.id).first();
+      title = `Sharing profit akun ${l.account_number} dijeda`;
+      body = inv ? `Tagihan ${inv.code} (${rupiah(inv.total)}) belum dibayar. EA aktif lagi otomatis setelah lunas.` : 'EA belum melapor ke web. Aktifkan WebRequest agar laporan masuk dan lisensi diperpanjang otomatis.';
+      link = inv ? '#/bayar/' + inv.id : '#/lisensi';
+      cta = inv ? { text: 'Bayar Tagihan', url: `${base}/member#/bayar/${inv.id}` } : { text: 'Buka Lisensi', url: `${base}/member#/lisensi` };
+      html = inv ? `<p>Tagihan komisi <b>${esc(inv.code)}</b> sebesar <b>${rupiah(inv.total)}</b> untuk akun <b>${esc(l.account_number)}</b> melewati jatuh tempo, jadi EA berhenti membuka posisi baru (posisi berjalan tetap diurus). Begitu tagihan lunas, lisensi aktif lagi dan file EA baru dibuat otomatis.</p>`
+        : `<p>EA di akun <b>${esc(l.account_number)}</b> tidak mengirim laporan ke web, sehingga profit mingguan tidak bisa dihitung dan lisensi sharing profit tidak diperpanjang. Izinkan WebRequest <b>https://goldhuntergaruda.com</b> di MetaTrader (Tools → Options → Expert Advisors). Begitu EA melapor lagi, lisensi diperpanjang otomatis.</p>`;
+    } else if (l.billing === 'trial') {
+      title = `Trial EA akun ${l.account_number} sudah berakhir`;
+      body = 'Lanjutkan dengan Sewa EA atau Sharing Profit di menu Order.';
+      link = '#/order';
+      cta = { text: 'Lihat Paket', url: `${base}/member#/order` };
+    }
+    await notify(env, l.user_id, title, body, link);
+    await emailUser(env, { email: l.email }, title, `<p>Halo ${esc(l.user_name)},</p>${html}`, cta);
     out.expired++;
+  }
+
+  // Renewal email the day after the expiry (rent / VPS / trial), once per expiry date
+  const { results: lapsed } = await env.DB.prepare(`
+    SELECT l.*, p.name AS product_name, p.billing, u.email, u.name AS user_name
+      FROM licenses l JOIN products p ON p.id=l.product_id JOIN users u ON u.id=l.user_id
+     WHERE p.billing IN ('monthly','trial') AND l.status='expired' AND l.expires_at IS NOT NULL AND l.expires_at <= ? AND l.expires_at > ?`)
+    .bind(t - DAY + 3600, t - 30 * DAY).all();
+  for (const l of lapsed) {
+    const sent = tokens(l);
+    if (sent.includes('r')) continue;
+    const trial = l.billing === 'trial';
+    const inv = trial ? null : await env.DB.prepare(`SELECT id, total FROM orders WHERE license_id=? AND kind='renew' AND status='awaiting_payment' ORDER BY id DESC LIMIT 1`).bind(l.id).first();
+    const title = trial ? 'Lanjutkan GOLD HUNTER GARUDA setelah trial' : `Aktifkan lagi EA akun ${l.account_number}`;
+    await notify(env, l.user_id, title, inv ? `Tagihan perpanjangan ${rupiah(inv.total)} masih bisa dibayar.` : trial ? 'Pilih Sewa EA atau Sharing Profit.' : 'Perpanjang dari menu Lisensi & VPS.', inv ? '#/bayar/' + inv.id : trial ? '#/order' : '#/lisensi');
+    await emailUser(env, { email: l.email }, title,
+      `<p>Halo ${esc(l.user_name)},</p><p>${trial ? `Trial EA untuk akun <b>${esc(l.account_number)}</b> sudah selesai. Terima kasih sudah mencoba!` : `Masa aktif <b>${esc(l.product_name)}</b> untuk akun <b>${esc(l.account_number)}</b> sudah berakhir ${fmtDate(l.expires_at)}.`}</p>
+       ${trial ? `<p>Lanjutkan dengan <b>Sewa EA</b> (pilih 1 bulan sampai 2 tahun, update otomatis gratis) atau <b>Sharing Profit</b> (tanpa biaya di depan, komisi ${sharePct(s)}% dari profit mingguan).</p>`
+         : inv ? `<p>Tagihan perpanjangan <b>${rupiah(inv.total)}</b> masih bisa dibayar. Setelah lunas, file EA baru dibuat dan terpasang otomatis bila agen VPS aktif.</p>`
+         : '<p>Perpanjang dari menu <b>Lisensi &amp; VPS</b>; setelah lunas, file EA baru dibuat otomatis.</p>'}`,
+      inv ? { text: 'Bayar Tagihan', url: `${base}/member#/bayar/${inv.id}` } : trial ? { text: 'Lihat Paket', url: `${base}/member#/order` } : { text: 'Perpanjang', url: `${base}/member#/lisensi` });
+    await env.DB.prepare('UPDATE licenses SET reminder_exp=?, reminders_sent=? WHERE id=?').bind(l.expires_at, [...new Set([...sent, 'r'])].join(','), l.id).run();
+    out.renewal_emails++;
   }
 
   await env.DB.batch([
