@@ -186,30 +186,70 @@
   const savePct = (p, m, c) => { const full = p.price * m, x = priceFor(p, m, c); return full > 0 && x < full ? Math.round((1 - x / full) * 100) : 0; };
   const fromPerMonth = (p, c) => Math.min(...durationsOf(p, c).map((m) => priceFor(p, m, c) / m));
   const MAIN_KINDS = ['ea_rent', 'ea_ib', 'ea_share', 'ea_trial'];
+  const durSelect = (p, c, name, sel, list, attrs = '') => `<select name="${name}" class="dur-sel" ${attrs}>${(list || durationsOf(p, c)).map((m) => {
+    const d = savePct(p, m, c);
+    return `<option value="${m}" ${Number(sel) === m ? 'selected' : ''}>${durLabel(m)} · ${rupiah(priceFor(p, m, c))}${d ? ` · hemat ${d}%` : ''}</option>`;
+  }).join('')}</select>`;
+  const durInfo = (p, c, m) => {
+    const x = priceFor(p, m, c), d = savePct(p, m, c);
+    return `<b>${rupiah(x)}</b>${m > 1 ? ` <span class="muted">· ${rupiah(Math.round(x / m))}/bulan</span>` : ''}${d ? ` <span class="save">hemat ${d}%</span>` : ''}`;
+  };
+  // cards side by side: title, price, text and features start at the same height
+  function alignCards() {
+    const parts = ['.p-tag', '.p-name', '.price', '.pdesc', 'ul'];
+    view.querySelectorAll('.grid.pk4, .grid.pk3').forEach((g) => {
+      const cards = [...g.children];
+      cards.forEach((c) => parts.forEach((q) => { const el = c.querySelector(q); if (el) el.style.minHeight = ''; }));
+      const rows = new Map();
+      cards.forEach((c) => { const k = Math.round(c.offsetTop); rows.set(k, [...(rows.get(k) || []), c]); });
+      rows.forEach((row) => {
+        if (row.length < 2) return;
+        parts.forEach((q) => {
+          const els = row.map((c) => c.querySelector(q)).filter(Boolean);
+          const h = Math.max(...els.map((el) => el.getBoundingClientRect().height));
+          els.forEach((el) => { el.style.minHeight = h + 'px'; });
+        });
+      });
+    });
+  }
+  let alignT = 0;
+  addEventListener('resize', () => { clearTimeout(alignT); alignT = setTimeout(() => { if (view.querySelector('.grid.pk4')) alignCards(); }, 120); });
   async function orderPage(productId) {
     const c = await getCatalog();
     if (productId) return orderForm(c, c.products.find((p) => String(p.id) === productId));
     const card = (p) => {
       const tag = { ea_ib: 'KHUSUS IB', ea_share: 'TANPA BIAYA DI DEPAN', ea_trial: `GRATIS ${c.trial_days} HARI` }[p.kind];
       const btn = { ea_ib: 'Ajukan Gratis', ea_share: 'Aktifkan Sharing Profit', ea_trial: 'Mulai Trial' }[p.kind] || 'Pilih Paket';
-      const durs = p.billing === 'monthly' && p.prices ? `<div class="choice" style="margin:8px 0 2px">${durationsOf(p, c).slice(0, 14).map((m) =>
-        `<span class="tiny" style="padding:4px 10px;border:1px solid var(--line);border-radius:20px;background:var(--bg-2)">${durLabel(m)} <b>${rupiah(priceFor(p, m, c))}</b>${savePct(p, m, c) ? ` <span style="color:var(--green)">-${savePct(p, m, c)}%</span>` : ''}</span>`).join('')}</div>` : '';
+      const m0 = durationsOf(p, c)[0];
+      const durs = p.billing === 'monthly' && p.prices ? `<div class="dur-pick"><label>Pilih lama sewa</label>${durSelect(p, c, 'dur', m0, null, `data-prod="${p.id}"`)}
+        <div class="dur-info" data-info="${p.id}">${durInfo(p, c, m0)}</div></div>` : '';
       return `<div class="card product ${p.requires_ib || p.kind === 'ea_share' ? 'gold' : ''}">
-        ${tag ? `<span class="badge ${p.kind === 'ea_share' ? 'b-green' : p.kind === 'ea_trial' ? 'b-blue' : 'b-gold'} ribbon">${tag}</span>` : ''}
-        <h3 style="margin:0;padding-right:${tag ? 120 : 0}px">${esc(p.name)}</h3>
+        <div class="p-tag">${tag ? `<span class="badge ${p.kind === 'ea_share' ? 'b-green' : p.kind === 'ea_trial' ? 'b-blue' : 'b-gold'}">${tag}</span>` : ''}</div>
+        <h3 class="p-name">${esc(p.name)}</h3>
         <div class="price">${priceText(p, c)}</div>
-        <p class="muted small">${esc(p.description)}</p>${durs}
+        <p class="muted small pdesc">${esc(p.description)}</p>
         <ul>${features(p.features)}</ul>
-        <a class="btn ${p.requires_ib || p.kind === 'ea_share' ? 'btn-gold' : 'btn-outline'}" href="#/order/${p.id}">${btn}</a>
+        <div class="p-foot">${durs}<a class="btn btn-block ${p.requires_ib || p.kind === 'ea_share' ? 'btn-gold' : 'btn-outline'}" href="#/order/${p.id}" data-go="${p.id}">${btn}</a></div>
       </div>`;
     };
     const main = c.products.filter((p) => MAIN_KINDS.includes(p.kind)), rest = c.products.filter((p) => !MAIN_KINDS.includes(p.kind));
     view.innerHTML = `${title('Order')}
       <p class="muted small" style="margin:-10px 0 18px">Semua paket memakai EA GOLD HUNTER GARUDA yang sama, terkunci di nomor akun Anda, update otomatis gratis. Bayar lewat transfer bank, USDT TRC20${c.pay && c.pay.gateway ? ' atau QRIS / Virtual Account' : ''}; metode bisa diganti selama belum dibayar.</p>
-      ${main.length ? `<div class="grid c2" style="margin-bottom:30px">${main.map(card).join('')}</div>` : ''}
+      ${main.length ? `<div class="grid pk4" style="margin-bottom:30px">${main.map(card).join('')}</div>` : ''}
       ${rest.length ? `<h2 class="cinzel" style="font-size:1.15rem;margin-bottom:6px">🖥️ Paket + VPS</h2>
         <p class="muted small" style="margin-bottom:14px">EA berjalan 24 jam di VPS. Paket bertanda IB khusus akun di bawah partner kami (<a href="#/ib">panduan</a>).</p>
-        <div class="grid c3">${rest.map(card).join('')}</div>` : ''}`;
+        <div class="grid pk3">${rest.map(card).join('')}</div>` : ''}`;
+    alignCards();
+    view.querySelectorAll('select[data-prod]').forEach((sel) => {
+      const p = c.products.find((x) => String(x.id) === sel.dataset.prod);
+      sel.onchange = () => { view.querySelector(`[data-info="${sel.dataset.prod}"]`).innerHTML = durInfo(p, c, Number(sel.value)); };
+    });
+    view.querySelectorAll('[data-go]').forEach((a) => {
+      a.onclick = () => {
+        const sel = view.querySelector(`select[data-prod="${a.dataset.go}"]`);
+        try { if (sel) sessionStorage.setItem('ghg_order_m', sel.value); else sessionStorage.removeItem('ghg_order_m'); } catch { /* private mode */ }
+      };
+    });
   }
 
   function orderForm(c, p) {
@@ -220,10 +260,9 @@
          <div class="help">Akun harus terdaftar di bawah partner GoldHunter Garuda. <a href="#/ib">Panduan daftar / pindah partner →</a></div>`
       : `<select name="broker_sel"><option>Exness</option><option>HFM</option><option value="">Lainnya…</option></select>
          <input name="broker_other" class="hidden" placeholder="Nama broker" style="margin-top:8px">`;
-    const durations = durationsOf(p, c).map((m, i) => {
-      const d = savePct(p, m, c);
-      return `<label><input type="radio" name="months" value="${m}" ${i === 0 ? 'checked' : ''}><span>${durLabel(m)} ${d ? `<small>-${d}%</small>` : ''}</span></label>`;
-    }).join('');
+    let pre = 0;
+    try { pre = Number(sessionStorage.getItem('ghg_order_m')) || 0; sessionStorage.removeItem('ghg_order_m'); } catch { /* private mode */ }
+    const durations = durSelect(p, c, 'months', durationsOf(p, c).includes(pre) ? pre : durationsOf(p, c)[0]);
     const share = p.billing === 'share', trial = p.billing === 'trial', free = p.billing === 'free';
     const submit = free ? 'Ajukan EA Gratis' : share ? 'Aktifkan Sharing Profit' : trial ? `Mulai Trial ${c.trial_days} Hari` : 'Buat Pesanan';
     view.innerHTML = `
@@ -246,7 +285,7 @@
             <div class="help">Dipakai admin untuk login MetaTrader di VPS kami dan memasang EA. Disimpan terenkripsi. Bukan password Personal Area broker.</div></div>
             <div class="alert info small" style="margin-bottom:16px">🖥️ <b>VPS share dikelola admin.</b> Akun Anda dipasang di server kami dan <b>admin membantu setup sampai EA berjalan</b>. Anda tidak perlu mengurus VPS dan tidak mendapat akses Remote Desktop. Pantau lewat aplikasi MetaTrader di HP dengan <b>password investor</b> (akun pantau).</div>` : ''}
           ${p.includes_vps && !p.managed_vps ? `<div class="alert info small" style="margin-bottom:16px">🖥️ <b>VPS pribadi untuk Anda</b> (${esc(c.vps_spec || "Windows")}). Setelah pesanan selesai, IP, username dan password Remote Desktop muncul di menu <b>Lisensi &amp; VPS</b>. Anda login sendiri lalu memasang MetaTrader dan EA, dan bisa mengatur setting EA sesuka Anda.</div>` : ''}
-          ${p.billing === 'monthly' ? `<div class="field"><label>Lama sewa</label><div class="choice">${durations}</div></div>` : ''}
+          ${p.billing === 'monthly' ? `<div class="field"><label>Lama sewa</label>${durations}</div>` : ''}
           ${share ? `<div class="alert info small" style="margin-bottom:12px">💹 <b>Cara kerja sharing profit:</b> tiap hari <b>Minggu</b> Anda menerima laporan profit tertutup EA per chart untuk 7 hari sebelumnya dan tagihan komisi <b>${c.share.pct}%</b> dari total profitnya. Minggu tanpa profit tidak ditagih. Jatuh tempo <b>${c.share.due_days} hari</b>; bila belum dibayar, EA berhenti membuka posisi baru sampai lunas. EA wajib melapor ke web (WebRequest aktif), karena profit dihitung dari laporan EA.</div>
             <label class="row small" style="color:var(--text);margin-bottom:16px;align-items:flex-start"><input type="checkbox" name="agree_share" style="margin-top:4px"><span>Saya setuju komisi ${c.share.pct}% dari profit EA ditagih tiap minggu, dan EA berhenti membuka posisi baru bila tagihan lewat jatuh tempo.</span></label>` : ''}
           ${p.requires_ib ? `<div class="alert info small" style="margin-bottom:16px">Syarat akun: <b>Standard Cent (USC)</b>, mode <b>hedging</b>, pair XAUUSDc.<br>${capitalLine()}</div>` : ''}
@@ -434,8 +473,7 @@
             <div class="small" style="margin-top:4px">${o.kind === 'share' ? `Komisi ${usd(o.amount_usd)} = <b>${rupiah(o.subtotal)}</b>` : `Tagihan <b>${rupiah(o.subtotal)}</b>${o.months ? ' · ' + durLabel(o.months) : ''}`}</div>
             <div class="tiny muted">Jatuh tempo ${fmtDateTime(o.pay_deadline)}${o.kind === 'share' ? ' (setelah itu EA berhenti membuka posisi baru sampai lunas)' : ''}</div></div>
           ${report ? `<details style="margin-bottom:14px"><summary class="small" style="cursor:pointer;color:var(--gold)">📊 Lihat laporan profit minggu ini</summary>${shareTable(report)}</details>` : ''}
-          ${durs.length ? `<div class="field"><label>Lama perpanjangan (bisa diganti sebelum bayar)</label><div class="choice" id="inv-months">${durs.map((m) =>
-            `<label><input type="radio" name="inv_m" value="${m}" ${m === o.months ? 'checked' : ''}><span>${durLabel(m)} · ${rupiah(priceFor(product, m, c))}</span></label>`).join('')}</div></div>` : ''}
+          ${durs.length ? `<div class="field"><label>Lama perpanjangan (bisa diganti sebelum bayar)</label>${durSelect(product, c, 'inv_m', o.months, durs, 'id="inv-months"')}</div>` : ''}
           ${o.status === 'awaiting_verification' ? `<div class="alert info small" style="margin-bottom:14px">${o.paid_via ? 'Pembayaran sudah diterima; admin sedang mengecek.' : 'Bukti transfer sudah Anda kirim dan sedang dicek admin. Isi form di bawah hanya jika ingin mengganti bukti.'}</div>` : ''}
           <div class="field"><label>Metode pembayaran${o.status === 'awaiting_payment' ? ' (bisa diganti kapan saja sebelum bayar)' : ''}</label>
             <div class="choice" id="pm">${methods.map(([k, l]) => `<label><input type="radio" name="pm" value="${k}" ${k === cur ? 'checked' : ''} ${o.status !== 'awaiting_payment' && k !== cur ? 'disabled' : ''}><span>${l}</span></label>`).join('')}</div></div>
@@ -713,10 +751,7 @@
     const p = c.products.find((x) => x.id === l.product_id) || { price: 0, durations: c.durations };
     const m = modal(`Perpanjang akun ${l.account_number}`, `
       <p class="muted small" style="margin-bottom:14px">${esc(l.product_name)} · berakhir ${fmtDate(l.expires_at)}. Masa baru dihitung dari tanggal berakhir (atau dari hari ini jika sudah habis).</p>
-      <form id="rf"><div class="field"><label>Lama perpanjangan</label><div class="choice">${durationsOf(p, c).map((mo, i) => {
-        const d = savePct(p, mo, c);
-        return `<label><input type="radio" name="months" value="${mo}" ${i === 0 ? 'checked' : ''}><span>${durLabel(mo)} ${d ? `<small>-${d}%</small>` : ''}</span></label>`;
-      }).join('')}</div></div>
+      <form id="rf"><div class="field"><label>Lama perpanjangan</label>${durSelect(p, c, 'months', durationsOf(p, c)[0])}</div>
       <div class="summary"><div class="row between"><span>Total</span><span class="total" id="rt"></span></div></div>
       <button class="btn btn-gold btn-block" style="margin-top:16px" type="submit">Buat Tagihan Perpanjangan</button></form>`);
     const f = $('#rf', m.el);

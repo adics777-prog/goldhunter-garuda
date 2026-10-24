@@ -160,33 +160,18 @@ const SITE = (() => {
   // ---- recommended setup card
   const ICON = { XAUUSD: '🥇', BTCUSD: '₿', EURUSD: '💶', USDJPY: '💴', GBPUSD: '💷', US500: '📊', XAGUSD: '🥈' };
   const PAIR_NAME = () => ({ XAUUSD: TT('Emas', 'Gold'), BTCUSD: 'Bitcoin', EURUSD: 'Euro / Dolar', USDJPY: TT('Dolar / Yen', 'Dollar / Yen'), GBPUSD: 'Pound / Dolar', XAGUSD: TT('Perak', 'Silver') });
-  const RISK = () => ({ low: TT('RISIKO RENDAH', 'LOW RISK'), medium: TT('RISIKO SEDANG', 'MEDIUM RISK'), high: TT('RISIKO TINGGI', 'HIGH RISK') });
-  const money = (v, s) => {
-    if (!(v > 0)) return { main: '-', sub: '' };
-    if (s.account_type === 'cent') return { main: `${num(v)} USC`, sub: TT(`akun cent ≈ $${num(v / 100)}`, `cent account ≈ $${num(v / 100)}`) };
-    return { main: `$${num(v)}`, sub: TT('akun standar', 'standard account') };
-  };
+  // public card: pair + short description; details and the preset are in the member area
   function setupCard(s, ctx = {}) {
-    const cap = money(s.capital_per_lot, s), bud = money(s.budget, s);
-    const lines = tx(s, 'settings').split(/\r?\n/).map((x) => x.trim()).filter(Boolean);
-    const max = ctx.compact ? 3 : 12;
-    let foot = '';
-    if (ctx.compact) foot = `<a class="btn btn-outline btn-sm" href="/setup#s${s.id}">${TT('Lihat detail setup', 'See setup details')}</a>`;
-    else if (!s.has_preset) foot = `<span class="btn btn-ghost btn-sm" aria-disabled="true">${TT('Preset segera tersedia', 'Preset coming soon')}</span>`;
-    else if (ctx.can_download) foot = `<a class="btn btn-gold btn-sm" href="/api/setups/${s.id}/preset" download>⬇ ${TT('Unduh preset', 'Download preset')} (.set)</a>`;
-    else if (ctx.logged_in) foot = `<a class="btn btn-outline btn-sm" href="/harga">${TT('Butuh lisensi aktif · lihat paket', 'Active licence needed · see packages')}</a>`;
-    else foot = `<a class="btn btn-outline btn-sm" href="/masuk?next=/setup">${TT('Masuk / daftar untuk unduh', 'Log in / sign up to download')}</a>`;
+    const sum = tx(s, 'summary');
+    const short = sum.length > 160 ? sum.slice(0, 157).replace(/\s+\S*$/, '') + '…' : sum;
+    const btn = ctx.compact ? [`/setup#s${s.id}`, TT('Lihat setup', 'See setup')]
+      : ctx.logged_in ? ['/member#/setup', TT('Detail & preset di member area', 'Details & preset in the member area')]
+        : ['/masuk?next=/member', TT('Masuk untuk detail & preset', 'Log in for details & preset')];
     return `<article class="setup-card reveal" id="s${s.id}">
       <div class="sc-head"><span class="sc-ico" aria-hidden="true">${ICON[s.symbol] || '📈'}</span>
-        <div class="sc-id"><div class="sc-top"><b>${esc(s.symbol)}</b><span class="risk-pill risk-${esc(s.risk)}">${RISK()[s.risk] || esc(s.risk)}</span></div>
-          <small>${esc(tx(s, 'title') || PAIR_NAME()[s.symbol] || '')}</small></div></div>
-      ${tx(s, 'style') ? `<div class="sc-style">⚙️ ${esc(tx(s, 'style'))}</div>` : ''}
-      ${!ctx.compact && tx(s, 'summary') ? `<p class="sc-sum">${esc(tx(s, 'summary'))}</p>` : ''}
-      <div class="sc-nums"><div><span>${TT('Modal per 0,01 lot', 'Capital per 0.01 lot')}</span><b>${cap.main}</b><small>${cap.sub}</small></div>
-        <div><span>${TT('Saran modal awal', 'Suggested start')}</span><b>${bud.main}</b><small>${bud.sub}</small></div></div>
-      ${lines.length ? `<ul class="sc-list">${lines.slice(0, max).map((l) => `<li>${esc(l)}</li>`).join('')}</ul>` : ''}
-      <div class="sc-foot">${foot}
-        <div class="sc-meta"><span>${TT('Chart', 'Chart')} ${esc(s.timeframe || 'M1')}${s.preset_version ? ` · EA v${esc(s.preset_version)}` : ''}</span><span>${TT('Diperbarui', 'Updated')} ${fmtDate(s.updated_at)}</span></div></div>
+        <div class="sc-id"><b>${esc(s.symbol)}</b><small>${esc(tx(s, 'title') || PAIR_NAME()[s.symbol] || '')}</small></div></div>
+      ${short ? `<p class="sc-sum">${esc(short)}</p>` : ''}
+      <div class="sc-foot"><a class="btn btn-outline btn-sm" href="${btn[0]}">${btn[1]}</a></div>
     </article>`;
   }
   const setups = () => fetch('/api/setups', { credentials: 'same-origin' }).then((r) => r.json());

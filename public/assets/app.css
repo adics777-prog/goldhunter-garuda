@@ -128,6 +128,22 @@ tbody tr.click:hover{background:var(--card-2)}
 .product li{padding:4px 0 4px 24px;position:relative;color:#d6d6de}
 .product li::before{content:"✓";position:absolute;left:0;color:var(--gold);font-weight:700}
 .product .btn{margin-top:auto}
+.product .p-foot{margin-top:auto;display:flex;flex-direction:column;gap:12px}
+.product .p-foot .btn{margin-top:0}
+.product .pdesc{margin:0}
+.product .p-tag{display:flex}
+.product .p-tag:not(:empty){padding-bottom:8px}
+.product .p-tag:empty{display:block}
+.product .p-name{margin:0}
+.grid.pk4,.grid.pk3{grid-template-columns:minmax(0,1fr)}
+@media (min-width:640px){.grid.pk4,.grid.pk3{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media (min-width:1100px){.grid.pk3{grid-template-columns:repeat(3,minmax(0,1fr))}}
+@media (min-width:1360px){.grid.pk4{grid-template-columns:repeat(4,minmax(0,1fr))}}
+.dur-pick{border:1px solid var(--line);border-radius:12px;padding:10px 12px;background:var(--bg-2)}
+.dur-pick label{font-size:.74rem;text-transform:uppercase;letter-spacing:.05em;margin-bottom:6px}
+.dur-info{margin-top:8px;font-size:.86rem}
+.dur-info .save{color:var(--green);font-weight:600}
+select.dur-sel{cursor:pointer;font-weight:500}
 .ribbon{position:absolute;top:14px;right:14px}
 .choice{display:flex;gap:8px;flex-wrap:wrap}
 .choice label{margin:0;cursor:pointer}

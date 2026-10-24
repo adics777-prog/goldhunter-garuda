@@ -1927,12 +1927,14 @@ const recPublic = (r, rel) => {
     capital_per_lot: r.capital_per_lot, budget: r.budget, timeframe: r.timeframe, summary: r.summary, summary_en: r.summary_en, settings: r.settings,
     settings_en: r.settings_en, updated_at: r.updated_at, has_preset: !!p, preset_name: p ? p.name : '', preset_version: p && p.version ? p.version : '' };
 };
+// visitors (not logged in): the pair and a short description only, the setup itself is for members
+const recBrief = (r) => ({ id: r.id, symbol: r.symbol, title: r.title, title_en: r.title_en, summary: r.summary, summary_en: r.summary_en, updated_at: r.updated_at });
 const REC_SQL = `SELECT r.*, f.name AS upload_name FROM rec_setups r LEFT JOIN files f ON f.id=r.preset_file_id AND f.kind='setup_preset'`;
 route('GET', '/setups', 'public', async ({ env, user }) => {
   const s = await getSettings(env);
   const rel = vpsRelease(s);
   const { results } = await env.DB.prepare(REC_SQL + ' WHERE r.active=1 ORDER BY r.sort, r.id').all();
-  return json({ setups: results.map((r) => recPublic(r, rel)), logged_in: !!user, can_download: await hasActiveEaLicence(env, user),
+  return json({ setups: results.map((r) => (user ? recPublic(r, rel) : recBrief(r))), logged_in: !!user, can_download: await hasActiveEaLicence(env, user),
     ea_version: rel ? rel.version || '' : '' });
 });
 route('GET', '/setups/:id/preset', 'member', async ({ env, user, params }) => {
