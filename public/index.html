@@ -223,6 +223,14 @@
   @media(max-width:440px){.steps,.stats{grid-template-columns:1fr}.stat b{font-size:1.8rem}}
   @media(max-width:360px){.nav-in .logo span{font-size:1rem}.logo svg{width:30px;height:30px}}
   .cap-usc{font-size:.85rem;color:var(--muted)}
+  /* pricing (from /api/catalog, prices set in Admin > Produk & Harga) */
+  #plans{grid-template-columns:repeat(auto-fit,minmax(min(250px,100%),1fr));gap:20px}
+  #plans .plan{padding:30px 24px}
+  #plans .price b{font-size:2rem}
+  #plans .price small{color:var(--muted);font-size:.85rem;font-weight:400}
+  #plans select{width:100%;background:#0d0d13;border:1px solid var(--line);border-radius:12px;color:var(--text);padding:10px 12px;font:inherit;margin:4px 0 2px}
+  #plans .save{color:#2ecc71;font-size:.8rem;font-weight:600;min-height:1.2em}
+  .pay-note{text-align:center;color:var(--muted);font-size:.85rem;max-width:760px;margin:26px auto 0}
   .cap-eq{font-size:2rem;color:var(--gold)}
   .pm{padding:26px 0 0}
   .pm[hidden]{display:none}
@@ -296,6 +304,7 @@
       <a href="/live" data-en="Live">Live</a>
       <a href="#member" data-en="Member Results">Hasil Member</a>
       <a href="#strategi" data-en="Strategy">Strategi</a>
+      <a href="#harga" data-en="Pricing">Harga</a>
       <a href="#faq">FAQ</a>
       <a href="/masuk" id="nav-login" data-en="Log in">Masuk</a>
       <a href="#" class="lang-btn" data-lang-toggle>🌐 EN</a>
@@ -449,6 +458,17 @@
   </div>
 </section>
 
+<!-- ============ HARGA ============ -->
+<section id="harga" class="pricing" style="padding-top:30px">
+  <div class="container">
+    <div class="center"><span class="tag" data-en="Pricing">Harga</span></div>
+    <h2 class="sec-title" data-en="Choose How You &lt;span class=&quot;gold-text&quot;&gt;Use It&lt;/span&gt;">Pilih Cara <span class="gold-text">Pakainya</span></h2>
+    <p class="sec-sub" data-en="The same EA in every package, locked to your account number, with free automatic updates. Try it free first.">EA yang sama di setiap paket, terkunci di nomor akun Anda, dengan update otomatis gratis. Coba gratis dulu.</p>
+    <div class="plans" id="plans"><div class="tr-empty" style="grid-column:1/-1" data-en="Loading prices…">Memuat harga…</div></div>
+    <p class="pay-note" id="pay-note" data-en="Pay by bank transfer, USDT (TRC20) or QRIS / virtual account. Packages with a VPS are available in the member area.">Bayar lewat transfer bank, USDT (TRC20) atau QRIS / virtual account. Paket dengan VPS tersedia di member area.</p>
+  </div>
+</section>
+
 <!-- ============ AKSES (soft) ============ -->
 <section id="akses" style="padding-top:20px">
   <div class="container">
@@ -477,7 +497,7 @@
       <details class="reveal"><summary data-en="Is there a stop loss?">Apakah ada stop loss?</summary><p data-en="There is no stop loss per position. Risk is handled by the two-step DD reduction, the profit pocket, the widening steps and an optional equity guard that closes everything at a loss limit you choose.">Tidak ada stop loss per posisi. Risiko ditangani DD reduction dua tahap, kantong profit, jarak yang melebar, dan pengaman equity opsional yang menutup semua posisi di batas rugi pilihan Anda.</p></details>
       <details class="reveal"><summary data-en="Which broker and platform?">Broker dan platform apa?</summary><p data-en="MetaTrader 5, preferably a cent account (our live accounts run on Exness). If your broker quotes gold with 2 decimals instead of 3, enter one tenth of the point values (1000 → 100).">MetaTrader 5, disarankan akun cent (akun live kami berjalan di Exness). Bila broker Anda menampilkan harga emas 2 desimal, bukan 3, isi sepersepuluh nilai poinnya (1000 → 100).</p></details>
       <details class="reveal"><summary data-en="How do my results appear?">Bagaimana hasil saya tampil?</summary><p data-en="Your EA reports to the member results board: trading time, capital, profit in dollars and % of capital. Your name is censored, and you can ask the admin to hide it completely.">EA Anda melapor ke papan hasil member: lama trading, modal, profit dalam dolar dan persen modal. Nama Anda disensor, dan Anda bisa minta admin menyembunyikannya sama sekali.</p></details>
-      <details class="reveal"><summary data-en="How much does it cost?">Berapa biayanya?</summary><p data-en="Ask the admin on WhatsApp; the options depend on your broker and whether you need a VPS. Watching the live reports is always free.">Tanyakan ke admin lewat WhatsApp; pilihannya tergantung broker Anda dan perlu VPS atau tidak. Memantau laporan live selalu gratis.</p></details>
+      <details class="reveal"><summary data-en="How much does it cost?">Berapa biayanya?</summary><p data-en="See the &lt;a href=&quot;#harga&quot; style=&quot;color:var(--gold)&quot;&gt;Pricing&lt;/a&gt; section: monthly or yearly rental, free for accounts under our IB, profit sharing (a weekly commission only on profit) or a free trial. Watching the live reports is always free.">Lihat bagian <a href="#harga" style="color:var(--gold)">Harga</a>: sewa bulanan atau tahunan, gratis untuk akun di bawah IB kami, sharing profit (komisi mingguan hanya dari profit) atau trial gratis. Memantau laporan live selalu gratis.</p></details>
     </div>
   </div>
 </section>
@@ -534,11 +554,57 @@
   });
   // Sembunyikan tombol WhatsApp sampai nomor admin diisi di Admin > Pengaturan
   document.querySelectorAll('.order').forEach(el => { el.style.display = 'none'; });
+  // ---- Pricing: the four EA packages with their current prices (rent: one price per duration)
+  let CAT = null;
+  const rp = (n) => 'Rp ' + Math.round(n || 0).toString().replace(/\B(?=(\d{3})+(?!\d))/g, '.');
+  const durL = (m) => m === 18 ? T('1,5 tahun', '1.5 years') : m >= 12 && m % 12 === 0 ? `${m / 12} ${T('tahun', m === 12 ? 'year' : 'years')}` : `${m} ${T('bulan', m === 1 ? 'month' : 'months')}`;
+  const tx = (p, k) => (window.GHG_LANG === 'en' && p[k + '_en']) || p[k] || '';
+  function renderPlans() {
+    const box = document.getElementById('plans');
+    const list = CAT ? CAT.products.filter((p) => ['ea_rent', 'ea_ib', 'ea_share', 'ea_trial'].includes(p.kind)) : [];
+    if (!list.length) { box.innerHTML = `<div class="tr-empty" style="grid-column:1/-1">${T('Hubungi admin untuk harga terbaru.', 'Ask the admin for the current prices.')}</div>`; return; }
+    const order = { ea_trial: 0, ea_rent: 1, ea_share: 2, ea_ib: 3 };
+    list.sort((a, b) => order[a.kind] - order[b.kind]);
+    box.innerHTML = list.map((p) => {
+      const feats = tx(p, 'features').split(/\r?\n/).filter(Boolean).map((f) => `<li>${escH(f)}</li>`).join('');
+      let price = '', extra = '';
+      if (p.kind === 'ea_rent' && p.prices) {
+        const ms = Object.keys(p.prices).map(Number).sort((a, b) => a - b);
+        const def = ms.includes(12) ? 12 : ms[0];
+        extra = `<select data-rent="${p.id}">${ms.map((m) => `<option value="${m}" ${m === def ? 'selected' : ''}>${durL(m)} · ${rp(p.prices[m])}</option>`).join('')}</select><div class="save" data-save="${p.id}"></div>`;
+        price = `<b data-rp="${p.id}">${rp(p.prices[def])}</b><small data-rl="${p.id}">/ ${durL(def)}</small>`;
+      } else if (p.kind === 'ea_share') price = `<b>${CAT.share.pct}%</b><small>${T('dari profit mingguan', 'of the weekly profit')}</small>`;
+      else if (p.kind === 'ea_trial') price = `<b>${T('GRATIS', 'FREE')}</b><small>${CAT.trial_days} ${T('hari', 'days')}</small>`;
+      else price = `<b>${T('GRATIS', 'FREE')}</b><small>${T('akun di bawah IB kami', 'accounts under our IB')}</small>`;
+      const best = p.kind === 'ea_share';
+      const cta = { ea_trial: T('Coba Gratis', 'Try Free'), ea_rent: T('Sewa Sekarang', 'Rent Now'), ea_share: T('Mulai Sharing', 'Start Sharing'), ea_ib: T('Ajukan Gratis', 'Apply Free') }[p.kind];
+      return `<div class="plan ${best ? 'best' : ''}">${best ? `<div class="ribbon">${T('TANPA BIAYA DI DEPAN', 'NO UPFRONT FEE')}</div>` : ''}
+        <h3>${escH(tx(p, 'name'))}</h3><p class="desc">${escH(tx(p, 'description'))}</p>
+        <div class="price">${price}</div>${extra}<ul>${feats}</ul>
+        <a class="btn ${best ? 'btn-gold' : 'btn-outline'}" href="/member#/order/${p.id}">${cta}</a></div>`;
+    }).join('');
+    box.querySelectorAll('[data-rent]').forEach((sel) => {
+      const p = CAT.products.find((x) => String(x.id) === sel.dataset.rent);
+      const upd = () => {
+        const m = Number(sel.value), v = p.prices[m], full = p.price * m;
+        box.querySelector(`[data-rp="${p.id}"]`).textContent = rp(v);
+        box.querySelector(`[data-rl="${p.id}"]`).textContent = '/ ' + durL(m);
+        box.querySelector(`[data-save="${p.id}"]`).textContent = full > v ? T(`Hemat ${Math.round((1 - v / full) * 100)}% (${rp(full - v)})`, `Save ${Math.round((1 - v / full) * 100)}% (${rp(full - v)})`) : '';
+      };
+      sel.onchange = upd; upd();
+    });
+    const pays = [T('transfer bank', 'bank transfer'), CAT.pay && CAT.pay.usdt ? 'USDT (TRC20)' : '', CAT.pay && CAT.pay.gateway ? 'QRIS / virtual account' : ''].filter(Boolean);
+    const note = document.getElementById('pay-note');
+    note.removeAttribute('data-en');
+    note.textContent = T(`Bayar lewat ${pays.join(', ')}. Paket dengan VPS tersedia di member area.`, `Pay by ${pays.join(', ')}. Packages with a VPS are available in the member area.`);
+  }
+  document.addEventListener('ghg:lang', renderPlans);
   fetch('/api/catalog').then(r => r.json()).then(c => {
+    CAT = c; renderPlans();
     if (!c.whatsapp) return;
     setWa(c.whatsapp.replace(/\D/g, '').replace(/^0/, '62'));
     document.querySelectorAll('.order').forEach(el => { el.style.display = ''; });
-  }).catch(() => {});
+  }).catch(() => renderPlans());
 
   // Navbar scroll + burger
   const nav = document.getElementById('nav'), menu = document.getElementById('menu');
