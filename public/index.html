@@ -32,7 +32,7 @@
 {"@context":"https://schema.org","@type":"WebSite","name":"GoldHunter Garuda","url":"https://goldhuntergaruda.com/","inLanguage":"id-ID"},
 {"@context":"https://schema.org","@type":"SoftwareApplication","name":"GOLD HUNTER GARUDA","applicationCategory":"FinanceApplication","operatingSystem":"MetaTrader 5 (Windows)","description":"Expert Advisor MetaTrader 5 untuk emas XAUUSD dan semua pair: marty basket averaging dengan DD reduction, kantong profit, mode BARBAR, Market Liar dan mode berita. Setup rekomendasi per pair, installer 1 file, update otomatis.","url":"https://goldhuntergaruda.com/","offers":{"@type":"Offer","price":"0","priceCurrency":"IDR","description":"Trial gratis 7 hari; sewa, sharing profit dan EA gratis untuk akun IB"},"publisher":{"@type":"Organization","name":"GoldHunter Garuda"}},
 {"@context":"https://schema.org","@type":"FAQPage","mainEntity":[
-{"@type":"Question","name":"Apakah GOLD HUNTER GARUDA pasti profit?","acceptedAnswer":{"@type":"Answer","text":"Tidak. Tidak ada sistem trading yang menjamin profit. GOLD HUNTER GARUDA adalah EA martingale / averaging tanpa stop loss per posisi: sebagian besar basket selesai profit, tetapi tren panjang bisa membuat floating dalam dan drawdown besar tetap mungkin."}},
+{"@type":"Question","name":"Apakah GOLD HUNTER GARUDA pasti profit?","acceptedAnswer":{"@type":"Answer","text":"Tidak. Tidak ada sistem trading yang menjamin profit. GOLD HUNTER GARUDA adalah EA martingale / averaging dengan stop loss equity (setting 9.1, batas rugi yang Anda pilih): sebagian besar basket selesai profit, tetapi tren panjang bisa membuat floating dalam dan drawdown besar tetap mungkin."}},
 {"@type":"Question","name":"Pair apa saja yang bisa dipakai?","acceptedAnswer":{"@type":"Answer","text":"Fokus utama emas (XAUUSD), tetapi EA jalan di semua pair. Setup rekomendasi dari pusat tersedia untuk XAUUSD, USDJPY, EURUSD dan BTCUSD, pair lain menyusul."}},
 {"@type":"Question","name":"Berapa modal yang disarankan?","acceptedAnswer":{"@type":"Answer","text":"Tergantung pair dan setup. Setup rekomendasi menuliskan modal per 0,01 lot, misalnya emas konservatif 40.000 USC (sekitar $400) di akun cent per 0,01 lot."}},
 {"@type":"Question","name":"Bagaimana cara memasangnya?","acceptedAnswer":{"@type":"Answer","text":"Unduh satu file installer dari member area, taruh di C:\\GOLD HUNTER GARUDA lalu klik dua kali. EA dan preset terpasang di setiap MT5 yang login di akun berlisensi, dan update EA serta preset masuk otomatis."}},
@@ -80,12 +80,6 @@
   </div>
 </section>
 
-<div class="wrap">
-  <div class="risk-banner reveal" role="note">
-    <span class="ri" aria-hidden="true">⚠️</span>
-    <div data-en="&lt;b&gt;Honest first:&lt;/b&gt; GOLD HUNTER GARUDA is a &lt;b&gt;martingale / averaging&lt;/b&gt; EA without a stop loss per position. It adds positions while price moves against it, so the floating loss can get deep in a long trend. &lt;b&gt;No profit is guaranteed&lt;/b&gt; and you can lose part or all of your capital. Only use money you can afford to lose. &lt;a href=&quot;#risiko&quot;&gt;Full risk warning&lt;/a&gt;"><b>Jujur dulu:</b> GOLD HUNTER GARUDA adalah EA <b>martingale / averaging</b> tanpa stop loss per posisi. EA menambah posisi saat harga melawan, sehingga floating bisa dalam saat tren panjang. <b>Tidak ada jaminan profit</b> dan Anda bisa kehilangan sebagian atau seluruh modal. Pakai hanya dana yang siap Anda tanggung. <a href="#risiko">Peringatan risiko lengkap</a></div>
-  </div>
-</div>
 
 <!-- ============ CARA KERJA ============ -->
 <span id="strategi" aria-hidden="true"></span>
@@ -224,7 +218,7 @@
       <h2 class="sec-title" data-en="Frequently Asked &lt;span class=&quot;gold-text&quot;&gt;Questions&lt;/span&gt;">Pertanyaan <span class="gold-text">Umum</span></h2>
     </div>
     <div class="faq">
-      <details><summary data-en="Is GOLD HUNTER GARUDA guaranteed to profit?">Apakah GOLD HUNTER GARUDA pasti profit?</summary><p data-en="No. No trading system guarantees profit. It is a martingale / averaging EA without a stop loss per position: most baskets close in profit, but a long trend can push the floating loss deep and a big drawdown is possible.">Tidak. Tidak ada sistem trading yang menjamin profit. Ini EA martingale / averaging tanpa stop loss per posisi: sebagian besar basket selesai profit, tetapi tren panjang bisa membuat floating dalam dan drawdown besar tetap mungkin.</p></details>
+      <details><summary data-en="Is GOLD HUNTER GARUDA guaranteed to profit?">Apakah GOLD HUNTER GARUDA pasti profit?</summary><p data-en="No. No trading system guarantees profit. It is a martingale / averaging EA with an equity stop loss (setting 9.1, a loss limit you choose): most baskets close in profit, but a long trend can push the floating loss deep and a big drawdown is possible.">Tidak. Tidak ada sistem trading yang menjamin profit. Ini EA martingale / averaging dengan stop loss equity (setting 9.1, batas rugi yang Anda pilih): sebagian besar basket selesai profit, tetapi tren panjang bisa membuat floating dalam dan drawdown besar tetap mungkin.</p></details>
       <details><summary data-en="Which pairs can I use?">Pair apa saja yang bisa dipakai?</summary><p data-en="The focus is gold (XAUUSD), but the EA runs on every pair. HQ publishes recommended setups for XAUUSD, USDJPY, EURUSD and BTCUSD; more pairs will follow.">Fokus utamanya emas (XAUUSD), tetapi EA jalan di semua pair. Pusat menerbitkan setup rekomendasi untuk XAUUSD, USDJPY, EURUSD dan BTCUSD; pair lain menyusul.</p></details>
       <details><summary data-en="How much capital do I need?">Berapa modal yang dibutuhkan?</summary><p data-en="Each recommended setup states its capital per 0.01 lot, for example 40,000 USC (about $400) on a cent account for the conservative gold setup. A bigger capital per 0.01 lot is safer.">Setiap setup rekomendasi menuliskan modal per 0,01 lot, misalnya 40.000 USC (sekitar $400) di akun cent untuk setup emas konservatif. Makin besar modal per 0,01 lot, makin aman.</p></details>
       <details><summary data-en="Can I run several setups?">Boleh menjalankan beberapa setup?</summary><p data-en="Yes. Put the EA on several charts and give each chart a different magic number (input 1.1). Every chart becomes its own setup with its own results, so you can compare your setup with the recommended one.">Boleh. Pasang EA di beberapa chart dan beri magic number berbeda di tiap chart (input 1.1). Setiap chart menjadi setup sendiri dengan hasilnya sendiri, jadi Anda bisa membandingkan setup Anda dengan setup rekomendasi.</p></details>
@@ -253,7 +247,7 @@
 </main>
 
 <script src="/assets/i18n.js?v=489e4256"></script>
-<script src="/assets/site.js?v=63068651"></script>
+<script src="/assets/site.js?v=720d3dfb"></script>
 <script src="/assets/ghlive.js?v=288b5d0d"></script>
 <script src="/assets/ghhud.js?v=7dd2c601"></script>
 <script>

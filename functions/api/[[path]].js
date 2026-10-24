@@ -727,7 +727,7 @@ const CONTENT_TOPICS = [
   'Cara kerja: kenapa jarak layer melebar sesudah layer 4',
   'Cara kerja: kenapa seri baru menunggu harga mundur dulu sesudah TP',
   'Transparansi: kenapa hasil EA dilaporkan live tiap menit, termasuk saat rugi',
-  'Jujur soal risiko: kelemahan EA martingale / averaging tanpa stop loss',
+  'Jujur soal risiko: kenapa EA martingale / averaging butuh stop loss equity',
   'Edukasi: apa itu floating dan drawdown, dan kenapa harus dipantau',
   'Edukasi: kenapa akun cent cocok untuk modal kecil ($100 = 10.000 USC)',
   'Edukasi: lot ikut balance (autocompound), lot membesar saat akun tumbuh',
@@ -764,7 +764,7 @@ async function qwenJson(env, s, system, user) {
 async function eduScript(env, s, lang, data) {
   const L = lang === 'en' ? 'English' : 'Bahasa Indonesia (santai, jelas, gaya TikTok edukatif)';
   return qwenJson(env, s, `You write short educational vertical videos (25-35 seconds, TikTok / Reels / Shorts) for GOLD HUNTER GARUDA (goldhuntergaruda.com), an Expert Advisor (trading robot) for MetaTrader 5 / 4, mainly for gold. Write in ${L}.
-Teach one topic clearly and correctly for beginners. Use only the GOLD HUNTER GARUDA facts given; never invent results or numbers. Never promise profit, never say "pasti untung" or "passive income"; be honest that the EA has no stop loss per position and that drawdown can be deep. Mention GOLD HUNTER GARUDA naturally (mostly in the last point and the cta).
+Teach one topic clearly and correctly for beginners. Use only the GOLD HUNTER GARUDA facts given; never invent results or numbers. Never promise profit, never say "pasti untung" or "passive income"; be honest that drawdown can be deep and that the equity stop loss (setting 9.1) is the loss limit. Mention GOLD HUNTER GARUDA naturally (mostly in the last point and the cta).
 Style: the hook must stop the scroll in 2 seconds (pick one: a sharp question, a common mistake, a surprising fact, or "stop doing X"). Speak like a friendly mentor, short punchy sentences, explain every term with an everyday analogy, give one concrete example (e.g. a gold basket of 5 layers closing together at its average price plus the target). Each point adds something new, no filler, no repeated words. Titles are catchy and readable in one glance.
 Return JSON only: {"hook": "max 8 words that stop the scroll", "scenes": [{"id": "hook", "say": "...", "text": "..."}, {"id": "point", "icon": "one emoji", "title": "2-5 words", "say": "1-2 short sentences", "text": "short subtitle"} x3, {"id": "cta", "say": "invite to follow the channel and check the live results at goldhunter garuda dot com", "text": "..."}], "caption": "3-4 short lines ending with goldhuntergaruda.com/live and a one-line risk note", "hashtags": "5-8 hashtags"}
 "say" is read by a voice (website as "goldhunter garuda dot com"), "text" is the subtitle (website written goldhuntergaruda.com). Total narration 70-90 words.`,
@@ -778,7 +778,7 @@ const GARUDA_FACTS = ['GOLD HUNTER GARUDA is an Expert Advisor (trading robot) f
   'profit pocket: part of every closed profit is saved and later pays off the oldest losing position of a long basket',
   'after a take profit the next series waits for a small pullback; high-impact news from the MT5 calendar can hold new series; orders wait while the spread is too wide',
   'the first lot follows the balance (auto-compound); an optional equity guard closes everything at a loss limit the user chooses',
-  'there is no stop loss per position: a long one-way trend can make the floating loss and the drawdown deep, and the EA does not guarantee profit',
+  'stop loss: setting 9.1 closes every position when the floating loss reaches the % limit set for the account; before that limit a long one-way trend can still make the drawdown deep, and the EA does not guarantee profit',
   'every EA instance reports from a real account to goldhuntergaruda.com/live every minute, losses included; Telegram gets a picture report'];
 
 route('POST', '/builder/content/claim', 'builder', async ({ env }) => {
