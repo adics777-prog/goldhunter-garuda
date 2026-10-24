@@ -19,8 +19,8 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@700;900&family=Poppins:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="/assets/app.css?v=2a3c1a22">
-<link rel="stylesheet" href="/assets/site.css?v=e8abdc80">
+<link rel="stylesheet" href="/assets/app.css?v=4c97ef78">
+<link rel="stylesheet" href="/assets/site.css?v=0f4268d9">
 <script type="application/ld+json">{"@context":"https://schema.org","@type":"HowTo","name":"Cara pasang EA GOLD HUNTER GARUDA di MetaTrader 5","totalTime":"PT10M","tool":[{"@type":"HowToTool","name":"MetaTrader 5 (Windows PC atau VPS)"}],"step":[
 {"@type":"HowToStep","name":"Aktifkan lisensi","text":"Daftar dan pilih paket di member area. Trial 7 hari dan sharing profit langsung aktif."},
 {"@type":"HowToStep","name":"Login MetaTrader 5","text":"Login akun berlisensi dengan password trading dan centang Save password."},
@@ -141,7 +141,7 @@
           <ol>
             <li data-en="Open the chart of the pair, for example XAUUSD (M1).">Buka chart pair-nya, misalnya XAUUSD (M1).</li>
             <li data-en="Navigator → Expert Advisors → drag &lt;b&gt;GOLD HUNTER GARUDA&lt;/b&gt; onto the chart.">Navigator → Expert Advisors → seret <b>GOLD HUNTER GARUDA</b> ke chart.</li>
-            <li data-en="Inputs → &lt;b&gt;Load&lt;/b&gt; → pick the recommended preset of that pair (see &lt;a href=&quot;/setup&quot;&gt;Setups&lt;/a&gt;).">Inputs → <b>Load</b> → pilih preset rekomendasi pair tersebut (lihat <a href="/setup">Setup</a>).</li>
+            <li data-en="Inputs → &lt;b&gt;Load&lt;/b&gt; → pick the preset of that pair, it is already in the list (see the &lt;a href=&quot;#preset&quot;&gt;illustrated guide&lt;/a&gt;).">Inputs → <b>Load</b> → pilih preset pair tersebut, sudah ada di daftar (lihat <a href="#preset">panduan bergambar</a>).</li>
             <li data-en="Tick &lt;b&gt;Allow Algo Trading&lt;/b&gt;, OK. The panel appears with the licence type and countdown.">Centang <b>Allow Algo Trading</b>, OK. Panel muncul dengan jenis lisensi dan hitung mundurnya.</li>
           </ol>
         </div>
@@ -157,6 +157,17 @@
       </div>
     </div>
   </div>
+
+  <section class="sec alt" id="preset">
+    <div class="wrap">
+      <div class="sec-head reveal">
+        <span class="eyebrow" data-en="📖 Illustrated guide">📖 Panduan bergambar</span>
+        <h2 class="sec-title" data-en="Use a Preset in &lt;span class=&quot;gold-text&quot;&gt;4 Steps&lt;/span&gt;">Memakai Preset dalam <span class="gold-text">4 Langkah</span></h2>
+        <p class="sec-sub" data-en="The installer already copied the preset of every pair into MetaTrader and keeps it updated. The setup running on a chart is never changed.">Preset tiap pair sudah disalin installer ke MetaTrader dan ikut update otomatis. Setup yang sedang jalan di chart tidak pernah diubah.</p>
+      </div>
+      <div data-preset-guide></div>
+    </div>
+  </section>
 
   <!-- help topics -->
   <section class="sec">
@@ -182,7 +193,7 @@
       <div class="card" id="multi">
         <h3 data-en="🧩 Several setups at once">🧩 Beberapa setup sekaligus</h3>
         <p class="small muted" data-en="One licence = one account number, as many charts as you like. Give every chart its own &lt;b&gt;magic number&lt;/b&gt; (input 1.1) and name (1.3): each chart is then a separate setup with its own baskets and results. Two charts with the same magic share their positions, so always change it.">Satu lisensi = satu nomor akun, chart sebanyak apa pun. Beri setiap chart <b>magic number</b> sendiri (input 1.1) dan nama (1.3): tiap chart menjadi setup terpisah dengan basket dan hasilnya sendiri. Dua chart dengan magic sama berbagi posisi, jadi selalu ganti.</p>
-        <p class="small" style="margin-top:8px"><a href="/setup#setup-sendiri" data-en="Tips for your own setups →">Tips setup sendiri →</a></p>
+
       </div>
       <div class="card" id="vps">
         <h3 data-en="🖥️ New PC or moving to another VPS">🖥️ PC baru atau pindah VPS</h3>
@@ -213,6 +224,7 @@
 </main>
 
 <script src="/assets/i18n.js?v=489e4256"></script>
-<script src="/assets/site.js?v=9d5e3635"></script>
+<script src="/assets/presetguide.js?v=0d37bec8"></script>
+<script src="/assets/site.js?v=40e45176"></script>
 </body>
 </html>

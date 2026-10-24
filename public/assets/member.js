@@ -172,11 +172,13 @@
         <div style="margin-top:auto">${!s.has_preset ? '<span class="btn btn-ghost btn-sm btn-block" aria-disabled="true">Preset segera tersedia</span>'
           : st.can_download ? `<a class="btn btn-gold btn-sm btn-block" href="/api/setups/${s.id}/preset" download>⬇ Unduh preset (.set)</a>` : '<a class="btn btn-outline btn-sm btn-block" href="#/order">Butuh lisensi aktif · pilih paket</a>'}</div></div>`;
     };
-    view.innerHTML = `${title('🎯 Setup Rekomendasi', '<a class="btn btn-ghost btn-sm" href="/setup" target="_blank">Versi publik</a>')}
-      <div class="alert info small" style="margin-bottom:18px">Satu EA, setup per pair. Installer sudah memasang semua preset rekomendasi ke <span class="mono">MQL5\\Presets</span> dan memperbaruinya otomatis:
-        di chart buka Inputs → <b>Load</b> → pilih preset. Mau setup sendiri? Pakai <b>magic number berbeda</b> (input 1.1) di tiap chart supaya hasilnya terpisah dan bisa dibandingkan.</div>
+    view.innerHTML = `${title('🎯 Setup Rekomendasi')}
+      <div class="card" style="margin-bottom:18px"><h3 style="margin-bottom:4px">📖 Cara memakai preset</h3>
+        <p class="small muted" style="margin-bottom:14px">Installer sudah memasang semua preset ke <span class="mono">MQL5\\Presets</span> dan memperbaruinya otomatis. Mau setup sendiri? Pakai <b>magic number berbeda</b> (input 1.1) di tiap chart supaya hasilnya terpisah dan bisa dibandingkan.</p>
+        <div data-preset-guide></div></div>
       ${st.setups.length ? `<div class="grid c2">${st.setups.map(card).join('')}</div>` : '<div class="card empty">Setup rekomendasi sedang disiapkan pusat.</div>'}
       <p class="tiny muted" style="margin-top:16px">Tingkat risiko bersifat relatif antar setup. Semua setup EA martingale / averaging tetap bisa mengalami floating dalam dan kehilangan modal; modal per 0,01 lot adalah panduan, bukan jaminan.</p>`;
+    if (window.GHG_PRESET_GUIDE) GHG_PRESET_GUIDE.render();
   }
 
   // ------------------------------------------------------------------ order

@@ -3,15 +3,15 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title data-en="Recommended Setups per Pair · GOLD HUNTER GARUDA">Setup Rekomendasi per Pair · GOLD HUNTER GARUDA</title>
-<meta name="description" content="Setup rekomendasi EA GOLD HUNTER GARUDA per pair (XAUUSD, USDJPY, EURUSD, BTCUSD), disiapkan pusat dan diperbarui mengikuti versi EA. Detail dan preset untuk member berlisensi.">
+<title data-en="Supported Pairs · GOLD HUNTER GARUDA">Pair yang Didukung · GOLD HUNTER GARUDA</title>
+<meta name="description" content="GOLD HUNTER GARUDA fokus emas XAUUSD dan jalan di semua pair: USDJPY, EURUSD, BTCUSD dan lainnya. Preset tiap pair dari pusat otomatis terpasang, dengan panduan bergambar.">
 <meta name="robots" content="index,follow">
 <meta name="theme-color" content="#07070a">
 <link rel="canonical" href="https://goldhuntergaruda.com/setup">
 <meta property="og:type" content="website">
 <meta property="og:url" content="https://goldhuntergaruda.com/setup">
-<meta property="og:title" content="Setup Rekomendasi GOLD HUNTER GARUDA">
-<meta property="og:description" content="Satu EA, satu setup rekomendasi per pair, disiapkan pusat untuk member.">
+<meta property="og:title" content="Pair yang Didukung GOLD HUNTER GARUDA">
+<meta property="og:description" content="Fokus emas, jalan di semua pair, preset otomatis terpasang.">
 <meta property="og:image" content="https://goldhuntergaruda.com/assets/brand/goldhunter-garuda-banner-1200x630.jpg">
 <meta name="twitter:card" content="summary_large_image">
 <link rel="icon" href="/assets/brand/favicon.ico">
@@ -19,49 +19,37 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@700;900&family=Poppins:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="/assets/app.css?v=2a3c1a22">
-<link rel="stylesheet" href="/assets/site.css?v=e8abdc80">
+<link rel="stylesheet" href="/assets/app.css?v=4c97ef78">
+<link rel="stylesheet" href="/assets/site.css?v=0f4268d9">
 </head>
 <body>
-<main>
+<main id="main">
   <section class="page-hero">
     <div class="wrap">
-      <span class="eyebrow" data-en="🎯 Recommended setups">🎯 Setup rekomendasi</span>
-      <h1 data-en="One EA, &lt;span class=&quot;gold-text&quot;&gt;a Setup per Pair&lt;/span&gt;">Satu EA, <span class="gold-text">Setup per Pair</span></h1>
-      <p data-en="One GOLD HUNTER GARUDA EA for every pair. HQ prepares a recommended setup for each pair and keeps it in step with every EA version; members get the details and the preset in the member area.">Satu EA GOLD HUNTER GARUDA untuk semua pair. Pusat menyiapkan setup rekomendasi untuk tiap pair dan menyesuaikannya dengan setiap versi EA; detail dan presetnya untuk member di member area.</p>
+      <span class="eyebrow" data-en="🌐 Pairs">🌐 Pair</span>
+      <h1 data-en="Gold First, &lt;span class=&quot;gold-text&quot;&gt;Runs on Every Pair&lt;/span&gt;">Fokus Emas, <span class="gold-text">Jalan di Semua Pair</span></h1>
+      <p data-en="One GOLD HUNTER GARUDA EA for every pair. HQ prepares the preset of each pair, keeps it in step with every EA version, and the installer puts it into your MetaTrader automatically.">Satu EA GOLD HUNTER GARUDA untuk semua pair. Preset tiap pair disiapkan pusat, disesuaikan dengan setiap versi EA, dan otomatis terpasang di MetaTrader Anda lewat installer.</p>
     </div>
   </section>
-
-  <div class="wrap">
-    <div class="note" id="dl-state" style="margin-bottom:22px" data-en="Loading…">Memuat…</div>
-    <div class="setups" id="setups"><div class="empty-box" style="grid-column:1/-1" data-en="Loading setups…">Memuat setup…</div></div>
-  </div>
-
+  <section class="sec tight">
+    <div class="wrap"><div class="pairs" id="pair-tiles"></div></div>
+  </section>
+  <section class="sec alt" id="preset">
+    <div class="wrap">
+      <div class="sec-head reveal">
+        <span class="eyebrow" data-en="📖 Illustrated guide">📖 Panduan bergambar</span>
+        <h2 class="sec-title" data-en="Presets Installed, &lt;span class=&quot;gold-text&quot;&gt;Just Pick One&lt;/span&gt;">Preset Otomatis, <span class="gold-text">Tinggal Pilih</span></h2>
+        <p class="sec-sub" data-en="The installer already copied every preset into MetaTrader and keeps it updated. On the chart it takes these four steps.">Installer sudah menyalin semua preset ke MetaTrader dan memperbaruinya sendiri. Di chart cukup empat langkah ini.</p>
+      </div>
+      <div data-preset-guide></div>
+      <div class="sec-foot"><a href="/harga#trial" class="btn btn-gold" data-en="Try 7 Days Free">Coba Trial 7 Hari</a> <a href="/cara-pasang" class="btn btn-outline" data-en="Full Install Guide">Cara Pasang Lengkap</a></div>
+    </div>
+  </section>
 </main>
 
 <script src="/assets/i18n.js?v=489e4256"></script>
-<script src="/assets/site.js?v=9d5e3635"></script>
-<script>
-(() => {
-  const T2 = SITE.TT;
-  let D = null;
-  function render() {
-    const box = document.getElementById('setups'), st = document.getElementById('dl-state');
-    st.removeAttribute('data-en');
-    if (!D) { box.innerHTML = `<div class="empty-box" style="grid-column:1/-1">${T2('Setup belum bisa dimuat. Muat ulang halaman.', 'The setups could not be loaded. Please reload.')}</div>`; st.hidden = true; return; }
-    st.innerHTML = D.can_download
-      ? T2('✔ <b>Lisensi aktif.</b> Detail setiap setup dan unduhan preset ada di <a href="/member#/setup">member area › Setup Rekomendasi</a>; installer sudah memasang presetnya ke MetaTrader Anda.', '✔ <b>Active licence.</b> The details of every setup and the preset downloads are in <a href="/member#/setup">member area › Recommended setups</a>; the installer already put the presets into your MetaTrader.')
-      : D.logged_in
-        ? T2('Detail setup dan preset tersedia di <a href="/member#/setup">member area</a> selama Anda punya <b>lisensi EA aktif</b>. Belum punya? <a href="/harga#trial">Mulai trial 7 hari gratis</a>.', 'Setup details and presets are in the <a href="/member#/setup">member area</a> while you have an <b>active EA licence</b>. None yet? <a href="/harga#trial">Start the free 7-day trial</a>.')
-        : T2('Detail setup dan preset tersedia untuk member dengan lisensi aktif: <a href="/masuk?next=/member">masuk</a> atau <a href="/daftar">daftar</a> (trial 7 hari gratis).', 'Setup details and presets are for members with an active licence: <a href="/masuk?next=/member">log in</a> or <a href="/daftar">sign up</a> (free 7-day trial).');
-    box.innerHTML = D.setups.length ? D.setups.map((s) => SITE.setupCard(s, D)).join('')
-      : `<div class="empty-box" style="grid-column:1/-1">${T2('Setup rekomendasi sedang disiapkan pusat.', 'HQ is preparing the recommended setups.')}</div>`;
-    SITE.reveal(box);
-    if (location.hash && /^#s\d+$/.test(location.hash)) { const el = document.querySelector(location.hash); if (el) { el.classList.add('show'); el.scrollIntoView({ block: 'start' }); } }
-  }
-  SITE.setups().then((d) => { D = d; render(); }).catch(() => { D = null; render(); });
-  document.addEventListener('ghg:lang', () => { if (D) render(); });
-})();
-</script>
+<script src="/assets/site.js?v=40e45176"></script>
+<script src="/assets/presetguide.js?v=0d37bec8"></script>
+<script>SITE.pairs(document.getElementById('pair-tiles'));</script>
 </body>
 </html>

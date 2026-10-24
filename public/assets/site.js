@@ -5,7 +5,7 @@ const SITE = (() => {
   const TT = (id, en) => (typeof window.T === 'function' ? window.T(id, en) : id);
   const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
   const here = (location.pathname.replace(/\.html$/, '').replace(/\/+$/, '') || '/').toLowerCase();
-  const NAV = [['/', 'Beranda', 'Home'], ['/live', 'Live', 'Live'], ['/setup', 'Setup', 'Setups'], ['/harga', 'Harga', 'Pricing'], ['/cara-pasang', 'Cara Pasang', 'How to Install']];
+  const NAV = [['/', 'Beranda', 'Home'], ['/live', 'Live', 'Live'], ['/setup', 'Pair', 'Pairs'], ['/harga', 'Harga', 'Pricing'], ['/cara-pasang', 'Cara Pasang', 'How to Install']];
   const link = ([href, id, en]) => `<a href="${href}" data-en="${esc(en)}"${here === href ? ' class="on" aria-current="page"' : ''}>${esc(id)}</a>`;
 
   const header = `<header class="site-top" id="site-top"><div class="wrap nav-in">
@@ -33,9 +33,9 @@ const SITE = (() => {
   const footer = `<footer class="site-foot"><div class="wrap">
     <div class="foot-grid">
       <div><a class="logo" href="/"><img src="/assets/brand/goldhunter-garuda-logo-128.png" width="36" height="36" alt=""><span><b class="gold-text">GOLD HUNTER</b><small>GARUDA</small></span></a>
-        <p data-en="One Expert Advisor for MetaTrader 5. Focus on gold (XAUUSD), runs on every pair, with a recommended setup per pair from HQ.">Satu Expert Advisor untuk MetaTrader 5. Fokus emas (XAUUSD), jalan di semua pair, dengan setup rekomendasi per pair dari pusat.</p></div>
+        <p data-en="One Expert Advisor for MetaTrader 5. Focus on gold (XAUUSD), runs on every pair, with a preset per pair from HQ.">Satu Expert Advisor untuk MetaTrader 5. Fokus emas (XAUUSD), jalan di semua pair, dengan preset per pair dari pusat.</p></div>
       <div><h4 data-en="Product">Produk</h4><ul>
-        <li><a href="/live" data-en="Live reports">Laporan live</a></li><li><a href="/setup" data-en="Recommended setups">Setup rekomendasi</a></li>
+        <li><a href="/live" data-en="Live reports">Laporan live</a></li><li><a href="/setup" data-en="Supported pairs">Pair yang didukung</a></li>
         <li><a href="/harga" data-en="Pricing &amp; packages">Harga &amp; paket</a></li><li><a href="/cara-pasang" data-en="How to install">Cara pasang</a></li>
         <li><a href="/profit" data-en="Member results">Hasil member</a></li></ul></div>
       <div><h4 data-en="Account">Akun</h4><ul>
@@ -158,23 +158,27 @@ const SITE = (() => {
   }
 
   // ---- recommended setup card
-  const ICON = { XAUUSD: '🥇', BTCUSD: '₿', EURUSD: '💶', USDJPY: '💴', GBPUSD: '💷', US500: '📊', XAGUSD: '🥈' };
-  const PAIR_NAME = () => ({ XAUUSD: TT('Emas', 'Gold'), BTCUSD: 'Bitcoin', EURUSD: 'Euro / Dolar', USDJPY: TT('Dolar / Yen', 'Dollar / Yen'), GBPUSD: 'Pound / Dolar', XAGUSD: TT('Perak', 'Silver') });
-  // public card: pair + short description; details and the preset are in the member area
-  function setupCard(s, ctx = {}) {
-    const sum = tx(s, 'summary');
-    const short = sum.length > 160 ? sum.slice(0, 157).replace(/\s+\S*$/, '') + '…' : sum;
-    const btn = ctx.compact ? [`/setup#s${s.id}`, TT('Lihat setup', 'See setup')]
-      : ctx.logged_in ? ['/member#/setup', TT('Detail & preset di member area', 'Details & preset in the member area')]
-        : ['/masuk?next=/member', TT('Masuk untuk detail & preset', 'Log in for details & preset')];
-    return `<article class="setup-card reveal" id="s${s.id}">
-      <div class="sc-head"><span class="sc-ico" aria-hidden="true">${ICON[s.symbol] || '📈'}</span>
-        <div class="sc-id"><b>${esc(s.symbol)}</b><small>${esc(tx(s, 'title') || PAIR_NAME()[s.symbol] || '')}</small></div></div>
-      ${short ? `<p class="sc-sum">${esc(short)}</p>` : ''}
-      <div class="sc-foot"><a class="btn btn-outline btn-sm" href="${btn[0]}">${btn[1]}</a></div>
-    </article>`;
-  }
+  const ICON = { XAUUSD: '🥇', BTCUSD: '₿', EURUSD: '💶', USDJPY: '💴', GBPUSD: '💷', US500: '📊', XAGUSD: '🥈', AUDCAD: '🌏', GBPJPY: '💷', EURJPY: '💶' };
+  const PAIR_NAME = () => ({ XAUUSD: TT('Emas', 'Gold'), BTCUSD: 'Bitcoin', EURUSD: 'Euro / Dolar', USDJPY: TT('Dolar / Yen', 'Dollar / Yen'), GBPUSD: 'Pound / Dolar', XAGUSD: TT('Perak', 'Silver'), US500: TT('Indeks S&P 500', 'S&P 500 index'), AUDCAD: 'Aussie / Loonie' });
   const setups = () => fetch('/api/setups', { credentials: 'same-origin' }).then((r) => r.json());
+  // ---- pairs (public): which pairs the EA runs on; "preset ready" for the pairs HQ already has a preset for
+  const PAIRS = ['XAUUSD', 'USDJPY', 'EURUSD', 'BTCUSD', 'XAGUSD', 'GBPUSD', 'US500'];
+  function pairTiles(ready) {
+    const list = PAIRS.slice();
+    (ready || []).forEach((x) => { if (!list.includes(x)) list.push(x); });
+    return list.map((sym) => `<div class="pair-tile ${sym === 'XAUUSD' ? 'focus' : ''}">
+        <span class="pt-ico" aria-hidden="true">${ICON[sym] || '📈'}</span><b>${esc(sym)}</b><small>${esc(PAIR_NAME()[sym] || '')}</small>
+        <span class="pt-chips">${sym === 'XAUUSD' ? `<span class="pt-chip gold">${TT('Fokus utama', 'Main focus')}</span>` : ''}${(ready || []).includes(sym) ? `<span class="pt-chip">✔ ${TT('Preset siap', 'Preset ready')}</span>` : ''}</span></div>`).join('')
+      + `<div class="pair-tile more"><span class="pt-ico" aria-hidden="true">➕</span><b>${TT('Pair lain', 'Other pairs')}</b><small>${TT('EA jalan di semua pair MT5', 'The EA runs on every MT5 pair')}</small></div>`;
+  }
+  function pairs(el) {
+    if (!el) return;
+    let ready = null;
+    const draw = () => { el.innerHTML = pairTiles(ready); };
+    draw();
+    setups().then((d) => { ready = [...new Set((d.setups || []).map((x) => x.symbol))]; draw(); }).catch(() => {});
+    document.addEventListener('ghg:lang', draw);
+  }
 
-  return { loc, esc, TT, rp, durL, tx, num, fmtDate, catalog, me, waLink, renderPlans, setupCard, setups, ICON, reveal };
+  return { loc, esc, TT, rp, durL, tx, num, fmtDate, catalog, me, waLink, renderPlans, pairs, setups, ICON, reveal };
 })();
