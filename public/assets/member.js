@@ -1,4 +1,4 @@
-// Member area (hash router). Pages: beranda, order, pesanan, lisensi, ib, notifikasi, profil.
+// Member area (hash router). Pages: beranda, setup, order, pesanan, lisensi, ib, notifikasi, profil.
 (() => {
   const { $, $$, esc, rupiah, fmtDate, fmtDateTime, ago, api, toast, busy, modal, confirmBox, readProof,
     orderBadge, licenseBadge, buildBadge, billingText, qrSvg, fillCapital, capitalLine, durLabel, kindBadge, PAY_LABEL, usd } = GHG;
@@ -44,7 +44,7 @@
 
   // ------------------------------------------------------------------ router
   const routes = {
-    '': home, order: orderPage, pesanan: ordersPage, bayar: payPage, lisensi: licensesPage, ib: ibPage, notifikasi: notifPage, profil: profilePage,
+    '': home, setup: setupPage, order: orderPage, pesanan: ordersPage, bayar: payPage, lisensi: licensesPage, ib: ibPage, notifikasi: notifPage, profil: profilePage,
   };
   async function render() {
     clearInterval(timer);
@@ -61,49 +61,122 @@
   $('#burger').onclick = () => $('#side').classList.toggle('open');
   document.addEventListener('click', (e) => { if (e.target.id === 'side') $('#side').classList.remove('open'); });
 
-  // ------------------------------------------------------------------ beranda
+  // ------------------------------------------------------------------ beranda: licence status first, then installer, setups, invoices
+  const leftText = (l) => {
+    if (!l.expires_at) return { big: 'Selamanya', small: 'tanpa masa habis', cls: 'b-green' };
+    const sec = l.expires_at - Date.now() / 1000;
+    if (sec <= 0) return { big: 'Habis', small: `sejak ${fmtDate(l.expires_at)}`, cls: 'b-red' };
+    const d = Math.floor(sec / 86400), h = Math.floor((sec % 86400) / 3600);
+    return { big: d >= 1 ? `${d} hari${d < 7 && h ? ` ${h} jam` : ''}` : `${h} jam`, small: `lagi · s/d ${fmtDate(l.expires_at)}`, cls: d < 3 ? 'b-red' : d < 8 ? 'b-orange' : 'b-green' };
+  };
+  const RISK_M = { low: ['b-green', 'Risiko rendah'], medium: ['b-orange', 'Risiko sedang'], high: ['b-red', 'Risiko tinggi'] };
+  const ICON_M = { XAUUSD: '🥇', BTCUSD: '₿', EURUSD: '💶', USDJPY: '💴', GBPUSD: '💷', XAGUSD: '🥈' };
+  const capText = (v, s) => !(v > 0) ? '-' : s.account_type === 'cent' ? `${Number(v).toLocaleString('id-ID')} USC (≈ $${Number(v / 100).toLocaleString('id-ID')})` : `$${Number(v).toLocaleString('id-ID')}`;
+  const setupRow = (s, can) => `<div class="row between" style="padding:10px 0;border-bottom:1px solid var(--line);flex-wrap:nowrap;align-items:flex-start">
+      <div style="min-width:0"><b>${ICON_M[s.symbol] || '📈'} ${esc(s.symbol)}</b> <span class="small muted">${esc(s.title)}</span> <span class="badge ${(RISK_M[s.risk] || ['b-gray'])[0]}">${(RISK_M[s.risk] || [0, s.risk])[1]}</span>
+        <div class="tiny muted">Modal per 0,01 lot: ${capText(s.capital_per_lot, s)} · diperbarui ${fmtDate(s.updated_at)}</div></div>
+      <div style="flex:none">${!s.has_preset ? '<span class="tiny muted">segera</span>' : can ? `<a class="btn btn-outline btn-sm" href="/api/setups/${s.id}/preset" download>⬇ .set</a>` : '<span class="tiny muted">butuh lisensi aktif</span>'}</div></div>`;
   async function home() {
-    const [s, lic, n, c, lv] = await Promise.all([api('/member/summary'), api('/licenses'), api('/notifications'), getCatalog(),
-      (typeof GHL !== 'undefined' ? GHL.load(true) : Promise.resolve(null)).catch(() => null)]);
-    const vpsP = c.products.find((p) => p.requires_ib && p.includes_vps) || c.products.find((p) => p.includes_vps);
+    const [lic, n, c, lv, st, ord] = await Promise.all([api('/licenses'), api('/notifications'), getCatalog(),
+      (typeof GHL !== 'undefined' ? GHL.load(true) : Promise.resolve(null)).catch(() => null), api('/setups').catch(() => null), api('/orders')]);
+    const trial = c.products.find((p) => p.kind === 'ea_trial');
     const ibOffer = c.products.some((p) => p.requires_ib);
-    // GOLD HUNTER GARUDA live: the EAs reporting from real accounts (one card per EA chart)
+    const eaLic = lic.licenses.filter((l) => l.includes_ea && l.status !== 'suspended');
+    const otherLic = lic.licenses.filter((l) => !l.includes_ea && l.status !== 'suspended');
+    const bills = ord.orders.filter((o) => o.status === 'awaiting_payment' && o.total > 0);
+    const running = ord.orders.filter((o) => ['awaiting_verification', 'processing'].includes(o.status));
+    const renewOf = (l) => lic.renewals.find((r) => r.license_id === l.id && r.status === 'awaiting_payment');
+
+    // 1. licence status (type, countdown) + installer
+    const licCard = (l) => {
+      const t = leftText(l), b = l.build;
+      const pct = l.expires_at && l.days_left > 0 ? Math.min(100, Math.round(l.days_left / 31 * 100)) : l.expires_at ? 0 : 100;
+      const rn = renewOf(l);
+      const canInstall = l.status === 'active' && !l.managed_vps;
+      return `<div class="card license ${l.status}" style="display:flex;flex-direction:column;gap:12px">
+        <div class="row between" style="align-items:flex-start;flex-wrap:nowrap"><div style="min-width:0">
+            <div class="row" style="gap:6px">${kindBadge(l.product_kind)} ${licenseBadge(l.status)}</div>
+            <div style="font-size:1.3rem;font-weight:700;margin-top:6px">${esc(l.account_number)}</div>
+            <div class="tiny muted">${esc(l.broker)} · ${l.platform.toUpperCase()} · ${esc(l.product_name)}</div></div>
+          <div class="right" style="flex:none"><div class="tiny muted">Masa aktif</div><div class="cinzel" style="font-size:1.25rem;color:var(--gold)">${t.big}</div><div class="tiny muted">${t.small}</div></div></div>
+        ${l.expires_at ? `<div class="bar" style="margin:0"><i style="width:${pct}%"></i></div>` : ''}
+        ${l.status === 'expired' ? '<div class="alert warn small">Lisensi habis: EA di chart berhenti membuka posisi baru (basket berjalan tetap diurus). Perpanjang supaya EA jalan lagi.</div>' : ''}
+        ${l.build_pending ? '<div class="small"><span class="badge b-blue">File EA sedang dibuat…</span></div>' : ''}
+        <div class="row" style="gap:8px">
+          ${canInstall ? `<a class="btn btn-gold btn-sm" href="/api/licenses/${l.id}/installer">⬇ Unduh installer (1 file)</a>` : ''}
+          ${rn ? `<a class="btn btn-gold btn-sm" href="#/bayar/${rn.id}">💳 Bayar tagihan ${rupiah(rn.total)}</a>`
+            : l.billing === 'monthly' && ['active', 'expired'].includes(l.status) ? '<a class="btn btn-outline btn-sm" href="#/lisensi">↻ Perpanjang</a>' : ''}
+          ${l.billing === 'trial' ? '<a class="btn btn-outline btn-sm" href="#/order">Lanjut berlangganan</a>' : ''}
+          <a class="btn btn-ghost btn-sm" href="#/lisensi">Detail${b && b.ea_version ? ' · EA v' + esc(b.ea_version) : ''}</a></div>
+        ${canInstall ? '<div class="tiny muted">Taruh file di <span class="mono">C:\\GOLD HUNTER GARUDA</span>, klik dua kali, Yes. EA + preset terpasang dan update otomatis. <a href="/cara-pasang" target="_blank">Panduan</a></div>' : ''}
+      </div>`;
+    };
+    const licSection = eaLic.length
+      ? `<div class="grid c2" style="margin-bottom:22px">${eaLic.slice(0, 4).map(licCard).join('')}</div>${eaLic.length > 4 ? '<p class="small" style="margin:-12px 0 22px"><a href="#/lisensi">Semua lisensi →</a></p>' : ''}`
+      : `<div class="card gold" style="margin-bottom:22px"><div class="row between" style="gap:16px">
+          <div style="max-width:640px"><h3 class="cinzel gold-text" style="font-size:1.3rem;margin-bottom:6px">Mulai dengan Trial ${c.trial_days} hari</h3>
+            <p class="muted small">Belum ada lisensi EA. Trial langsung aktif untuk nomor akun MT5 Anda: unduh installer satu file, EA + preset rekomendasi terpasang sendiri. Sesudahnya lanjut Sewa, Sharing Profit${ibOffer ? ' atau EA gratis (akun IB)' : ''}.</p></div>
+          <div class="row">${trial ? `<a class="btn btn-gold" href="#/order/${trial.id}">Mulai Trial</a>` : ''}<a class="btn btn-outline" href="#/order">Lihat paket</a></div></div></div>`;
+
+    // 2. invoices
+    const billCard = `<div class="card"><div class="row between" style="margin-bottom:10px"><h3 style="margin:0">💳 Tagihan</h3><a href="#/bayar" class="small">Semua →</a></div>
+      ${bills.length ? bills.slice(0, 4).map((o) => `<div class="row between" style="padding:9px 0;border-bottom:1px solid var(--line)"><div><b class="mono">${esc(o.code)}</b><div class="tiny muted">${esc(o.product_name || '')} · jatuh tempo ${fmtDate(o.pay_deadline)}</div></div>
+          <a class="btn btn-gold btn-sm" href="#/bayar/${o.id}">Bayar ${rupiah(o.total)}</a></div>`).join('')
+        : '<p class="small muted">Tidak ada tagihan yang menunggu pembayaran.</p>'}
+      ${running.length ? `<p class="tiny muted" style="margin-top:10px">${running.length} pesanan sedang diverifikasi / diproses. <a href="#/pesanan">Lihat</a></p>` : ''}</div>`;
+
+    // 3. recommended setups
+    const sets = st && st.setups ? st.setups : [];
+    const setCard = `<div class="card"><div class="row between" style="margin-bottom:6px"><h3 style="margin:0">🎯 Setup rekomendasi</h3><a href="#/setup" class="small">Semua →</a></div>
+      <p class="tiny muted" style="margin-bottom:4px">${st && st.can_download ? 'Installer sudah memasang preset ini ke MetaTrader Anda (MQL5\\Presets). Unduh manual bila perlu.' : 'Preset bisa diunduh selama Anda punya lisensi EA aktif.'}</p>
+      ${sets.length ? sets.slice(0, 5).map((s) => setupRow(s, st.can_download)).join('') : '<p class="small muted">Setup rekomendasi sedang disiapkan.</p>'}</div>`;
+
+    // 4. live showcase
     const setups = lv && lv.setups ? lv.setups : [];
     const top = setups.slice().sort((a, b) => (b.online - a.online) || ((b.total_pct ?? -1e9) - (a.total_pct ?? -1e9))).slice(0, 4);
-    const liveCard = `<div class="card gold" style="margin-bottom:22px">
+    const liveCard = `<div class="card gold" style="margin-top:22px">
         <div class="row between" style="flex-wrap:wrap;gap:10px;margin-bottom:12px"><h3 style="margin:0">📡 Laporan Live GOLD HUNTER GARUDA</h3>
           <div class="row" style="gap:8px;flex-wrap:wrap">${c.telegram_link ? `<a class="btn btn-outline btn-sm" href="${esc(c.telegram_link)}" target="_blank" rel="noopener">✈️ Gabung Telegram</a>` : ''}<a class="btn btn-gold btn-sm" href="/live">Buka laporan live</a></div></div>
-        ${top.length ? `<div class="ghl-cards">${top.map((x) => GHL.card(x)).join('')}</div>` : '<p class="small muted">Akun live sedang disiapkan. Laporan live tampil di sini begitu EA-nya mulai mengirim data.</p>'}
+        ${top.length ? `<div class="ghl-cards">${top.map((x) => GHL.card(x)).join('')}</div>` : '<p class="small muted">Akun contoh live sedang disiapkan. Laporan live tampil di sini begitu akun pilihan pusat mulai mengirim data.</p>'}
         <p class="tiny muted" style="margin-top:12px">Bukan saran investasi. Trading berisiko tinggi; hasil masa lalu tidak menjamin hasil berikutnya.</p></div>`;
-    const active = lic.licenses.filter((l) => l.status !== 'suspended').slice(0, 3);
-    const bills = (await api('/orders')).orders.filter((o) => o.status === 'awaiting_payment' && o.total > 0);
+
     view.innerHTML = `
-      ${title(`Halo, ${esc(me.name.split(' ')[0])} 👋`)}
+      ${title(`Halo, ${esc(me.name.split(' ')[0])} 👋`, '<a class="btn btn-gold btn-sm" href="#/order">+ Order</a>')}
       ${bills.length ? `<div class="alert warn" style="margin-bottom:18px">💳 Anda punya <b>${bills.length} tagihan</b> menunggu pembayaran${bills.length === 1 ? `: <b>${rupiah(bills[0].total)}</b>, jatuh tempo ${fmtDate(bills[0].pay_deadline)}` : ''}. <a href="#/bayar${bills.length === 1 ? '/' + bills[0].id : ''}">Bayar sekarang →</a></div>` : ''}
+      <h2 class="small muted" style="text-transform:uppercase;letter-spacing:1.5px;margin-bottom:10px">🔑 Lisensi EA</h2>
+      ${licSection}
+      ${otherLic.length ? `<p class="small muted" style="margin:-10px 0 22px">Juga ${otherLic.length} paket VPS. <a href="#/lisensi">Lihat</a></p>` : ''}
+      <div class="grid c2">${setCard}${billCard}</div>
+      ${ibOffer && !eaLic.some((l) => l.requires_ib) ? `<div class="card" style="margin-top:22px"><div class="row between">
+          <div style="max-width:620px"><h3 style="margin-bottom:4px">🎁 EA gratis untuk akun partner (IB)</h3>
+            <p class="muted small">Akun broker Anda terdaftar di bawah partner GoldHunter Garuda? EA gratis tanpa masa habis untuk akun itu.</p></div>
+          <div class="row"><a class="btn btn-outline btn-sm" href="#/ib">Syarat &amp; panduan</a></div></div></div>` : ''}
       ${liveCard}
-      ${s.active_licenses || s.open_orders ? `<div class="grid c4" style="margin-bottom:22px">
-        <a class="stat" href="#/lisensi"><b>${s.active_licenses}</b><span>Lisensi aktif</span></a>
-        <a class="stat" href="#/pesanan"><b>${s.open_orders}</b><span>Pesanan berjalan</span></a>
-        <a class="stat ${s.expiring_soon ? 'alert' : ''}" href="#/lisensi"><b>${s.expiring_soon}</b><span>Habis ≤ 7 hari</span></a>
-      </div>` : ''}
-      ${ibOffer ? `<div class="card gold" style="margin-bottom:22px">
-        <div class="row between">
-          <div style="max-width:620px"><h3 class="gold-text cinzel" style="font-size:1.3rem;margin-bottom:6px">EA GRATIS untuk akun Exness partner kami</h3>
-            <p class="muted">Akun Exness Anda terdaftar di bawah partner GoldHunter Garuda? Maka EA GoldHunter Garuda <b style="color:var(--text)">gratis</b> untuk akun itu. Cukup modal <b data-cap="usd" style="color:var(--text)">$100</b> <span data-cap="idr"></span> di akun cent. Mau jalan 24 jam? Sewa VPS kami${vpsP ? ` <b style="color:var(--text)">${rupiah(vpsP.price)}/bulan</b>` : ''}.</p></div>
-          <div class="row"><a class="btn btn-outline" href="#/ib">Syarat &amp; Panduan</a><a class="btn btn-gold" href="#/order">Order Sekarang</a></div>
-        </div>
-      </div>` : ''}
-      <div class="grid c2">
-        <div class="card"><div class="row between" style="margin-bottom:10px"><h3 style="margin:0">Lisensi Anda</h3><a href="#/lisensi" class="small">Lihat semua →</a></div>
-          ${active.length ? active.map((l) => `<div class="row between" style="padding:10px 0;border-bottom:1px solid var(--line)">
-              <div><b>${esc(l.account_number)}</b> <span class="muted small">${esc(l.broker)} · ${l.platform.toUpperCase()}</span><div class="small muted">${esc(l.product_name)}</div></div>
-              <div class="right">${licenseBadge(l.status)}<div class="tiny muted">${l.expires_at ? 's/d ' + fmtDate(l.expires_at) : 'Selamanya'}</div></div></div>`).join('')
-            : '<div class="empty">Belum ada lisensi. <a href="#/order">Order sekarang</a></div>'}
-        </div>
-        <div class="card"><div class="row between" style="margin-bottom:10px"><h3 style="margin:0">Notifikasi terbaru</h3><a href="#/notifikasi" class="small">Semua →</a></div>
-          ${n.notifications.slice(0, 5).map((x) => `<div style="padding:9px 0;border-bottom:1px solid var(--line)"><div class="small"><b>${esc(x.title)}</b></div><div class="tiny muted">${ago(x.created_at)}</div></div>`).join('') || '<div class="empty">Belum ada notifikasi</div>'}
-        </div>
+      <div class="card" style="margin-top:22px"><div class="row between" style="margin-bottom:10px"><h3 style="margin:0">🔔 Notifikasi terbaru</h3><a href="#/notifikasi" class="small">Semua →</a></div>
+        ${n.notifications.slice(0, 5).map((x) => `<div style="padding:9px 0;border-bottom:1px solid var(--line)"><div class="small"><b>${esc(x.title)}</b></div><div class="tiny muted">${ago(x.created_at)}</div></div>`).join('') || '<div class="empty">Belum ada notifikasi</div>'}
       </div>`;
+  }
+
+  // ------------------------------------------------------------------ setup rekomendasi (member)
+  async function setupPage() {
+    const st = await api('/setups');
+    const card = (s) => {
+      const lines = String(s.settings || '').split(/\r?\n/).filter(Boolean);
+      return `<div class="card" style="display:flex;flex-direction:column;gap:10px">
+        <div class="row between" style="flex-wrap:nowrap;align-items:flex-start"><div style="min-width:0"><div style="font-size:1.15rem;font-weight:700">${ICON_M[s.symbol] || '📈'} ${esc(s.symbol)}</div><div class="small muted">${esc(s.title)}${s.style ? ' · ' + esc(s.style) : ''}</div></div>
+          <span class="badge ${(RISK_M[s.risk] || ['b-gray'])[0]}" style="flex:none">${(RISK_M[s.risk] || [0, s.risk])[1]}</span></div>
+        ${s.summary ? `<p class="small muted">${esc(s.summary)}</p>` : ''}
+        <dl class="kv small"><dt>Modal per 0,01 lot</dt><dd>${capText(s.capital_per_lot, s)}</dd><dt>Saran modal awal</dt><dd>${capText(s.budget, s)}</dd><dt>Chart</dt><dd>${esc(s.timeframe || 'M1')}</dd>
+          <dt>Preset</dt><dd>${s.has_preset ? esc(s.preset_name) + (s.preset_version ? ` (EA v${esc(s.preset_version)})` : '') : 'segera tersedia'}</dd><dt>Diperbarui</dt><dd>${fmtDate(s.updated_at)}</dd></dl>
+        ${lines.length ? `<ul class="steps-list small" style="margin-top:0">${lines.map((x) => `<li>${esc(x)}</li>`).join('')}</ul>` : ''}
+        <div style="margin-top:auto">${!s.has_preset ? '<span class="btn btn-ghost btn-sm btn-block" aria-disabled="true">Preset segera tersedia</span>'
+          : st.can_download ? `<a class="btn btn-gold btn-sm btn-block" href="/api/setups/${s.id}/preset" download>⬇ Unduh preset (.set)</a>` : '<a class="btn btn-outline btn-sm btn-block" href="#/order">Butuh lisensi aktif · pilih paket</a>'}</div></div>`;
+    };
+    view.innerHTML = `${title('🎯 Setup Rekomendasi', '<a class="btn btn-ghost btn-sm" href="/setup" target="_blank">Versi publik</a>')}
+      <div class="alert info small" style="margin-bottom:18px">Satu EA, setup per pair. Installer sudah memasang semua preset rekomendasi ke <span class="mono">MQL5\\Presets</span> dan memperbaruinya otomatis:
+        di chart buka Inputs → <b>Load</b> → pilih preset. Mau setup sendiri? Pakai <b>magic number berbeda</b> (input 1.1) di tiap chart supaya hasilnya terpisah dan bisa dibandingkan.</div>
+      ${st.setups.length ? `<div class="grid c2">${st.setups.map(card).join('')}</div>` : '<div class="card empty">Setup rekomendasi sedang disiapkan pusat.</div>'}
+      <p class="tiny muted" style="margin-top:16px">Tingkat risiko bersifat relatif antar setup. Semua setup EA martingale / averaging tetap bisa mengalami floating dalam dan kehilangan modal; modal per 0,01 lot adalah panduan, bukan jaminan.</p>`;
   }
 
   // ------------------------------------------------------------------ order

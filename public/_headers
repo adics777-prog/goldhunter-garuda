@@ -2,6 +2,10 @@
   Cache-Control: public, max-age=2592000, stale-while-revalidate=604800
 /assets/app.css
   Cache-Control: no-cache
+/assets/site.css
+  Cache-Control: no-cache
+/assets/site.js
+  Cache-Control: no-cache
 /assets/common.js
   Cache-Control: no-cache
 /assets/auth.js

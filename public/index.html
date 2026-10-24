@@ -3,662 +3,286 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title data-en="GOLD HUNTER GARUDA — Gold &amp;amp; Forex EA for MT5 with Live Reports from Real Accounts">GOLD HUNTER GARUDA — EA Emas &amp; Forex MT5 dengan Laporan Live Akun Nyata</title>
-<meta name="description" content="EA GOLD HUNTER GARUDA untuk MetaTrader 5: seri BUY &amp; SELL bersamaan, TP bersama dari harga rata-rata, DD reduction dua tahap dan kantong profit. Satu EA, laporan live dari akun nyata tiap menit, plus hasil member.">
+<title data-en="GOLD HUNTER GARUDA — Gold EA for MT5 (XAUUSD focus, every pair) with Live Reports">GOLD HUNTER GARUDA — EA Emas MT5 (fokus XAUUSD, semua pair) dengan Laporan Live</title>
+<meta name="description" content="GOLD HUNTER GARUDA: satu Expert Advisor MetaTrader 5 untuk emas XAUUSD dan semua pair. Marty basket averaging dengan DD reduction, kantong profit, mode BARBAR 2 arah, Market Liar dan mode berita. Setup rekomendasi per pair, pasang 1 file, update otomatis, trial 7 hari.">
 <link rel="canonical" href="https://goldhuntergaruda.com/">
-<meta name="keywords" content="EA emas, EA XAUUSD MT5, robot trading emas, EA martingale averaging, EA grid MT5, EA USDJPY, akun cent, laporan live EA, GOLD HUNTER GARUDA, GoldHunter Garuda">
+<meta name="keywords" content="EA emas, EA XAUUSD MT5, robot trading emas, EA martingale averaging, EA grid MT5, EA USDJPY, EA EURUSD, EA BTCUSD, akun cent, setup EA, GOLD HUNTER GARUDA, GoldHunter Garuda">
 <meta name="robots" content="index,follow,max-image-preview:large">
 <meta name="theme-color" content="#07070a">
 <meta name="author" content="GoldHunter Garuda">
 <meta property="og:site_name" content="GoldHunter Garuda">
 <meta property="og:locale" content="id_ID">
-<meta name="twitter:title" content="GOLD HUNTER GARUDA — EA dengan Laporan Live Akun Nyata">
-<meta name="twitter:description" content="EA emas &amp; forex untuk MT5: setiap akun yang menjalankan EA melapor live dari akun nyata tiap menit.">
-<meta name="twitter:image" content="https://goldhuntergaruda.com/assets/brand/goldhunter-garuda-banner-1200x630.jpg">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-
-<link rel="icon" href="/assets/brand/favicon.ico">
-<link rel="apple-touch-icon" href="/assets/brand/apple-touch-icon.png">
 <meta property="og:type" content="website">
 <meta property="og:url" content="https://goldhuntergaruda.com/">
-<meta property="og:title" content="GOLD HUNTER GARUDA — EA Emas &amp; Forex dengan Laporan Live">
-<meta property="og:description" content="Lihat dulu buktinya: profit sejak mulai, persen modal dan drawdown tiap akun, dilaporkan EA dari akun nyata tiap menit.">
+<meta property="og:title" content="GOLD HUNTER GARUDA — Satu EA MT5, fokus emas, jalan di semua pair">
+<meta property="og:description" content="Marty basket averaging dengan DD reduction & kantong profit, setup rekomendasi per pair, pasang 1 file, laporan live dari akun nyata. Coba gratis 7 hari.">
 <meta property="og:image" content="https://goldhuntergaruda.com/assets/brand/goldhunter-garuda-banner-1200x630.jpg">
 <meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="GOLD HUNTER GARUDA — EA Emas MT5 dengan Laporan Live">
+<meta name="twitter:description" content="Satu EA MT5: fokus XAUUSD, jalan di semua pair, setup rekomendasi per pair, update otomatis.">
+<meta name="twitter:image" content="https://goldhuntergaruda.com/assets/brand/goldhunter-garuda-banner-1200x630.jpg">
+<link rel="icon" href="/assets/brand/favicon.ico">
+<link rel="apple-touch-icon" href="/assets/brand/apple-touch-icon.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
-<link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@700;900&family=Poppins:wght@300;400;600;700&display=swap" rel="stylesheet">
-<style>
-  :root{
-    --gold:#f5c542; --gold-2:#d4a017; --gold-3:#fff1b8;
-    --bg:#07070a; --bg-2:#101016; --card:#14141c; --line:#2a2a36;
-    --text:#ececf1; --muted:#a3a3b2; --red:#e63946;
-    --grad:linear-gradient(135deg,#fff1b8 0%,#f5c542 35%,#d4a017 70%,#8a6508 100%);
-  }
-  *{margin:0;padding:0;box-sizing:border-box}
-  html{scroll-behavior:smooth}
-  body{font-family:'Poppins',sans-serif;background:var(--bg);color:var(--text);line-height:1.6;overflow-x:hidden}
-  a{color:inherit;text-decoration:none}
-  .container{width:min(1140px,100% - 32px);margin-inline:auto}
-  .gold-text{background:var(--grad);-webkit-background-clip:text;background-clip:text;color:transparent}
-  .btn{display:inline-flex;align-items:center;gap:10px;padding:14px 28px;border-radius:50px;font-weight:600;transition:.3s;cursor:pointer;border:0;font-size:1rem}
-  .btn-gold{background:var(--grad);color:#1a1200;box-shadow:0 8px 30px rgba(245,197,66,.35)}
-  .btn-gold:hover{transform:translateY(-3px);box-shadow:0 12px 40px rgba(245,197,66,.55)}
-  .btn-outline{border:2px solid var(--gold);color:var(--gold)}
-  .btn-outline:hover{background:var(--gold);color:#1a1200}
-  section{padding:90px 0}
-  .tag{display:inline-block;padding:6px 16px;border:1px solid var(--gold-2);border-radius:50px;color:var(--gold);font-size:.8rem;letter-spacing:2px;text-transform:uppercase;margin-bottom:16px}
-  .sec-title{font-family:'Cinzel',serif;font-size:clamp(1.8rem,4vw,2.8rem);text-align:center;margin-bottom:12px}
-  .sec-sub{text-align:center;color:var(--muted);max-width:620px;margin:0 auto 50px}
-  .center{text-align:center}
-
-  /* NAV */
-  nav{position:fixed;inset:0 0 auto;z-index:100;transition:.3s;padding:18px 0}
-  nav.scrolled{background:rgba(7,7,10,.92);backdrop-filter:blur(12px);border-bottom:1px solid var(--line);padding:12px 0}
-  .nav-in{display:flex;align-items:center;justify-content:space-between}
-  .logo{display:flex;align-items:center;gap:10px;font-family:'Cinzel',serif;font-weight:900;font-size:1.25rem}
-  .logo svg{width:38px;height:38px}
-  .menu{display:flex;gap:28px;align-items:center}
-  .menu a{font-size:.92rem;color:var(--muted);transition:.2s}
-  .menu a:hover{color:var(--gold)}
-  .menu .btn{padding:10px 22px;color:#1a1200}
-  .burger{display:none;background:none;border:0;color:var(--gold);font-size:1.8rem;cursor:pointer}
-
-  /* HERO */
-  .hero{min-height:100vh;display:flex;align-items:center;position:relative;padding-top:110px;overflow:hidden}
-  .hero::before{content:"";position:absolute;width:900px;height:900px;border-radius:50%;background:radial-gradient(circle,rgba(245,197,66,.18),transparent 65%);top:-250px;right:-300px}
-  .hero::after{content:"";position:absolute;inset:0;background-image:linear-gradient(rgba(245,197,66,.04) 1px,transparent 1px),linear-gradient(90deg,rgba(245,197,66,.04) 1px,transparent 1px);background-size:50px 50px;mask-image:radial-gradient(ellipse at center,#000 30%,transparent 75%);pointer-events:none}
-  .hero-grid{display:grid;grid-template-columns:1.1fr .9fr;gap:40px;align-items:center;position:relative;z-index:2}
-  .hero h1{font-family:'Cinzel',serif;font-size:clamp(2.4rem,6vw,4.4rem);line-height:1.05;margin-bottom:20px}
-  .hero h1 small{display:block;font-size:.42em;color:var(--text);font-family:'Poppins';font-weight:300;letter-spacing:6px;margin-top:10px}
-  .hero p{color:var(--muted);font-size:1.1rem;max-width:520px;margin-bottom:32px}
-  .hero-btns{display:flex;gap:14px;flex-wrap:wrap}
-  .badges{display:flex;gap:22px;margin-top:36px;flex-wrap:wrap}
-  .badges div{display:flex;align-items:center;gap:8px;font-size:.88rem;color:var(--muted)}
-  .badges b{color:var(--gold)}
-  .hero-visual{position:relative;display:grid;place-items:center}
-  .garuda{width:100%;max-width:440px;filter:drop-shadow(0 0 40px rgba(245,197,66,.45));animation:float 5s ease-in-out infinite}
-  @keyframes float{50%{transform:translateY(-18px)}}
-  .ticker-card{position:absolute;background:rgba(20,20,28,.9);border:1px solid var(--line);backdrop-filter:blur(8px);border-radius:14px;padding:12px 16px;font-size:.82rem;box-shadow:0 10px 30px rgba(0,0,0,.5)}
-  .ticker-card.t1{top:8%;left:-4%}
-  .ticker-card.t2{bottom:10%;right:-4%}
-  .ticker-card b{display:block;font-size:1.05rem;color:var(--gold)}
-  .dot{display:inline-block;width:8px;height:8px;border-radius:50%;background:#2ecc71;margin-right:6px;animation:blink 1.4s infinite}
-  @keyframes blink{50%{opacity:.2}}
-
-  /* STRIP */
-  .strip{background:var(--grad);color:#1a1200;padding:18px 0;overflow:hidden;white-space:nowrap}
-  .strip-track{display:inline-block;animation:marq 25s linear infinite;font-weight:700;letter-spacing:2px}
-  .strip-track span{margin:0 28px}
-  @keyframes marq{to{transform:translateX(-50%)}}
-
-  /* STATS */
-  .stats{display:grid;grid-template-columns:repeat(4,1fr);gap:20px;margin-top:-50px;position:relative;z-index:3}
-  .stat{background:var(--card);border:1px solid var(--line);border-radius:18px;padding:28px 20px;text-align:center}
-  .stat b{font-family:'Cinzel',serif;font-size:2.2rem;display:block}
-  .stat span{color:var(--muted);font-size:.88rem}
-
-  /* FEATURES */
-  .grid-3{display:grid;grid-template-columns:repeat(3,1fr);gap:22px}
-  .feat{background:linear-gradient(180deg,var(--card),var(--bg-2));border:1px solid var(--line);border-radius:20px;padding:32px 26px;transition:.35s;position:relative;overflow:hidden}
-  .feat::before{content:"";position:absolute;inset:0;border-radius:20px;padding:1px;background:var(--grad);-webkit-mask:linear-gradient(#000 0 0) content-box,linear-gradient(#000 0 0);-webkit-mask-composite:xor;mask-composite:exclude;opacity:0;transition:.35s}
-  .feat:hover{transform:translateY(-8px)}
-  .feat:hover::before{opacity:1}
-  .ico{width:58px;height:58px;border-radius:16px;display:grid;place-items:center;background:rgba(245,197,66,.1);font-size:1.7rem;margin-bottom:18px}
-  .feat h3{font-size:1.15rem;margin-bottom:8px}
-  .feat p{color:var(--muted);font-size:.93rem}
-
-  /* STEPS */
-  .steps{display:grid;grid-template-columns:repeat(4,1fr);gap:20px;counter-reset:s}
-  .step{text-align:center;padding:20px}
-  .step .num{width:70px;height:70px;margin:0 auto 18px;border-radius:50%;display:grid;place-items:center;font-family:'Cinzel',serif;font-size:1.6rem;font-weight:900;border:2px solid var(--gold);color:var(--gold);box-shadow:0 0 25px rgba(245,197,66,.25)}
-  .step h4{margin-bottom:6px}
-  .step p{color:var(--muted);font-size:.9rem}
-
-  /* SPECS */
-  .specs-wrap{display:grid;grid-template-columns:1fr 1fr;gap:40px;align-items:center}
-  .spec-table{width:100%;border-collapse:collapse;background:var(--card);border-radius:18px;overflow:hidden;border:1px solid var(--line)}
-  .spec-table td{padding:15px 22px;border-bottom:1px solid var(--line);font-size:.95rem}
-  .spec-table tr:last-child td{border:0}
-  .spec-table td:first-child{color:var(--muted);width:45%}
-  .spec-table td:last-child{font-weight:600;color:var(--gold-3)}
-  .check-list{list-style:none;display:grid;gap:14px;margin-top:24px}
-  .check-list li{display:flex;gap:12px;align-items:flex-start}
-  .check-list li::before{content:"✓";flex:none;width:24px;height:24px;border-radius:50%;background:var(--grad);color:#1a1200;display:grid;place-items:center;font-weight:700;font-size:.8rem}
-
-  /* PRICING */
-  .pricing{background:radial-gradient(ellipse at top,rgba(245,197,66,.08),transparent 60%)}
-  .plans{display:grid;grid-template-columns:repeat(3,1fr);gap:24px;align-items:stretch}
-  .plan{background:var(--card);border:1px solid var(--line);border-radius:24px;padding:36px 30px;display:flex;flex-direction:column;position:relative;transition:.3s}
-  .plan:hover{transform:translateY(-6px)}
-  .plan.best{border:2px solid var(--gold);transform:scale(1.04);box-shadow:0 20px 60px rgba(245,197,66,.2)}
-  .plan.best:hover{transform:scale(1.04) translateY(-6px)}
-  .ribbon{position:absolute;top:-14px;left:50%;transform:translateX(-50%);background:var(--grad);color:#1a1200;font-weight:700;font-size:.75rem;padding:6px 18px;border-radius:50px;letter-spacing:1px}
-  .plan h3{font-family:'Cinzel',serif;font-size:1.4rem}
-  .plan .desc{color:var(--muted);font-size:.88rem;margin-bottom:20px}
-  .price{margin-bottom:6px}
-  .price s{color:var(--muted);font-size:.95rem}
-  .price b{display:block;font-size:2.4rem;font-weight:700}
-  .plan ul{list-style:none;margin:22px 0 30px;display:grid;gap:11px;flex:1}
-  .plan li{font-size:.92rem;display:flex;gap:10px}
-  .plan li::before{content:"◆";color:var(--gold);font-size:.75rem;margin-top:4px}
-  .plan li.no{color:#5c5c6b}
-  .plan li.no::before{content:"✕";color:#5c5c6b}
-  .plan .btn{justify-content:center;width:100%}
-  .countdown{display:flex;justify-content:center;gap:14px;margin:-20px 0 50px;flex-wrap:wrap}
-  .countdown div{background:var(--card);border:1px solid var(--gold-2);border-radius:12px;padding:10px 16px;min-width:74px;text-align:center}
-  .countdown b{font-size:1.6rem;display:block;color:var(--gold);font-family:'Cinzel',serif}
-  .countdown span{font-size:.7rem;color:var(--muted);text-transform:uppercase;letter-spacing:1px}
-
-  /* FAQ */
-  .faq{max-width:780px;margin:0 auto;display:grid;gap:14px}
-  .faq details{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:0 22px;transition:.3s}
-  .faq details[open]{border-color:var(--gold-2)}
-  .faq summary{padding:18px 0;cursor:pointer;font-weight:600;list-style:none;display:flex;justify-content:space-between;gap:16px}
-  .faq summary::-webkit-details-marker{display:none}
-  .faq summary::after{content:"+";color:var(--gold);font-size:1.4rem;line-height:1;transition:.3s}
-  .faq details[open] summary::after{transform:rotate(45deg)}
-  .faq details p{color:var(--muted);padding-bottom:18px;font-size:.94rem}
-
-  /* CTA */
-  .cta-box{background:var(--grad);border-radius:28px;padding:60px 40px;text-align:center;color:#1a1200;position:relative;overflow:hidden}
-  .cta-box h2{font-family:'Cinzel',serif;font-size:clamp(1.7rem,4vw,2.6rem);margin-bottom:12px}
-  .cta-box p{max-width:560px;margin:0 auto 28px;font-weight:500}
-  .cta-box .btn{background:#0b0b0f;color:var(--gold)}
-  .cta-box .btn:hover{transform:translateY(-3px)}
-
-  /* FOOTER */
-  footer{border-top:1px solid var(--line);padding:50px 0 30px;margin-top:90px}
-  .foot{display:flex;justify-content:space-between;gap:30px;flex-wrap:wrap;margin-bottom:30px}
-  .foot p{color:var(--muted);font-size:.9rem;max-width:340px;margin-top:12px}
-  .foot-links{display:flex;gap:22px;flex-wrap:wrap;color:var(--muted);font-size:.9rem}
-  .foot-links a:hover{color:var(--gold)}
-  .disclaimer{max-width:860px;margin:0 auto 22px;text-align:center;background:rgba(230,57,70,.08);border:1px solid rgba(230,57,70,.55);border-radius:14px;padding:20px 24px;font-size:.76rem;line-height:1.65;color:#e3c3c6}
-  .disclaimer h4{font-size:.86rem;letter-spacing:2px;color:#ff8b95;margin-bottom:8px}
-  .disclaimer p{margin-bottom:8px}
-  .disclaimer b{color:#fff}
-  .disclaimer ul{list-style:none;padding:0;margin:0}
-  .disclaimer li{margin:5px 0}
-  .disclaimer li::before{content:"• ";color:#ff8b95}
-  .copy{text-align:center;color:#666;font-size:.82rem}
-
-  /* WA FLOAT */
-  .wa{position:fixed;right:22px;bottom:22px;z-index:99;width:60px;height:60px;border-radius:50%;background:#25d366;display:grid;place-items:center;box-shadow:0 8px 25px rgba(37,211,102,.5);animation:pulse 2s infinite}
-  .wa svg{width:32px;height:32px;fill:#fff}
-  @keyframes pulse{0%{box-shadow:0 0 0 0 rgba(37,211,102,.6)}70%{box-shadow:0 0 0 18px rgba(37,211,102,0)}100%{box-shadow:0 0 0 0 rgba(37,211,102,0)}}
-
-  /* REVEAL */
-  .reveal{opacity:0;transform:translateY(40px);transition:1s cubic-bezier(.2,.7,.2,1)}
-  .reveal.show{opacity:1;transform:none}
-
-  /* RESPONSIVE */
-  @media (max-width:960px){
-    .hero-grid,.specs-wrap{grid-template-columns:1fr}
-    .hero{text-align:center}
-    .hero p{margin-inline:auto}
-    .hero-btns,.badges{justify-content:center}
-    .hero-visual{order:-1}
-    .garuda{max-width:300px}
-    .grid-3,.plans{grid-template-columns:1fr 1fr}
-    .steps,.stats{grid-template-columns:1fr 1fr}
-    .plan.best{transform:none}
-    .plan.best:hover{transform:translateY(-6px)}
-  }
-  /* tablets & iPad: the 8-item menu no longer fits -> burger menu */
-  @media (max-width:1080px){
-    .menu{position:fixed;inset:64px 0 auto;flex-direction:column;background:rgba(7,7,10,.98);padding:26px;gap:20px;border-bottom:1px solid var(--line);transform:translateY(-140%);transition:.35s}
-    .menu.open{transform:none}
-    .burger{display:block}
-    .ticker-card{display:none}
-  }
-  @media (max-width:720px){
-    .grid-3,.plans{grid-template-columns:1fr}
-    section{padding:70px 0}
-    .cta-box{padding:44px 22px}
-  }
-  .cap-box{display:grid;grid-template-columns:1fr auto 1fr;align-items:center;gap:20px;max-width:760px;margin:-20px auto 46px;padding:26px 30px;border:1px solid var(--gold-2);border-radius:22px;background:linear-gradient(135deg,rgba(245,197,66,.10),rgba(20,20,28,.9));text-align:center}
-  .cap-box>div{display:flex;flex-direction:column;align-items:center}
-  .cap-label{font-size:.78rem;letter-spacing:2px;text-transform:uppercase;color:var(--muted)}
-  .cap-usd{font-family:'Cinzel',serif;font-size:clamp(1.9rem,4vw,2.4rem);line-height:1.2;white-space:nowrap}
-  @media(max-width:640px){.cap-box{grid-template-columns:1fr;gap:10px}}
-  @media(max-width:440px){.steps,.stats{grid-template-columns:1fr}.stat b{font-size:1.8rem}}
-  @media(max-width:360px){.nav-in .logo span{font-size:1rem}.logo svg{width:30px;height:30px}}
-  .cap-usc{font-size:.85rem;color:var(--muted)}
-  /* pricing (from /api/catalog, prices set in Admin > Produk & Harga) */
-  #plans{grid-template-columns:repeat(auto-fit,minmax(min(250px,100%),1fr));gap:20px}
-  #plans .plan{padding:30px 24px}
-  #plans .price b{font-size:2rem}
-  #plans .price small{color:var(--muted);font-size:.85rem;font-weight:400}
-  #plans select{width:100%;background:#0d0d13;border:1px solid var(--line);border-radius:12px;color:var(--text);padding:10px 12px;font:inherit;margin:4px 0 2px}
-  #plans .save{color:#2ecc71;font-size:.8rem;font-weight:600;min-height:1.2em}
-  .pay-note{text-align:center;color:var(--muted);font-size:.85rem;max-width:760px;margin:26px auto 0}
-  .cap-eq{font-size:2rem;color:var(--gold)}
-  .pm{padding:26px 0 0}
-  .pm[hidden]{display:none}
-  .pm-head{display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:12px;font-size:.95rem}
-  .pm-head b{font-family:'Cinzel',serif;font-size:1.05rem}
-  .pm-live{font-size:.72rem;font-weight:700;letter-spacing:2px;color:#6ee7a2;border:1px solid rgba(46,204,113,.5);border-radius:30px;padding:3px 10px}
-  .pm-sum{color:var(--muted);font-size:.85rem;margin-left:auto}
-  .pm-sum b{font-family:'Poppins';color:#6ee7a2;font-size:.9rem}
-  .pm-viewport{overflow:hidden;-webkit-mask-image:linear-gradient(90deg,transparent,#000 6%,#000 94%,transparent);mask-image:linear-gradient(90deg,transparent,#000 6%,#000 94%,transparent)}
-  .pm-track{display:flex;gap:12px;width:max-content;animation:pmScroll var(--pm-dur,40s) linear infinite}
-  .pm-viewport:hover .pm-track{animation-play-state:paused}
-  @keyframes pmScroll{to{transform:translateX(-50%)}}
-  .pm-card{flex:none;display:flex;align-items:center;gap:12px;background:var(--card);border:1px solid var(--line);border-radius:14px;padding:10px 16px;min-width:220px}
-  .pm-card .rk{font-family:'Cinzel',serif;font-weight:900;color:var(--gold);font-size:1rem;min-width:22px}
-  .pm-card b{font-size:.9rem;white-space:nowrap}
-  .pm-card small{display:block;color:var(--muted);font-size:.72rem;white-space:nowrap}
-  .pm-card .pf{margin-left:auto;font-weight:700;color:#6ee7a2;white-space:nowrap;font-size:.95rem;padding-left:10px}
-  .pm-card .pf.neg{color:#ff8b95}
-  .pm-note{font-size:.72rem;color:var(--muted);margin-top:10px;text-align:center}
-  .pm-note a{color:#ff8b95;text-decoration:underline}
-  @media (prefers-reduced-motion:reduce){.pm-track{animation:none}.pm-viewport{overflow-x:auto}}
-  .pm-track.pm-static{animation:none;width:auto;flex-wrap:wrap;justify-content:center}
-  .profit-est{display:flex;flex-direction:column;align-items:center;text-align:center;max-width:760px;margin:-26px auto 46px;padding:18px 24px;border:1px dashed var(--gold-2);border-radius:18px;background:rgba(245,197,66,.05)}
-  .profit-est[hidden]{display:none}
-  .profit-est b{font-family:'Cinzel',serif;font-size:clamp(1.6rem,4vw,2.2rem)}
-  .pe-pct{color:var(--text);font-size:.92rem}
-  .profit-est small{color:var(--muted);font-size:.76rem;margin-top:8px;max-width:600px}
-
-  /* ===== GOLD HUNTER GARUDA ===== */
-  .tr-wrap{overflow-x:auto;border:1px solid var(--line);border-radius:18px;background:var(--card);margin-top:26px}
-  .tr{width:100%;border-collapse:collapse;min-width:520px}
-  .tr th,.tr td{padding:13px 18px;border-bottom:1px solid var(--line);text-align:right;font-size:.92rem;white-space:nowrap}
-  .tr th{color:var(--muted);font-weight:600;font-size:.74rem;letter-spacing:1px;text-transform:uppercase}
-  .tr th:first-child,.tr td:first-child{text-align:left}
-  .tr tr:last-child td{border:0}
-  .tr .pos{color:#4ade80;font-weight:700}.tr .neg{color:#f87171;font-weight:700}
-  .mk{display:inline-block;padding:2px 8px;border:1px solid var(--line);border-radius:6px;font-weight:700;font-size:.78rem;margin-right:6px;color:var(--gold-3)}
-  .tr-note{color:var(--muted);font-size:.8rem;margin-top:10px}
-  .tr-empty{padding:26px;text-align:center;color:var(--muted)}
-  .mk-card .meta{display:flex;flex-wrap:wrap;gap:6px;margin-top:14px}
-  .mk-card .meta span{font-size:.75rem;border:1px solid var(--line);border-radius:50px;padding:3px 10px;color:var(--gold-3)}
-  .soon{max-width:760px;margin:0 auto;text-align:center;background:linear-gradient(180deg,var(--card),var(--bg-2));border:1px solid var(--gold-2);border-radius:22px;padding:38px 28px}
-  .soon p{color:var(--muted);margin:10px 0 22px}
-  .soon .hero-btns{justify-content:center}
-  .lang-btn{border:1px solid var(--line);border-radius:50px;padding:6px 12px;font-size:.85rem;color:var(--text);white-space:nowrap}
-  .lang-btn:hover{border-color:var(--gold);color:var(--gold)}
-  /* live EA cards (ghlive.js) */
-  .badge{display:inline-block;padding:3px 10px;border-radius:30px;font-size:.72rem;font-weight:600;letter-spacing:.3px;border:1px solid var(--line);white-space:nowrap}
-  .b-gold{color:var(--gold);border-color:rgba(245,197,66,.5);background:rgba(245,197,66,.08)}
-  .b-blue{color:#8cc4ff;border-color:rgba(77,163,255,.5);background:rgba(77,163,255,.08)}
-  .b-green{color:#6ee7a2;border-color:rgba(46,204,113,.5);background:rgba(46,204,113,.08)}
-  .b-red{color:#ff8b95;border-color:rgba(239,77,90,.5);background:rgba(239,77,90,.08)}
-  .row{display:flex;gap:12px;align-items:center;flex-wrap:wrap}.row.between{justify-content:space-between}
-  .tiny{font-size:.75rem}.muted{color:var(--muted)}
-  .btn-sm{padding:8px 16px;font-size:.85rem;gap:6px}
-  .btn-ghost{border:1px solid var(--line);color:var(--text);background:transparent}.btn-ghost:hover{border-color:var(--gold);color:var(--gold)}
-  #live-cards .tr-empty{border:1px dashed var(--line);border-radius:16px}
-</style>
-<script type="application/ld+json">[{"@context": "https://schema.org", "@type": "Organization", "name": "GoldHunter Garuda", "url": "https://goldhuntergaruda.com/", "logo": "https://goldhuntergaruda.com/assets/brand/goldhunter-garuda-logo-512.png"}, {"@context": "https://schema.org", "@type": "WebSite", "name": "GoldHunter Garuda", "url": "https://goldhuntergaruda.com/", "inLanguage": "id-ID"}, {"@context": "https://schema.org", "@type": "SoftwareApplication", "name": "GOLD HUNTER GARUDA", "applicationCategory": "FinanceApplication", "operatingSystem": "MetaTrader 5 (Windows)", "description": "EA grid-averaging untuk MetaTrader 5 (emas XAUUSD dan USDJPY) dengan laporan live dari akun nyata.", "url": "https://goldhuntergaruda.com/live", "publisher": {"@type": "Organization", "name": "GoldHunter Garuda"}}, {"@context": "https://schema.org", "@type": "FAQPage", "mainEntity": [{"@type": "Question", "name": "Apakah GOLD HUNTER GARUDA pasti profit?", "acceptedAnswer": {"@type": "Answer", "text": "Tidak. Tidak ada sistem trading yang menjamin profit. Sebagian besar basket selesai profit, tetapi tren panjang bisa membuat floating dalam dan drawdown besar tetap mungkin. Karena itu setiap akun EA melapor live, termasuk saat rugi."}}, {"@type": "Question", "name": "Berapa modal minimalnya?", "acceptedAnswer": {"@type": "Answer", "text": "Tergantung pair dan lot pertama yang dipakai. Akun cent cocok untuk modal kecil ($100 = 10.000 USC). Untuk lot yang sama, modal yang lebih kecil membuat floating lebih cepat dalam; tanyakan admin untuk saran modal."}}, {"@type": "Question", "name": "Apakah ada stop loss?", "acceptedAnswer": {"@type": "Answer", "text": "Tidak ada stop loss per posisi. Risiko ditangani DD reduction dua tahap, kantong profit, jarak yang melebar, dan pengaman equity opsional."}}, {"@type": "Question", "name": "Bagaimana hasil saya tampil?", "acceptedAnswer": {"@type": "Answer", "text": "EA Anda melapor ke papan hasil member: lama trading, modal, profit dalam dolar dan persen modal. Nama Anda disensor dan bisa disembunyikan."}}]}]</script>
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@700;900&family=Poppins:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/assets/app.css?v=52dcd811">
+<link rel="stylesheet" href="/assets/site.css?v=4e34ae4e">
+<script type="application/ld+json">[{"@context":"https://schema.org","@type":"Organization","name":"GoldHunter Garuda","url":"https://goldhuntergaruda.com/","logo":"https://goldhuntergaruda.com/assets/brand/goldhunter-garuda-logo-512.png"},
+{"@context":"https://schema.org","@type":"WebSite","name":"GoldHunter Garuda","url":"https://goldhuntergaruda.com/","inLanguage":"id-ID"},
+{"@context":"https://schema.org","@type":"SoftwareApplication","name":"GOLD HUNTER GARUDA","applicationCategory":"FinanceApplication","operatingSystem":"MetaTrader 5 (Windows)","description":"Expert Advisor MetaTrader 5 untuk emas XAUUSD dan semua pair: marty basket averaging dengan DD reduction, kantong profit, mode BARBAR, Market Liar dan mode berita. Setup rekomendasi per pair, installer 1 file, update otomatis.","url":"https://goldhuntergaruda.com/","offers":{"@type":"Offer","price":"0","priceCurrency":"IDR","description":"Trial gratis 7 hari; sewa, sharing profit dan EA gratis untuk akun IB"},"publisher":{"@type":"Organization","name":"GoldHunter Garuda"}},
+{"@context":"https://schema.org","@type":"FAQPage","mainEntity":[
+{"@type":"Question","name":"Apakah GOLD HUNTER GARUDA pasti profit?","acceptedAnswer":{"@type":"Answer","text":"Tidak. Tidak ada sistem trading yang menjamin profit. GOLD HUNTER GARUDA adalah EA martingale / averaging tanpa stop loss per posisi: sebagian besar basket selesai profit, tetapi tren panjang bisa membuat floating dalam dan drawdown besar tetap mungkin."}},
+{"@type":"Question","name":"Pair apa saja yang bisa dipakai?","acceptedAnswer":{"@type":"Answer","text":"Fokus utama emas (XAUUSD), tetapi EA jalan di semua pair. Setup rekomendasi dari pusat tersedia untuk XAUUSD, USDJPY, EURUSD dan BTCUSD, pair lain menyusul."}},
+{"@type":"Question","name":"Berapa modal yang disarankan?","acceptedAnswer":{"@type":"Answer","text":"Tergantung pair dan setup. Setup rekomendasi menuliskan modal per 0,01 lot, misalnya emas konservatif 40.000 USC (sekitar $400) di akun cent per 0,01 lot."}},
+{"@type":"Question","name":"Bagaimana cara memasangnya?","acceptedAnswer":{"@type":"Answer","text":"Unduh satu file installer dari member area, taruh di C:\\GOLD HUNTER GARUDA lalu klik dua kali. EA dan preset terpasang di setiap MT5 yang login di akun berlisensi, dan update EA serta preset masuk otomatis."}},
+{"@type":"Question","name":"Apa yang terjadi saat lisensi habis?","acceptedAnswer":{"@type":"Answer","text":"Panel EA menampilkan hitung mundur masa aktif. Setelah habis, EA berhenti membuka posisi baru tetapi tetap di chart dan basket yang berjalan tetap diurus sampai TP. Perpanjang di member area, EA langsung jalan lagi."}}]}]</script>
 </head>
 <body>
-
-<!-- ============ NAV ============ -->
-<nav id="nav">
-  <div class="container nav-in">
-    <a href="#home" class="logo">
-      <svg viewBox="0 0 100 100"><use href="#garuda-icon"/></svg>
-      <span class="gold-text">GOLDHUNTER</span>
-    </a>
-    <div class="menu" id="menu">
-      <a href="/live" data-en="Live">Live</a>
-      <a href="#member" data-en="Member Results">Hasil Member</a>
-      <a href="#strategi" data-en="Strategy">Strategi</a>
-      <a href="#harga" data-en="Pricing">Harga</a>
-      <a href="#faq">FAQ</a>
-      <a href="/masuk" id="nav-login" data-en="Log in">Masuk</a>
-      <a href="#" class="lang-btn" data-lang-toggle>🌐 EN</a>
-      <a href="/daftar" class="btn btn-gold" id="nav-cta" data-en="Sign Up Free">Daftar Gratis</a>
-    </div>
-    <button class="burger" id="burger" aria-label="Menu">☰</button>
-  </div>
-</nav>
-
-<!-- SVG symbol Garuda (dipakai ulang) -->
-<svg width="0" height="0" style="position:absolute">
-  <defs>
-    <linearGradient id="g" x1="0" y1="0" x2="1" y2="1">
-      <stop offset="0" stop-color="#fff1b8"/><stop offset=".4" stop-color="#f5c542"/><stop offset="1" stop-color="#8a6508"/>
-    </linearGradient>
-  </defs>
-  <symbol id="garuda-icon" viewBox="0 0 100 100">
-    <path fill="url(#g)" d="M50 14c-4 0-7 3-7 7 0 3 2 5 4 6l-3 5 6-2 6 2-3-5c2-1 4-3 4-6 0-4-3-7-7-7zM50 34c-6 0-10 5-10 12v14l-6 10h32l-6-10V46c0-7-4-12-10-12zM38 44 6 26l8 10-6 2 12 6-6 3 14 4-4 4 14 1zM62 44l32-18-8 10 6 2-12 6 6 3-14 4 4 4-14 1zM40 72l-8 14 10-5 8 7 8-7 10 5-8-14z"/>
-  </symbol>
-</svg>
+<main id="top">
 
 <!-- ============ HERO ============ -->
-<header class="hero" id="home">
-  <div class="container hero-grid">
-    <div class="reveal">
-      <span class="tag" data-en="📡 Live reports from real accounts">📡 Laporan live dari akun nyata</span>
-      <h1><span class="gold-text">GOLD HUNTER GARUDA</span><small data-en="GOLD &amp;amp; FOREX EA · LIVE PROOF">EA EMAS &amp; FOREX · BUKTI LIVE</small></h1>
-      <p data-en="A grid-averaging EA for MetaTrader 5 that runs BUY and SELL series at the same time, closes each basket at one target from its average price, and is guarded by a two-step DD reduction and a profit pocket. Instead of promises we show the results: every account running the EA is a real account and reports to this site &lt;b&gt;every minute&lt;/b&gt;.">EA grid-averaging untuk MetaTrader 5 yang menjalankan seri BUY dan SELL sekaligus, menutup tiap basket di satu target dari harga rata-ratanya, dan dijaga DD reduction dua tahap serta kantong profit. Daripada janji, kami tampilkan hasilnya: setiap akun yang menjalankan EA adalah akun nyata dan melapor ke web ini <b>tiap menit</b>.</p>
+<section class="hero">
+  <div class="wrap hero-grid">
+    <div class="hero-copy reveal">
+      <span class="eyebrow" data-en="🦅 One EA · MetaTrader 5">🦅 Satu EA · MetaTrader 5</span>
+      <h1><span class="gold-text">GOLD HUNTER GARUDA</span><small data-en="GOLD EA · XAUUSD FOCUS · EVERY PAIR">EA EMAS · FOKUS XAUUSD · SEMUA PAIR</small></h1>
+      <p class="hero-lead" data-en="An Expert Advisor that manages baskets instead of guessing direction: it averages into the move, closes every position of a side together at one target from the average price, and shrinks long baskets with &lt;b&gt;DD reduction&lt;/b&gt; and a &lt;b&gt;profit pocket&lt;/b&gt;. One EA, a recommended setup per pair, installed with one file.">Expert Advisor yang mengelola basket, bukan menebak arah: menambah posisi saat harga melawan, menutup semua posisi satu sisi bersamaan di satu target dari harga rata-rata, dan memangkas basket panjang dengan <b>DD reduction</b> serta <b>kantong profit</b>. Satu EA, setup rekomendasi per pair, dipasang dengan satu file.</p>
       <div class="hero-btns">
-        <a href="/live" class="btn btn-gold" data-en="📡 See Live Reports">📡 Lihat Laporan Live</a>
-        <a href="#strategi" class="btn btn-outline" data-en="How It Works">Cara Kerja</a>
+        <a href="/daftar" class="btn btn-gold btn-lg" data-guest-only data-en="🦅 Sign Up Free">🦅 Daftar Gratis</a>
+        <a href="/member#/order" class="btn btn-gold btn-lg" data-member-only hidden data-en="🛒 Choose a Package">🛒 Pilih Paket</a>
+        <a href="/harga#trial" class="btn btn-outline btn-lg" data-en="Try 7 Days Free">Coba Trial 7 Hari</a>
+        <a href="/live" class="btn btn-ghost btn-lg" data-en="📡 Live Reports">📡 Laporan Live</a>
       </div>
-      <div class="badges">
-        <div data-en="🥇 Gold · 💴 USDJPY">🥇 Emas · 💴 USDJPY</div>
-        <div data-en="⚖️ BUY &amp;amp; SELL together">⚖️ BUY &amp; SELL bersamaan</div>
-        <div data-en="📊 Reported every minute">📊 Dilaporkan tiap menit</div>
+      <div class="hero-points">
+        <span data-en="🥇 &lt;b&gt;XAUUSD&lt;/b&gt; focus">🥇 Fokus <b>XAUUSD</b></span>
+        <span data-en="🌐 Runs on &lt;b&gt;every pair&lt;/b&gt;">🌐 Jalan di <b>semua pair</b></span>
+        <span data-en="📦 Install with &lt;b&gt;1 file&lt;/b&gt;">📦 Pasang <b>1 file</b></span>
+        <span data-en="🔄 &lt;b&gt;Automatic&lt;/b&gt; updates">🔄 Update <b>otomatis</b></span>
       </div>
     </div>
     <div class="hero-visual reveal">
-      <svg class="garuda" viewBox="0 0 100 100" role="img" aria-label="Logo GOLD HUNTER GARUDA"><use href="#garuda-icon"/></svg>
-      <div class="ticker-card t1"><span class="dot"></span><span data-en="EAs online">EA online</span><b id="hv-on">…</b></div>
-      <div class="ticker-card t2">📈 <span data-en="All EAs today">Semua EA hari ini</span><b id="hv-day">…</b></div>
+      <img src="/assets/brand/goldhunter-garuda-logo-512.png" width="380" height="380" alt="Logo GOLD HUNTER GARUDA">
+      <div class="hero-chips">
+        <div class="chip"><span class="dot"></span><span data-en="Live accounts">Akun live</span><b id="hv-on">…</b></div>
+        <div class="chip">📈 <span data-en="Showcase today">Akun contoh hari ini</span><b id="hv-day">…</b></div>
+      </div>
     </div>
   </div>
-</header>
+</section>
 
-<!-- ============ STRIP ============ -->
-<div class="strip">
-  <div class="strip-track">
-    <span data-en="◆ BUY &amp;amp; SELL AT THE SAME TIME">◆ BUY &amp; SELL BERSAMAAN</span><span data-en="◆ ONE TP FROM THE AVERAGE PRICE">◆ TP BERSAMA DARI HARGA RATA-RATA</span><span data-en="◆ TWO-STEP DD REDUCTION">◆ DD REDUCTION DUA TAHAP</span><span data-en="◆ PROFIT POCKET">◆ KANTONG PROFIT</span><span data-en="◆ WAITS FOR A PULLBACK">◆ TUNGGU HARGA MUNDUR</span><span data-en="◆ READS THE NEWS CALENDAR">◆ MEMBACA KALENDER BERITA</span><span data-en="◆ LOT GROWS WITH THE BALANCE">◆ LOT IKUT BALANCE</span>
-    <span data-en="◆ BUY &amp;amp; SELL AT THE SAME TIME">◆ BUY &amp; SELL BERSAMAAN</span><span data-en="◆ ONE TP FROM THE AVERAGE PRICE">◆ TP BERSAMA DARI HARGA RATA-RATA</span><span data-en="◆ TWO-STEP DD REDUCTION">◆ DD REDUCTION DUA TAHAP</span><span data-en="◆ PROFIT POCKET">◆ KANTONG PROFIT</span><span data-en="◆ WAITS FOR A PULLBACK">◆ TUNGGU HARGA MUNDUR</span><span data-en="◆ READS THE NEWS CALENDAR">◆ MEMBACA KALENDER BERITA</span><span data-en="◆ LOT GROWS WITH THE BALANCE">◆ LOT IKUT BALANCE</span>
+<div class="wrap">
+  <div class="risk-banner reveal" role="note">
+    <span class="ri" aria-hidden="true">⚠️</span>
+    <div data-en="&lt;b&gt;Honest first:&lt;/b&gt; GOLD HUNTER GARUDA is a &lt;b&gt;martingale / averaging&lt;/b&gt; EA without a stop loss per position. It adds positions while price moves against it, so the floating loss can get deep in a long trend. &lt;b&gt;No profit is guaranteed&lt;/b&gt; and you can lose part or all of your capital. Only use money you can afford to lose. &lt;a href=&quot;#risiko&quot;&gt;Full risk warning&lt;/a&gt;"><b>Jujur dulu:</b> GOLD HUNTER GARUDA adalah EA <b>martingale / averaging</b> tanpa stop loss per posisi. EA menambah posisi saat harga melawan, sehingga floating bisa dalam saat tren panjang. <b>Tidak ada jaminan profit</b> dan Anda bisa kehilangan sebagian atau seluruh modal. Pakai hanya dana yang siap Anda tanggung. <a href="#risiko">Peringatan risiko lengkap</a></div>
   </div>
 </div>
 
-<!-- ============ STATS ============ -->
-<div class="container" style="padding-top:80px">
-  <div class="stats">
-    <div class="stat reveal"><b class="gold-text">1</b><span data-en="EA, one per chart">EA, satu per chart</span></div>
-    <div class="stat reveal"><b class="gold-text">24/7</b><span data-en="Runs by itself on a VPS">Jalan sendiri di VPS</span></div>
-    <div class="stat reveal"><b class="gold-text" data-en="60 s">60 dtk</b><span data-en="Each account reports">Tiap akun melapor</span></div>
-    <div class="stat reveal"><b class="gold-text">100%</b><span data-en="Shown as it is, wins &amp;amp; losses">Tampil apa adanya, untung &amp; rugi</span></div>
-  </div>
-</div>
-
-<!-- ============ LIVE SEKARANG ============ -->
-<section id="live-now" style="padding-top:30px;padding-bottom:40px">
-  <div class="container">
-    <div class="center"><span class="tag" data-en="📡 Live now">📡 Live sekarang</span></div>
-    <h2 class="sec-title" data-en="Accounts &lt;span class=&quot;gold-text&quot;&gt;Running Right Now&lt;/span&gt;">Akun yang <span class="gold-text">Sedang Berjalan</span></h2>
-    <p class="sec-sub" data-en="Profit since the start, % of capital, deepest drawdown and the baskets open at this moment, straight from the EA.">Profit sejak mulai, persen dari modal, drawdown terdalam dan basket yang terbuka saat ini, langsung dari EA.</p>
-    <div class="ghl-cards" id="live-cards"><div class="tr-empty" data-en="Loading live data…">Memuat data live…</div></div>
-    <div class="center" style="margin-top:24px"><a href="/live" class="btn btn-gold" data-en="📡 Open All Live Reports">📡 Buka Semua Laporan Live</a></div>
-  </div>
-</section>
-
-<!-- ============ HASIL MEMBER ============ -->
-<section id="member" style="padding-top:30px;padding-bottom:40px">
-  <div class="container">
-    <div class="center"><span class="tag" data-en="Member Results">Hasil Member</span></div>
-    <h2 class="sec-title" data-en="Member Accounts, &lt;span class=&quot;gold-text&quot;&gt;Real Results&lt;/span&gt;">Akun Member, <span class="gold-text">Hasil Nyata</span></h2>
-    <p class="sec-sub" data-en="Members' EAs report by themselves: how long they have been trading, the capital, the profit in dollars and as a % of capital. Names are censored.">EA member melapor sendiri: sudah berapa lama trading, modalnya, profit dalam dolar dan persen dari modal. Nama member disensor.</p>
-    <div class="tr-wrap reveal">
-      <table class="tr">
-        <thead data-en="&lt;tr&gt;&lt;th&gt;Member&lt;/th&gt;&lt;th&gt;Trading for&lt;/th&gt;&lt;th&gt;Capital&lt;/th&gt;&lt;th&gt;Profit&lt;/th&gt;&lt;th&gt;% of capital&lt;/th&gt;&lt;/tr&gt;"><tr><th>Member</th><th>Lama trading</th><th>Modal</th><th>Profit</th><th>% modal</th></tr></thead>
-        <tbody id="mb-body"><tr><td colspan="5" class="tr-empty">Memuat…</td></tr></tbody>
-      </table>
+<!-- ============ CARA KERJA ============ -->
+<span id="strategi" aria-hidden="true"></span>
+<section class="sec" id="cara-kerja">
+  <div class="wrap">
+    <div class="sec-head reveal">
+      <span class="eyebrow" data-en="How it works">Cara kerja</span>
+      <h2 class="sec-title" data-en="Simple Rules, &lt;span class=&quot;gold-text&quot;&gt;Every Basket&lt;/span&gt;">Aturan Sederhana, <span class="gold-text">Tiap Basket</span></h2>
+      <p class="sec-sub" data-en="No predictions. The EA follows the same four steps on every chart, all day.">Tanpa ramalan. EA menjalankan empat langkah yang sama di setiap chart, sepanjang hari.</p>
     </div>
-    <div class="center" style="margin-top:24px"><a href="/profit" class="btn btn-outline" data-en="See All Member Results">Lihat Semua Hasil Member</a></div>
+    <ol class="flow">
+      <li class="reveal"><h3 data-en="Opens BUY and SELL">Buka BUY dan SELL</h3><p data-en="In BARBAR mode a BUY series and a SELL series run at the same time, so one side is always working in the direction of the market.">Di mode BARBAR seri BUY dan seri SELL jalan bersamaan, jadi selalu ada sisi yang searah dengan pasar.</p>
+        <svg viewBox="0 0 200 64" aria-hidden="true"><path d="M10 44 C50 40 70 20 100 26 S150 50 190 18" fill="none" stroke="#f5c542" stroke-width="2"/><g font-size="9" font-weight="700"><rect x="30" y="8" width="34" height="14" rx="4" fill="rgba(72,152,255,.25)" stroke="#4da3ff"/><text x="37" y="18" fill="#8cc4ff">BUY</text><rect x="120" y="44" width="38" height="14" rx="4" fill="rgba(255,150,72,.25)" stroke="#ff9f43"/><text x="126" y="54" fill="#ffc58a">SELL</text></g></svg></li>
+      <li class="reveal"><h3 data-en="Adds layers when price moves against it">Tambah layer saat harga melawan</h3><p data-en="Each new layer is a little bigger (lot ×1.15) and, after layer 4, a little further away (step ×1.1), so the basket does not get too tight in a trend.">Tiap layer baru sedikit lebih besar (lot ×1,15) dan, sesudah layer 4, sedikit lebih jauh (jarak ×1,1), sehingga basket tidak terlalu rapat saat tren.</p>
+        <svg viewBox="0 0 200 64" aria-hidden="true"><path d="M10 10 L190 56" stroke="rgba(255,255,255,.25)" stroke-width="1.5"/><g fill="#4da3ff"><circle cx="24" cy="14" r="3"/><circle cx="58" cy="23" r="3.6"/><circle cx="96" cy="33" r="4.2"/><circle cx="140" cy="44" r="5"/><circle cx="182" cy="54" r="5.8"/></g></svg></li>
+      <li class="reveal"><h3 data-en="Closes together at one target">Tutup bersama di satu target</h3><p data-en="All positions of a side close together at the average price plus the target. Swap is counted, so the target is net.">Semua posisi satu sisi ditutup bersama di harga rata-rata ditambah target. Swap ikut dihitung, jadi targetnya bersih.</p>
+        <svg viewBox="0 0 200 64" aria-hidden="true"><line x1="0" y1="40" x2="200" y2="40" stroke="#a3a3b2" stroke-dasharray="4 4"/><line x1="0" y1="16" x2="200" y2="16" stroke="#2ecc71" stroke-dasharray="4 4"/><text x="6" y="36" font-size="8" fill="#a3a3b2">avg</text><text x="6" y="12" font-size="8" fill="#6ee7a2">TP</text><path d="M20 52 C60 58 90 50 120 34 S170 12 190 14" fill="none" stroke="#f5c542" stroke-width="2"/><circle cx="186" cy="14" r="5" fill="#2ecc71"/></svg></li>
+      <li class="reveal"><h3 data-en="Shrinks long baskets">Pangkas basket panjang</h3><p data-en="DD reduction lets the newest winning position pay for the oldest losing one; the profit pocket pays off stuck positions from saved profit.">DD reduction membuat posisi terbaru yang untung membayar posisi terlama yang rugi; kantong profit melunasi posisi macet dari profit yang disisihkan.</p>
+        <svg viewBox="0 0 200 64" aria-hidden="true"><g fill="none" stroke-width="2"><rect x="16" y="22" width="22" height="30" rx="4" stroke="#ff8b95"/><rect x="48" y="28" width="22" height="24" rx="4" stroke="#ff8b95"/><rect x="80" y="34" width="22" height="18" rx="4" stroke="#6ee7a2"/></g><path d="M86 28 C70 6 40 6 28 18" fill="none" stroke="#56d6d6" stroke-width="1.6" marker-end="url(#ar)"/><defs><marker id="ar" viewBox="0 0 6 6" refX="3" refY="3" markerWidth="6" markerHeight="6" orient="auto"><path d="M0 0 6 3 0 6z" fill="#56d6d6"/></marker></defs><path d="M130 24 h48 a6 6 0 0 1 6 6 v16 a6 6 0 0 1-6 6 h-48 a6 6 0 0 1-6-6 v-16 a6 6 0 0 1 6-6z" fill="rgba(245,197,66,.12)" stroke="#f5c542" stroke-width="1.6"/><text x="138" y="42" font-size="9" fill="#f5c542" font-weight="700">👛 50%</text></svg></li>
+    </ol>
   </div>
 </section>
 
-<!-- ============ STRATEGI ============ -->
-<section id="strategi">
-  <div class="container">
-    <div class="center"><span class="tag" data-en="Strategy">Strategi</span></div>
-    <h2 class="sec-title" data-en="How &lt;span class=&quot;gold-text&quot;&gt;GOLD HUNTER GARUDA&lt;/span&gt; Works">Cara Kerja <span class="gold-text">GOLD HUNTER GARUDA</span></h2>
-    <p class="sec-sub" data-en="It does not try to guess the direction. It manages baskets: averaging into the move, closing at one shared target, and shrinking long baskets before they get dangerous.">Ia tidak berusaha menebak arah. Ia mengelola basket: menambah posisi saat harga melawan, menutup semuanya di satu target bersama, dan memangkas basket yang panjang sebelum berbahaya.</p>
-    <div class="grid-3">
-      <div class="feat reveal"><div class="ico">⚖️</div><h3 data-en="BUY &amp;amp; SELL Together">BUY &amp; SELL Bersamaan</h3><p data-en="In BARBAR mode both sides always run. While one side waits for price to come back, the other side keeps closing baskets in profit.">Di mode BARBAR kedua sisi selalu berjalan. Saat satu sisi menunggu harga kembali, sisi lain terus menutup basket dengan profit.</p></div>
-      <div class="feat reveal"><div class="ico">🪜</div><h3 data-en="Layers That Widen">Layer yang Melebar</h3><p data-en="When price moves against a side, the EA adds a layer. The lot grows ×1.15 per layer and, after layer 4, the step widens ×1.1, so baskets do not get too tight in a long trend.">Saat harga melawan, EA menambah layer. Lot naik ×1,15 tiap layer dan sesudah layer 4 jaraknya melebar ×1,1, sehingga basket tidak terlalu rapat saat tren panjang.</p></div>
-      <div class="feat reveal"><div class="ico">🎯</div><h3 data-en="One Shared Take Profit">TP Bersama</h3><p data-en="All positions of one side close together at the average price plus the target. Swap is included, so the target is net.">Semua posisi satu sisi ditutup bersamaan di harga rata-rata ditambah target. Swap ikut dihitung, jadi targetnya bersih.</p></div>
-      <div class="feat reveal"><div class="ico">🔁</div><h3 data-en="Two-Step DD Reduction">DD Reduction Dua Tahap</h3><p data-en="From 6 positions, the newest position in profit pays for the oldest one in loss. The oldest is closed only after the profit has really been received, so the basket shrinks without a loss.">Mulai 6 posisi, posisi terbaru yang untung membayar posisi terlama yang rugi. Posisi terlama baru ditutup setelah untungnya benar-benar diterima, jadi basket menyusut tanpa rugi.</p></div>
-      <div class="feat reveal"><div class="ico">🟡</div><h3 data-en="Profit Pocket">Kantong Profit</h3><p data-en="Part of every closed profit is set aside. When a basket gets long, the pocket pays off its oldest losing position.">Sebagian dari setiap profit tertutup disisihkan. Saat basket sudah panjang, kantong dipakai melunasi posisi terlamanya yang rugi.</p></div>
-      <div class="feat reveal"><div class="ico">⏳</div><h3 data-en="Waits for a Pullback">Tunggu Harga Mundur</h3><p data-en="After a side takes profit, its next series waits for price to pull back a little, so it does not re-enter at the top of a spike.">Setelah satu sisi TP, seri berikutnya menunggu harga mundur sedikit, supaya tidak masuk lagi di pucuk lonjakan.</p></div>
-      <div class="feat reveal"><div class="ico">📰</div><h3 data-en="News &amp;amp; Spread Aware">Paham Berita &amp; Spread</h3><p data-en="High-impact news from the MT5 calendar: keep trading (GASPOL) or hold new series (TAHAN). Orders and closes wait while the spread is too wide.">Berita berdampak tinggi dari kalender MT5: tetap jalan (GASPOL) atau tahan seri baru (TAHAN). Order dan penutupan menunggu saat spread terlalu lebar.</p></div>
-      <div class="feat reveal"><div class="ico">📈</div><h3 data-en="Lot Follows the Balance">Lot Ikut Balance</h3><p data-en="The first lot is calculated from the balance (auto-compound): it grows as the account grows and shrinks after a loss.">Lot pertama dihitung dari balance (autocompound): ikut membesar saat akun tumbuh dan mengecil setelah rugi.</p></div>
-      <div class="feat reveal"><div class="ico">🖥️</div><h3 data-en="Clear Panel on the Chart">Panel Jelas di Chart</h3><p data-en="Average lines, basket TP, next layer, pocket balance and today's result are drawn on the chart, so you always see what the EA is doing.">Garis rata-rata, TP basket, layer berikutnya, saldo kantong dan hasil hari ini tergambar di chart, jadi Anda selalu tahu apa yang dikerjakan EA.</p></div>
+<!-- ============ FITUR ============ -->
+<section class="sec alt" id="fitur">
+  <div class="wrap">
+    <div class="sec-head reveal">
+      <span class="eyebrow" data-en="Key features">Fitur utama</span>
+      <h2 class="sec-title" data-en="Everything in &lt;span class=&quot;gold-text&quot;&gt;One EA&lt;/span&gt;">Semuanya dalam <span class="gold-text">Satu EA</span></h2>
+      <p class="sec-sub" data-en="Each part can be switched on or off in the inputs. The recommended setups already choose a safe combination per pair.">Setiap bagian bisa dinyalakan atau dimatikan di input. Setup rekomendasi sudah memilih kombinasi yang aman per pair.</p>
+    </div>
+    <div class="g3">
+      <div class="feat reveal"><div class="ico">🪜</div><h3 data-en="Marty Basket Averaging">Marty Basket Averaging</h3><p data-en="Layers with a growing lot and widening steps, one shared take profit from the average price, net of swap.">Layer dengan lot naik dan jarak melebar, satu take profit bersama dari harga rata-rata, bersih swap.</p></div>
+      <div class="feat reveal"><div class="ico">♻️</div><h3 data-en="Two-Step DD Reduction">DD Reduction Dua Tahap</h3><p data-en="From 6 positions the newest profit closes the oldest loss, only after the profit is really received, so the basket shrinks without a loss.">Mulai 6 posisi, profit terbaru menutup rugi terlama, baru setelah profitnya benar-benar diterima, jadi basket menyusut tanpa rugi.</p></div>
+      <div class="feat reveal"><div class="ico">👛</div><h3 data-en="Profit Pocket">Kantong Profit</h3><p data-en="Part of every closed profit is saved. When a basket gets long, the pocket pays off its oldest stuck position.">Sebagian setiap profit tertutup disisihkan. Saat basket panjang, kantong melunasi posisi terlama yang macet.</p></div>
+      <div class="feat reveal"><div class="ico">⇅</div><h3 data-en="BARBAR Both-Direction Mode">Mode BARBAR 2 Arah</h3><p data-en="BUY and SELL always run together. Prefer a direction filter? Switch to EMA trend or SMA mode in the inputs.">BUY dan SELL selalu jalan bersamaan. Mau pakai filter arah? Ganti ke mode EMA tren atau SMA di input.</p></div>
+      <div class="feat reveal"><div class="ico">⚡</div><h3 data-en="Market Liar Fast Mode">Mode Market Liar</h3><p data-en="When two M1 candles move at least 3× the layer step, the EA re-enters at once and takes profit sooner (70% of the target).">Saat dua candle M1 bergerak minimal 3× jarak layer, EA langsung masuk lagi dan mengambil profit lebih cepat (70% target).</p></div>
+      <div class="feat reveal"><div class="ico">📰</div><h3 data-en="News Modes">Mode Berita</h3><p data-en="High-impact news from the MT5 calendar: GASPOL, TAHAN, COPET (quick BUY &amp; SELL with a small TP in the news window), IKUT TREN (new series in the news direction) or AUTO (strong move = follow, weak = copet).">Berita berdampak tinggi dari kalender MT5: GASPOL, TAHAN, COPET (BUY &amp; SELL cepat dengan TP kecil di jendela berita), IKUT TREN (seri baru searah berita) atau AUTO (gerak kuat = ikut, lemah = copet).</p></div>
+      <div class="feat reveal"><div class="ico">📈</div><h3 data-en="Lot Follows the Capital">Lot Ikut Modal</h3><p data-en="The first lot is calculated from the balance or a budget per setup: it grows with the account and shrinks after a loss.">Lot pertama dihitung dari balance atau anggaran per setup: ikut membesar saat akun tumbuh dan mengecil setelah rugi.</p></div>
+      <div class="feat reveal"><div class="ico">🧩</div><h3 data-en="Many Setups, One EA">Banyak Setup, Satu EA</h3><p data-en="Run the EA on several charts with a different magic number each: every chart is its own setup, reported and compared on the web.">Jalankan EA di beberapa chart dengan magic number berbeda: tiap chart jadi setup sendiri, dilaporkan dan dibandingkan di web.</p></div>
+      <div class="feat reveal"><div class="ico">🖥️</div><h3 data-en="Panel, Licence &amp; Updates">Panel, Lisensi &amp; Update</h3><p data-en="Average lines, basket TP, next layer, pocket and today's result on the chart, plus the licence type and countdown. New versions install themselves.">Garis rata-rata, TP basket, layer berikutnya, kantong dan hasil hari ini di chart, plus jenis lisensi dan hitung mundurnya. Versi baru terpasang sendiri.</p></div>
     </div>
   </div>
 </section>
 
-<!-- ============ RISIKO JUJUR ============ -->
-<section id="risiko-terukur" style="padding-top:20px">
-  <div class="container specs-wrap">
+<!-- ============ LIVE ============ -->
+<span id="member" aria-hidden="true"></span>
+<section class="sec" id="live">
+  <div class="wrap">
+    <div class="sec-head reveal">
+      <span class="eyebrow" data-en="📡 Live now">📡 Live sekarang</span>
+      <h2 class="sec-title" data-en="Showcase Accounts, &lt;span class=&quot;gold-text&quot;&gt;Real Numbers&lt;/span&gt;">Akun Contoh, <span class="gold-text">Angka Nyata</span></h2>
+      <p class="sec-sub" data-en="Accounts chosen by HQ, reported by the EA itself every minute: closed profit since the start, % of capital and the deepest drawdown.">Akun pilihan pusat, dilaporkan oleh EA sendiri tiap menit: profit tertutup sejak mulai, persen dari modal dan drawdown terdalam.</p>
+    </div>
+    <div class="ghl-cards" id="live-cards"><div class="empty-box" style="grid-column:1/-1" data-en="Loading live data…">Memuat data live…</div></div>
+    <div class="sec-foot"><a href="/live" class="btn btn-gold" data-en="📡 Open All Live Reports">📡 Buka Semua Laporan Live</a></div>
+  </div>
+</section>
+
+<!-- ============ SETUP REKOMENDASI ============ -->
+<section class="sec alt" id="setup">
+  <div class="wrap">
+    <div class="sec-head reveal">
+      <span class="eyebrow" data-en="🎯 Recommended setups">🎯 Setup rekomendasi</span>
+      <h2 class="sec-title" data-en="One EA, &lt;span class=&quot;gold-text&quot;&gt;a Setup per Pair&lt;/span&gt;">Satu EA, <span class="gold-text">Setup per Pair</span></h2>
+      <p class="sec-sub" data-en="HQ prepares and updates a preset for every pair: capital per 0.01 lot, risk level and the key settings in plain words. Members download it and can build their own setups next to it.">Pusat menyiapkan dan memperbarui preset untuk tiap pair: modal per 0,01 lot, tingkat risiko dan setting penting dalam bahasa sederhana. Member tinggal unduh dan boleh membuat setup sendiri di sampingnya.</p>
+    </div>
+    <div class="setups" id="setup-cards"><div class="empty-box" style="grid-column:1/-1" data-en="Loading setups…">Memuat setup…</div></div>
+    <div class="sec-foot"><a href="/setup" class="btn btn-outline" data-en="See All Setups">Lihat Semua Setup</a></div>
+  </div>
+</section>
+
+<!-- ============ HARGA ============ -->
+<section class="sec" id="harga">
+  <div class="wrap">
+    <div class="sec-head reveal">
+      <span class="eyebrow" data-en="Packages">Paket</span>
+      <h2 class="sec-title" data-en="Choose How You &lt;span class=&quot;gold-text&quot;&gt;Use It&lt;/span&gt;">Pilih Cara <span class="gold-text">Pakainya</span></h2>
+      <p class="sec-sub" data-en="The same EA in every package, locked to your account number, with free automatic updates. Start with the free trial.">EA yang sama di setiap paket, terkunci di nomor akun Anda, dengan update otomatis gratis. Mulai dari trial gratis.</p>
+    </div>
+    <div class="plans" id="plans"><div class="empty-box" style="grid-column:1/-1" data-en="Loading prices…">Memuat harga…</div></div>
+    <p class="pay-note" id="pay-note"></p>
+    <div class="sec-foot"><a href="/harga" class="btn btn-outline" data-en="All Prices, VPS &amp; Payment">Semua Harga, VPS &amp; Pembayaran</a></div>
+  </div>
+</section>
+
+<!-- ============ PASANG 1 FILE ============ -->
+<section class="sec alt" id="pasang">
+  <div class="wrap">
+    <div class="sec-head reveal">
+      <span class="eyebrow" data-en="📦 Install">📦 Pemasangan</span>
+      <h2 class="sec-title" data-en="One File, &lt;span class=&quot;gold-text&quot;&gt;Done&lt;/span&gt;">Satu File, <span class="gold-text">Selesai</span></h2>
+      <p class="sec-sub" data-en="No copying files into MetaTrader folders by hand. The installer does it for every MT5 logged in to your licensed account.">Tidak perlu menyalin file ke folder MetaTrader satu per satu. Installer mengerjakannya untuk setiap MT5 yang login di akun berlisensi Anda.</p>
+    </div>
+    <ol class="flow">
+      <li class="reveal"><h3 data-en="Sign up &amp; pick a package">Daftar &amp; pilih paket</h3><p data-en="The 7-day trial and profit sharing are active right away; rent and IB follow payment or the admin check.">Trial 7 hari dan sharing profit langsung aktif; sewa dan IB menyusul setelah bayar atau dicek admin.</p></li>
+      <li class="reveal"><h3 data-en="Log in to MT5">Login MT5</h3><p data-en="Open MetaTrader 5, log in to the licensed account with the trading password and tick Save password.">Buka MetaTrader 5, login akun berlisensi dengan password trading dan centang Save password.</p></li>
+      <li class="reveal"><h3 data-en="Run the installer">Jalankan installer</h3><p data-en="Download the one file from the member area, put it in C:\GOLD HUNTER GARUDA and double-click it, then Yes.">Unduh satu file dari member area, taruh di C:\GOLD HUNTER GARUDA lalu klik dua kali, kemudian Yes.</p></li>
+      <li class="reveal"><h3 data-en="Attach &amp; relax">Pasang di chart</h3><p data-en="Drag the EA onto the chart, load the recommended preset. New EA versions and presets arrive by themselves; your chart setups are never changed.">Seret EA ke chart, muat preset rekomendasi. Versi EA dan preset baru masuk sendiri; setup chart Anda tidak pernah diubah.</p></li>
+    </ol>
+    <div class="sec-foot"><a href="/cara-pasang" class="btn btn-outline" data-en="Step-by-Step Install Guide">Panduan Pasang Lengkap</a></div>
+  </div>
+</section>
+
+<!-- ============ HASIL & RISIKO ============ -->
+<section class="sec" id="jujur">
+  <div class="wrap split">
     <div class="reveal">
-      <span class="tag" data-en="🛡️ Honest About Risk">🛡️ Jujur Soal Risiko</span>
+      <span class="eyebrow" data-en="🛡️ Results &amp; risk, honestly">🛡️ Hasil &amp; risiko, apa adanya</span>
       <h2 class="sec-title" style="text-align:left" data-en="Strong Win Rate, &lt;span class=&quot;gold-text&quot;&gt;Known Weakness&lt;/span&gt;">Win Rate Kuat, <span class="gold-text">Kelemahan Jelas</span></h2>
-      <p style="color:var(--muted)" data-en="GOLD HUNTER GARUDA is a martingale / averaging EA without a stop loss per position. Its strength: most baskets close in profit because each one closes at a target from its average price. Its weakness: when price runs far in one direction without a pause, the floating loss can get deep. That is why every account running the EA reports live, including its deepest floating loss.">GOLD HUNTER GARUDA adalah EA martingale / averaging tanpa stop loss per posisi. Kekuatannya: sebagian besar basket selesai profit karena tiap basket ditutup di target dari harga rata-ratanya. Kelemahannya: saat harga berlari jauh satu arah tanpa jeda, floating bisa dalam. Karena itu setiap akun yang menjalankan EA melapor live, termasuk floating terdalamnya.</p>
-      <ul class="check-list">
-        <li data-en="&lt;span&gt;Start with a &lt;b&gt;first lot that fits your capital&lt;/b&gt;; smaller is safer&lt;/span&gt;"><span>Mulai dengan <b>lot pertama sesuai modal</b>; makin kecil makin aman</span></li>
+      <p class="muted" data-en="Strength: most baskets close in profit because each closes at a target from its average price. Weakness: when price runs far in one direction without a pause, the floating loss can get deep, and a gap or slippage can make it worse. That is why the showcase accounts report their deepest drawdown too.">Kekuatan: sebagian besar basket selesai profit karena tiap basket ditutup di target dari harga rata-ratanya. Kelemahan: saat harga berlari jauh satu arah tanpa jeda, floating bisa dalam, dan gap atau slippage bisa memperburuknya. Karena itu akun contoh juga melaporkan drawdown terdalamnya.</p>
+      <ul class="checks">
+        <li data-en="&lt;span&gt;Start with a &lt;b&gt;first lot that fits your capital&lt;/b&gt;: follow the capital per 0.01 lot of the setup&lt;/span&gt;"><span>Mulai dengan <b>lot pertama sesuai modal</b>: ikuti modal per 0,01 lot dari setup</span></li>
         <li data-en="&lt;span&gt;Use a &lt;b&gt;cent account&lt;/b&gt; for small capital: $100 = 10,000 USC&lt;/span&gt;"><span>Pakai <b>akun cent</b> untuk modal kecil: $100 = 10.000 USC</span></li>
         <li data-en="&lt;span&gt;Withdraw profit regularly; the lot follows the remaining balance&lt;/span&gt;"><span>Tarik profit secara berkala; lot mengikuti balance yang tersisa</span></li>
         <li data-en="&lt;span&gt;An optional equity guard closes everything at −x% of the balance&lt;/span&gt;"><span>Pengaman equity opsional menutup semua posisi di −x% balance</span></li>
       </ul>
     </div>
-    <table class="spec-table reveal">
-      <tr data-en="&lt;td&gt;Platform&lt;/td&gt;&lt;td&gt;MetaTrader 5&lt;/td&gt;"><td>Platform</td><td>MetaTrader 5</td></tr>
-      <tr data-en="&lt;td&gt;Pairs&lt;/td&gt;&lt;td&gt;Gold (XAUUSD) and USDJPY; more pairs will follow&lt;/td&gt;"><td>Pair</td><td>Emas (XAUUSD) dan USDJPY; pair lain menyusul</td></tr>
+    <table class="spec reveal">
+      <tr data-en="&lt;td&gt;Platform&lt;/td&gt;&lt;td&gt;MetaTrader 5 (Windows PC or VPS)&lt;/td&gt;"><td>Platform</td><td>MetaTrader 5 (PC Windows atau VPS)</td></tr>
+      <tr data-en="&lt;td&gt;Pairs&lt;/td&gt;&lt;td&gt;Focus gold (XAUUSD); runs on every pair. Recommended setups: XAUUSD, USDJPY, EURUSD, BTCUSD&lt;/td&gt;"><td>Pair</td><td>Fokus emas (XAUUSD); jalan di semua pair. Setup rekomendasi: XAUUSD, USDJPY, EURUSD, BTCUSD</td></tr>
       <tr data-en="&lt;td&gt;Account&lt;/td&gt;&lt;td&gt;Cent account recommended ($100 = 10,000 USC)&lt;/td&gt;"><td>Akun</td><td>Disarankan akun cent ($100 = 10.000 USC)</td></tr>
-      <tr data-en="&lt;td&gt;First lot&lt;/td&gt;&lt;td&gt;Follows the balance (auto-compound)&lt;/td&gt;"><td>Lot pertama</td><td>Ikut balance (autocompound)</td></tr>
-      <tr data-en="&lt;td&gt;Layers&lt;/td&gt;&lt;td&gt;Lot ×1.15 per layer, step widens ×1.1 after layer 4&lt;/td&gt;"><td>Layer</td><td>Lot ×1,15 tiap layer, jarak melebar ×1,1 sesudah layer 4</td></tr>
+      <tr data-en="&lt;td&gt;First lot&lt;/td&gt;&lt;td&gt;Follows the balance or a budget per setup&lt;/td&gt;"><td>Lot pertama</td><td>Ikut balance atau anggaran per setup</td></tr>
       <tr data-en="&lt;td&gt;Stop loss per position&lt;/td&gt;&lt;td&gt;None (reduction, pocket, optional equity guard)&lt;/td&gt;"><td>Stop loss per posisi</td><td>Tidak ada (reduction, kantong, pengaman equity opsional)</td></tr>
-      <tr data-en="&lt;td&gt;Reports&lt;/td&gt;&lt;td&gt;Live every minute on /live&lt;/td&gt;"><td>Laporan</td><td>Live tiap menit di /live</td></tr>
+      <tr data-en="&lt;td&gt;Licence&lt;/td&gt;&lt;td&gt;Locked to your account number, countdown on the EA panel&lt;/td&gt;"><td>Lisensi</td><td>Terkunci di nomor akun Anda, hitung mundur di panel EA</td></tr>
+      <tr data-en="&lt;td&gt;Updates&lt;/td&gt;&lt;td&gt;EA and presets update automatically, chart setups stay&lt;/td&gt;"><td>Update</td><td>EA dan preset update otomatis, setup chart tetap</td></tr>
     </table>
-  </div>
-  <p class="container tr-note" style="margin-top:14px" data-en="Without a stop loss per position, a strong one-way trend, a price gap or slippage can make the drawdown deep. Check the deepest drawdown of every account on /live before you decide.">Tanpa stop loss per posisi, tren kuat satu arah, gap harga atau slippage bisa membuat drawdown dalam. Cek drawdown terdalam tiap akun di /live sebelum memutuskan.</p>
-</section>
-
-<!-- ============ CARA MULAI ============ -->
-<section id="cara">
-  <div class="container">
-    <div class="center"><span class="tag" data-en="Getting Started">Cara Mulai</span></div>
-    <h2 class="sec-title" data-en="Start &lt;span class=&quot;gold-text&quot;&gt;Without Rushing&lt;/span&gt;">Mulai <span class="gold-text">Tanpa Terburu-buru</span></h2>
-    <p class="sec-sub" data-en="Look at the proof first. Decide when you are convinced.">Lihat buktinya dulu. Putuskan setelah Anda yakin.</p>
-    <div class="steps">
-      <div class="step reveal"><div class="num">1</div><h4 data-en="Watch">Pantau</h4><p data-en="Follow the live report of every account for as long as you like. No sign-up needed.">Ikuti laporan live tiap akun selama yang Anda mau. Tidak perlu daftar.</p></div>
-      <div class="step reveal"><div class="num">2</div><h4 data-en="Plan">Rencanakan</h4><p data-en="Decide the capital, the pair and a first lot that fit your nerves; start small.">Tentukan modal, pair dan lot pertama yang cocok dengan ketenangan Anda; mulai dari kecil.</p></div>
-      <div class="step reveal"><div class="num">3</div><h4 data-en="Ask">Tanya</h4><p data-en="Sign up for free and ask the admin about a GOLD HUNTER GARUDA licence and how to install it.">Daftar gratis dan tanya admin soal lisensi GOLD HUNTER GARUDA dan cara pasangnya.</p></div>
-      <div class="step reveal"><div class="num">4</div><h4 data-en="Show">Tampil</h4><p data-en="Your EA reports to the member board by itself, with your name censored (or hidden if you prefer).">EA Anda melapor sendiri ke papan hasil member, dengan nama disensor (atau disembunyikan bila mau).</p></div>
-    </div>
-  </div>
-</section>
-
-<!-- ============ HARGA ============ -->
-<section id="harga" class="pricing" style="padding-top:30px">
-  <div class="container">
-    <div class="center"><span class="tag" data-en="Pricing">Harga</span></div>
-    <h2 class="sec-title" data-en="Choose How You &lt;span class=&quot;gold-text&quot;&gt;Use It&lt;/span&gt;">Pilih Cara <span class="gold-text">Pakainya</span></h2>
-    <p class="sec-sub" data-en="The same EA in every package, locked to your account number, with free automatic updates. Try it free first.">EA yang sama di setiap paket, terkunci di nomor akun Anda, dengan update otomatis gratis. Coba gratis dulu.</p>
-    <div class="plans" id="plans"><div class="tr-empty" style="grid-column:1/-1" data-en="Loading prices…">Memuat harga…</div></div>
-    <p class="pay-note" id="pay-note" data-en="Pay by bank transfer, USDT (TRC20) or QRIS / virtual account. Packages with a VPS are available in the member area.">Bayar lewat transfer bank, USDT (TRC20) atau QRIS / virtual account. Paket dengan VPS tersedia di member area.</p>
-  </div>
-</section>
-
-<!-- ============ AKSES (soft) ============ -->
-<section id="akses" style="padding-top:20px">
-  <div class="container">
-    <div class="soon reveal">
-      <span class="tag" data-en="🦅 Interested?">🦅 Tertarik?</span>
-      <h2 class="sec-title" style="margin-top:14px" data-en="Use &lt;span class=&quot;gold-text&quot;&gt;GOLD HUNTER GARUDA&lt;/span&gt; on Your Account">Pakai <span class="gold-text">GOLD HUNTER GARUDA</span> di Akun Anda</h2>
-      <p data-en="No pressure. Watch the live results first; if they suit you, sign up for free and ask the admin. Your money stays in your own broker account.">Tidak ada paksaan. Pantau dulu hasil live-nya; kalau cocok, daftar gratis lalu tanya admin. Dana Anda tetap di akun broker atas nama Anda sendiri.</p>
-      <div class="hero-btns">
-        <a href="/daftar" class="btn btn-gold" data-en="🦅 Sign Up Free">🦅 Daftar Gratis</a>
-        <a class="btn btn-outline order" data-plan="GOLD HUNTER GARUDA" data-en="💬 Ask the Admin">💬 Tanya Admin</a>
-      </div>
-    </div>
   </div>
 </section>
 
 <!-- ============ FAQ ============ -->
-<section id="faq" style="padding-top:20px">
-  <div class="container">
-    <div class="center"><span class="tag">FAQ</span></div>
-    <h2 class="sec-title" data-en="Frequently Asked &lt;span class=&quot;gold-text&quot;&gt;Questions&lt;/span&gt;">Pertanyaan <span class="gold-text">Umum</span></h2>
-    <p class="sec-sub" data-en="Still unsure? Find the answers here.">Masih ragu? Temukan jawabannya di sini.</p>
+<section class="sec alt" id="faq">
+  <div class="wrap">
+    <div class="sec-head reveal">
+      <span class="eyebrow">FAQ</span>
+      <h2 class="sec-title" data-en="Frequently Asked &lt;span class=&quot;gold-text&quot;&gt;Questions&lt;/span&gt;">Pertanyaan <span class="gold-text">Umum</span></h2>
+    </div>
     <div class="faq">
-      <details class="reveal"><summary data-en="Is GOLD HUNTER GARUDA guaranteed to profit?">Apakah GOLD HUNTER GARUDA pasti profit?</summary><p data-en="No. No trading system guarantees profit. Most baskets close in profit, but a long trend can push the floating loss deep, and a deep drawdown is possible. That is why every account running the EA reports live, losses included.">Tidak. Tidak ada sistem trading yang menjamin profit. Sebagian besar basket selesai profit, tetapi tren panjang bisa membuat floating dalam dan drawdown besar tetap mungkin. Karena itu setiap akun yang menjalankan EA melapor live, termasuk saat rugi.</p></details>
-      <details class="reveal"><summary data-en="How much capital do I need?">Berapa modal minimalnya?</summary><p data-en="It depends on the pair and the first lot you use. A cent account suits small capital: $100 shows as 10,000 USC. For the same lot, a smaller capital lets the floating loss get deep sooner, so a bigger capital per 0.01 lot is safer. Ask the admin for a capital suggestion.">Tergantung pair dan lot pertama yang Anda pakai. Akun cent cocok untuk modal kecil: $100 tampil sebagai 10.000 USC. Untuk lot yang sama, modal yang lebih kecil membuat floating lebih cepat dalam, jadi modal yang lebih besar per 0,01 lot lebih aman. Tanyakan admin untuk saran modal.</p></details>
-      <details class="reveal"><summary data-en="Can the numbers be faked?">Apakah angkanya bisa direkayasa?</summary><p data-en="The EA itself sends the account data every minute and calculates the closed profit from the account history. We do not edit the numbers; account numbers are shown masked.">EA sendiri yang mengirim data akun tiap menit dan menghitung profit tertutup dari riwayat akun. Kami tidak mengubah angkanya; nomor akun ditampilkan tersamar.</p></details>
-      <details class="reveal"><summary data-en="Is there a stop loss?">Apakah ada stop loss?</summary><p data-en="There is no stop loss per position. Risk is handled by the two-step DD reduction, the profit pocket, the widening steps and an optional equity guard that closes everything at a loss limit you choose.">Tidak ada stop loss per posisi. Risiko ditangani DD reduction dua tahap, kantong profit, jarak yang melebar, dan pengaman equity opsional yang menutup semua posisi di batas rugi pilihan Anda.</p></details>
-      <details class="reveal"><summary data-en="Which broker and platform?">Broker dan platform apa?</summary><p data-en="MetaTrader 5, preferably a cent account (our live accounts run on Exness). If your broker quotes gold with 2 decimals instead of 3, enter one tenth of the point values (1000 → 100).">MetaTrader 5, disarankan akun cent (akun live kami berjalan di Exness). Bila broker Anda menampilkan harga emas 2 desimal, bukan 3, isi sepersepuluh nilai poinnya (1000 → 100).</p></details>
-      <details class="reveal"><summary data-en="How do my results appear?">Bagaimana hasil saya tampil?</summary><p data-en="Your EA reports to the member results board: trading time, capital, profit in dollars and % of capital. Your name is censored, and you can ask the admin to hide it completely.">EA Anda melapor ke papan hasil member: lama trading, modal, profit dalam dolar dan persen modal. Nama Anda disensor, dan Anda bisa minta admin menyembunyikannya sama sekali.</p></details>
-      <details class="reveal"><summary data-en="How much does it cost?">Berapa biayanya?</summary><p data-en="See the &lt;a href=&quot;#harga&quot; style=&quot;color:var(--gold)&quot;&gt;Pricing&lt;/a&gt; section: monthly or yearly rental, free for accounts under our IB, profit sharing (a weekly commission only on profit) or a free trial. Watching the live reports is always free.">Lihat bagian <a href="#harga" style="color:var(--gold)">Harga</a>: sewa bulanan atau tahunan, gratis untuk akun di bawah IB kami, sharing profit (komisi mingguan hanya dari profit) atau trial gratis. Memantau laporan live selalu gratis.</p></details>
+      <details><summary data-en="Is GOLD HUNTER GARUDA guaranteed to profit?">Apakah GOLD HUNTER GARUDA pasti profit?</summary><p data-en="No. No trading system guarantees profit. It is a martingale / averaging EA without a stop loss per position: most baskets close in profit, but a long trend can push the floating loss deep and a big drawdown is possible.">Tidak. Tidak ada sistem trading yang menjamin profit. Ini EA martingale / averaging tanpa stop loss per posisi: sebagian besar basket selesai profit, tetapi tren panjang bisa membuat floating dalam dan drawdown besar tetap mungkin.</p></details>
+      <details><summary data-en="Which pairs can I use?">Pair apa saja yang bisa dipakai?</summary><p data-en="The focus is gold (XAUUSD), but the EA runs on every pair. HQ publishes recommended setups for XAUUSD, USDJPY, EURUSD and BTCUSD; more pairs will follow.">Fokus utamanya emas (XAUUSD), tetapi EA jalan di semua pair. Pusat menerbitkan setup rekomendasi untuk XAUUSD, USDJPY, EURUSD dan BTCUSD; pair lain menyusul.</p></details>
+      <details><summary data-en="How much capital do I need?">Berapa modal yang dibutuhkan?</summary><p data-en="Each recommended setup states its capital per 0.01 lot, for example 40,000 USC (about $400) on a cent account for the conservative gold setup. A bigger capital per 0.01 lot is safer.">Setiap setup rekomendasi menuliskan modal per 0,01 lot, misalnya 40.000 USC (sekitar $400) di akun cent untuk setup emas konservatif. Makin besar modal per 0,01 lot, makin aman.</p></details>
+      <details><summary data-en="Can I run several setups?">Boleh menjalankan beberapa setup?</summary><p data-en="Yes. Put the EA on several charts and give each chart a different magic number (input 1.1). Every chart becomes its own setup with its own results, so you can compare your setup with the recommended one.">Boleh. Pasang EA di beberapa chart dan beri magic number berbeda di tiap chart (input 1.1). Setiap chart menjadi setup sendiri dengan hasilnya sendiri, jadi Anda bisa membandingkan setup Anda dengan setup rekomendasi.</p></details>
+      <details><summary data-en="What happens when the licence ends?">Apa yang terjadi saat lisensi habis?</summary><p data-en="The EA panel shows the licence countdown and you get reminders 3 days and 1 day before. After the end, the EA stops opening new positions but stays on the chart and keeps managing running baskets until their TP. Renew in the member area and it continues.">Panel EA menampilkan hitung mundur lisensi dan Anda mendapat pengingat H-3 dan H-1. Setelah habis, EA berhenti membuka posisi baru tetapi tetap di chart dan tetap mengurus basket yang berjalan sampai TP. Perpanjang di member area, EA langsung lanjut.</p></details>
+      <details><summary data-en="Is there an MT4 version?">Ada versi MT4?</summary><p data-en="GOLD HUNTER GARUDA is offered for MetaTrader 5 only.">GOLD HUNTER GARUDA hanya ditawarkan untuk MetaTrader 5.</p></details>
+      <details><summary data-en="Where is my money?">Dana saya disimpan di mana?</summary><p data-en="In your own broker account, in your name. GoldHunter Garuda is not a broker and never holds trading funds; the EA only trades the account it is licensed for.">Di akun broker Anda sendiri, atas nama Anda. GoldHunter Garuda bukan broker dan tidak pernah memegang dana trading; EA hanya bertrading di akun yang dilisensikan.</p></details>
     </div>
   </div>
 </section>
 
 <!-- ============ CTA ============ -->
-<div class="container reveal">
-  <div class="cta-box">
-    <h2 data-en="Look First, Decide Later">Lihat Dulu, Putuskan Belakangan</h2>
-    <p data-en="Every account running the EA reports live every minute. Watch it for as long as you need.">Setiap akun yang menjalankan EA melapor live tiap menit. Pantau selama yang Anda perlukan.</p>
-    <a class="btn" href="/live" data-en="📡 See Live Reports">📡 Lihat Laporan Live</a>
-  </div>
-</div>
-
-<!-- ============ FOOTER ============ -->
-<footer>
-  <div class="container">
-    <div class="foot">
-      <div>
-        <a href="#home" class="logo"><svg viewBox="0 0 100 100"><use href="#garuda-icon"/></svg><span class="gold-text">GOLDHUNTER GARUDA</span></a>
-        <p data-en="GOLD HUNTER GARUDA: a gold &amp;amp; forex EA for MetaTrader 5 with live reports from real accounts.">GOLD HUNTER GARUDA: EA emas &amp; forex untuk MetaTrader 5 dengan laporan live dari akun nyata.</p>
+<section class="sec tight">
+  <div class="wrap reveal">
+    <div class="cta-box">
+      <h2 data-en="Try It on Your Own Account">Coba di Akun Anda Sendiri</h2>
+      <p data-en="7 days free, active right away, every feature. Watch the live reports first if you like; decide when you are convinced.">Gratis 7 hari, langsung aktif, semua fitur. Pantau dulu laporan live-nya bila perlu; putuskan setelah Anda yakin.</p>
+      <div class="hero-btns" style="justify-content:center">
+        <a class="btn btn-lg" href="/daftar" data-guest-only data-en="🦅 Sign Up Free">🦅 Daftar Gratis</a>
+        <a class="btn btn-lg" href="/member#/order" data-member-only hidden data-en="🛒 Start the Trial">🛒 Mulai Trial</a>
+        <a class="btn btn-lg btn-ghost" href="/live" data-en="📡 See Live Reports">📡 Lihat Laporan Live</a>
       </div>
-      <div class="foot-links">
-        <a href="/live" data-en="Live">Live</a><a href="/profit" data-en="Member Results">Hasil Member</a><a href="#strategi" data-en="Strategy">Strategi</a><a href="#faq">FAQ</a>
-      </div>
+      <small data-en="Not investment advice. Trading carries a high risk; past results do not guarantee future results.">Bukan saran investasi. Trading berisiko tinggi; hasil masa lalu tidak menjamin hasil berikutnya.</small>
     </div>
-    <div class="disclaimer" id="risiko">
-      <h4 data-en="⚠️ RISK WARNING">⚠️ PERINGATAN RISIKO</h4>
-      <p data-en="&lt;b&gt;Trading forex, gold and crypto with leverage carries a very high risk and can lead to the loss of part or ALL of your capital.&lt;/b&gt; Market conditions always change and cannot be predicted or controlled by anyone, including GoldHunter Garuda."><b>Trading forex, emas dan kripto dengan leverage berisiko sangat tinggi dan dapat menyebabkan kehilangan sebagian atau SELURUH modal.</b> Kondisi pasar selalu berubah dan tidak dapat diprediksi maupun dikendalikan oleh siapa pun, termasuk GoldHunter Garuda.</p>
-      <ul>
-        <li data-en="GOLD HUNTER GARUDA is a martingale / averaging EA without a stop loss per position. It is a &lt;b&gt;trading tool&lt;/b&gt;, not investment advice, not an investment product, not fund management, and it &lt;b&gt;does not guarantee profit&lt;/b&gt;.">GOLD HUNTER GARUDA adalah EA martingale / averaging tanpa stop loss per posisi. Ini <b>alat bantu trading</b>, bukan nasihat investasi, bukan produk investasi, bukan pengelolaan dana, dan <b>tidak menjamin profit</b>.</li>
-        <li data-en="The live reports and member results are &lt;b&gt;past records&lt;/b&gt; and do not guarantee future results. Results differ per account depending on capital, settings, start date and broker.">Laporan live dan hasil member adalah <b>catatan masa lalu</b> dan tidak menjamin hasil di masa depan. Hasil tiap akun berbeda tergantung modal, setting, waktu mulai dan broker.</li>
-        <li data-en="The decision to use the EA, the capital, the settings and the resulting risk are &lt;b&gt;entirely the user&amp;#39;s responsibility&lt;/b&gt;. GoldHunter Garuda and its admin are &lt;b&gt;not liable&lt;/b&gt; for losses caused by market conditions, brokers, VPS, connections or the use of the EA.">Keputusan memakai EA, besar modal, setting dan risiko yang timbul <b>sepenuhnya tanggung jawab pengguna</b>. GoldHunter Garuda dan admin <b>tidak bertanggung jawab</b> atas kerugian akibat kondisi pasar, broker, VPS, koneksi atau pemakaian EA.</li>
-        <li data-en="GoldHunter Garuda is &lt;b&gt;not a broker&lt;/b&gt; and &lt;b&gt;does not accept, hold or manage trading funds&lt;/b&gt;. Your funds stay in a broker account in your own name.">GoldHunter Garuda <b>bukan broker</b> dan <b>tidak menerima, menyimpan, atau mengelola dana trading</b>. Dana Anda berada di akun broker atas nama Anda sendiri.</li>
-        <li data-en="Only use money you can afford to lose. By signing up and using this service you confirm that you have read, understood and accepted this warning.">Gunakan hanya dana yang siap Anda tanggung risikonya. Dengan mendaftar dan memakai layanan ini, Anda dianggap telah membaca, memahami dan menyetujui peringatan ini.</li>
-      </ul>
-    </div>
-    <p class="copy">© <span id="yr"></span> GOLDHUNTER GARUDA. All rights reserved.</p>
   </div>
-</footer>
-
-<!-- WhatsApp Float -->
-<a class="wa order" data-plan="" aria-label="WhatsApp">
-  <svg viewBox="0 0 24 24"><path d="M17.5 14.4c-.3-.1-1.8-.9-2-1-.3-.1-.5-.1-.7.1-.2.3-.8 1-.9 1.2-.2.2-.3.2-.6.1-.3-.1-1.3-.5-2.4-1.5-.9-.8-1.5-1.8-1.7-2.1-.2-.3 0-.5.1-.6l.4-.5c.1-.2.2-.3.3-.5.1-.2 0-.4 0-.5l-.9-2.2c-.2-.6-.5-.5-.7-.5h-.6c-.2 0-.5.1-.8.4-.3.3-1 1-1 2.5s1.1 2.9 1.2 3.1c.1.2 2.1 3.2 5.1 4.5.7.3 1.3.5 1.7.6.7.2 1.4.2 1.9.1.6-.1 1.8-.7 2-1.4.2-.7.2-1.3.2-1.4-.1-.2-.3-.3-.6-.4zM12 2C6.5 2 2 6.5 2 12c0 1.8.5 3.5 1.3 4.9L2 22l5.2-1.4c1.4.8 3.1 1.2 4.8 1.2 5.5 0 10-4.5 10-10S17.5 2 12 2z"/></svg>
-</a>
+</section>
+</main>
 
 <script src="/assets/i18n.js?v=489e4256"></script>
+<script src="/assets/site.js?v=63068651"></script>
 <script src="/assets/ghlive.js?v=288b5d0d"></script>
 <script>
-  // Tombol chat admin -> WhatsApp (nomor dari Admin > Pengaturan)
-  const waMsg = (plan) => plan ? `Halo Admin, saya tertarik dengan *${plan}*. Mohon infonya.` : 'Halo Admin, saya ingin bertanya tentang GOLD HUNTER GARUDA.';
-  const setWa = (num) => document.querySelectorAll('.order').forEach(el => {
-    el.href = `https://wa.me/${num}?text=${encodeURIComponent(waMsg(el.dataset.plan))}`;
-    el.target = '_blank'; el.rel = 'noopener';
-  });
-  // Sembunyikan tombol WhatsApp sampai nomor admin diisi di Admin > Pengaturan
-  document.querySelectorAll('.order').forEach(el => { el.style.display = 'none'; });
-  // ---- Pricing: the four EA packages with their current prices (rent: one price per duration)
-  let CAT = null;
-  const rp = (n) => 'Rp ' + Math.round(n || 0).toString().replace(/\B(?=(\d{3})+(?!\d))/g, '.');
-  const durL = (m) => m === 18 ? T('1,5 tahun', '1.5 years') : m >= 12 && m % 12 === 0 ? `${m / 12} ${T('tahun', m === 12 ? 'year' : 'years')}` : `${m} ${T('bulan', m === 1 ? 'month' : 'months')}`;
-  const tx = (p, k) => (window.GHG_LANG === 'en' && p[k + '_en']) || p[k] || '';
-  function renderPlans() {
-    const box = document.getElementById('plans');
-    const list = CAT ? CAT.products.filter((p) => ['ea_rent', 'ea_ib', 'ea_share', 'ea_trial'].includes(p.kind)) : [];
-    if (!list.length) { box.innerHTML = `<div class="tr-empty" style="grid-column:1/-1">${T('Hubungi admin untuk harga terbaru.', 'Ask the admin for the current prices.')}</div>`; return; }
-    const order = { ea_trial: 0, ea_rent: 1, ea_share: 2, ea_ib: 3 };
-    list.sort((a, b) => order[a.kind] - order[b.kind]);
-    box.innerHTML = list.map((p) => {
-      const feats = tx(p, 'features').split(/\r?\n/).filter(Boolean).map((f) => `<li>${escH(f)}</li>`).join('');
-      let price = '', extra = '';
-      if (p.kind === 'ea_rent' && p.prices) {
-        const ms = Object.keys(p.prices).map(Number).sort((a, b) => a - b);
-        const def = ms.includes(12) ? 12 : ms[0];
-        extra = `<select data-rent="${p.id}">${ms.map((m) => `<option value="${m}" ${m === def ? 'selected' : ''}>${durL(m)} · ${rp(p.prices[m])}</option>`).join('')}</select><div class="save" data-save="${p.id}"></div>`;
-        price = `<b data-rp="${p.id}">${rp(p.prices[def])}</b><small data-rl="${p.id}">/ ${durL(def)}</small>`;
-      } else if (p.kind === 'ea_share') price = `<b>${CAT.share.pct}%</b><small>${T('dari profit mingguan', 'of the weekly profit')}</small>`;
-      else if (p.kind === 'ea_trial') price = `<b>${T('GRATIS', 'FREE')}</b><small>${CAT.trial_days} ${T('hari', 'days')}</small>`;
-      else price = `<b>${T('GRATIS', 'FREE')}</b><small>${T('akun di bawah IB kami', 'accounts under our IB')}</small>`;
-      const best = p.kind === 'ea_share';
-      const cta = { ea_trial: T('Coba Gratis', 'Try Free'), ea_rent: T('Sewa Sekarang', 'Rent Now'), ea_share: T('Mulai Sharing', 'Start Sharing'), ea_ib: T('Ajukan Gratis', 'Apply Free') }[p.kind];
-      return `<div class="plan ${best ? 'best' : ''}">${best ? `<div class="ribbon">${T('TANPA BIAYA DI DEPAN', 'NO UPFRONT FEE')}</div>` : ''}
-        <h3>${escH(tx(p, 'name'))}</h3><p class="desc">${escH(tx(p, 'description'))}</p>
-        <div class="price">${price}</div>${extra}<ul>${feats}</ul>
-        <a class="btn ${best ? 'btn-gold' : 'btn-outline'}" href="/member#/order/${p.id}">${cta}</a></div>`;
-    }).join('');
-    box.querySelectorAll('[data-rent]').forEach((sel) => {
-      const p = CAT.products.find((x) => String(x.id) === sel.dataset.rent);
-      const upd = () => {
-        const m = Number(sel.value), v = p.prices[m], full = p.price * m;
-        box.querySelector(`[data-rp="${p.id}"]`).textContent = rp(v);
-        box.querySelector(`[data-rl="${p.id}"]`).textContent = '/ ' + durL(m);
-        box.querySelector(`[data-save="${p.id}"]`).textContent = full > v ? T(`Hemat ${Math.round((1 - v / full) * 100)}% (${rp(full - v)})`, `Save ${Math.round((1 - v / full) * 100)}% (${rp(full - v)})`) : '';
-      };
-      sel.onchange = upd; upd();
-    });
-    const pays = [T('transfer bank', 'bank transfer'), CAT.pay && CAT.pay.usdt ? 'USDT (TRC20)' : '', CAT.pay && CAT.pay.gateway ? 'QRIS / virtual account' : ''].filter(Boolean);
-    const note = document.getElementById('pay-note');
-    note.removeAttribute('data-en');
-    note.textContent = T(`Bayar lewat ${pays.join(', ')}. Paket dengan VPS tersedia di member area.`, `Pay by ${pays.join(', ')}. Packages with a VPS are available in the member area.`);
-  }
-  document.addEventListener('ghg:lang', renderPlans);
-  fetch('/api/catalog').then(r => r.json()).then(c => {
-    CAT = c; renderPlans();
-    if (!c.whatsapp) return;
-    setWa(c.whatsapp.replace(/\D/g, '').replace(/^0/, '62'));
-    document.querySelectorAll('.order').forEach(el => { el.style.display = ''; });
-  }).catch(() => renderPlans());
-
-  // Navbar scroll + burger
-  const nav = document.getElementById('nav'), menu = document.getElementById('menu');
-  addEventListener('scroll', () => nav.classList.toggle('scrolled', scrollY > 40));
-  document.getElementById('burger').onclick = () => menu.classList.toggle('open');
-  menu.querySelectorAll('a').forEach(a => a.onclick = () => menu.classList.remove('open'));
-
-  // Reveal on scroll
-  const io = new IntersectionObserver(es => es.forEach(e => {
-    if (e.isIntersecting) { e.target.classList.add('show'); io.unobserve(e.target); }
-  }), { threshold: .12 });
-  document.querySelectorAll('.reveal').forEach(el => io.observe(el));
-
-  document.getElementById('yr').textContent = new Date().getFullYear();
-
-  // ---- Live: hero tickers, running EAs, member board ----
-  let LIVE = null, BOARD = null;
-  const escH = GHL.esc;
+(() => {
+  const T2 = SITE.TT;
+  // ---- live showcase (only the accounts the admin chose; empty = being prepared)
+  let LIVE = null;
   function renderLive() {
     const list = (LIVE && LIVE.setups) || [];
     const on = list.filter((x) => x.online).length;
-    document.getElementById('hv-on').textContent = list.length ? `${on}/${list.length}` : T('segera', 'soon');
+    document.getElementById('hv-on').textContent = list.length ? `${on}/${list.length} online` : T2('disiapkan', 'being prepared');
     const dayUsd = list.reduce((a, x) => a + (GHL.toUsd(x.day, x.currency) || 0), 0);
-    document.getElementById('hv-day').textContent = list.length ? GHL.usd(dayUsd) : T('menunggu data', 'waiting for data');
-    const top = list.slice().sort((a, b) => (b.online - a.online) || ((b.total_pct ?? -1e9) - (a.total_pct ?? -1e9))).slice(0, 8);
+    document.getElementById('hv-day').textContent = list.length ? GHL.usd(dayUsd) : T2('segera', 'soon');
+    const top = list.slice().sort((a, b) => (b.online - a.online) || ((b.total_pct ?? -1e9) - (a.total_pct ?? -1e9))).slice(0, 6);
     document.getElementById('live-cards').innerHTML = top.length ? top.map((x) => GHL.card(x)).join('')
-      : `<div class="tr-empty" style="grid-column:1/-1">${T('Akun live sedang disiapkan. Laporan live tampil di sini begitu EA-nya mulai mengirim data.', 'The live accounts are being prepared. Live reports appear here as soon as their EAs start sending data.')}</div>`;
+      : `<div class="empty-box" style="grid-column:1/-1"><b>${T2('Akun contoh live sedang disiapkan.', 'The live showcase accounts are being prepared.')}</b><br>${T2('Laporan live tampil di sini begitu akun pilihan pusat mulai mengirim data.', 'Live reports appear here as soon as the accounts chosen by HQ start sending data.')}</div>`;
   }
-  function renderBoard() {
-    const tb = document.getElementById('mb-body');
-    if (!BOARD || !BOARD.enabled || !BOARD.rows || !BOARD.rows.length) {
-      tb.innerHTML = `<tr><td colspan="5" class="tr-empty">${T('Belum ada akun member yang melapor. Hasil member tampil di sini otomatis, dengan nama disensor.', 'No member account is reporting yet. Member results appear here automatically, with names censored.')}</td></tr>`;
-      return;
-    }
-    tb.innerHTML = BOARD.rows.slice(0, 10).map((r) => `<tr><td><b>${escH(r.name)}</b> <small style="color:var(--muted)">${escH(r.broker || '')}</small></td>
-      <td>${r.since ? GHL.days(Math.max(0, BOARD.generated_at - r.since)) : '-'}</td><td>${r.modal_usd == null ? '-' : GHL.usd(r.modal_usd, false)}</td>
-      <td class="${GHL.cls(r.all_usd)}">${r.all_usd == null ? '-' : GHL.usd(r.all_usd)}</td><td class="${GHL.cls(r.all_pct)}">${GHL.pct(r.all_pct)}</td></tr>`).join('');
-  }
-  document.addEventListener('ghg:lang', () => { renderLive(); renderBoard(); });
   const loadLive = () => GHL.load(true).then((d) => { LIVE = d; renderLive(); }).catch(() => { LIVE = { setups: [] }; renderLive(); });
-  renderLive();
   loadLive();
   setInterval(() => { if (!document.hidden) loadLive(); }, 60000);
-  fetch('/api/board?period=all&limit=10').then((r) => r.json()).then((d) => { BOARD = d; renderBoard(); }).catch(() => { BOARD = null; renderBoard(); });
 
-  // Sudah login? tombol menu langsung ke area masing-masing
-  fetch('/api/me').then(r => r.json()).then(r => {
-    if (!r.user) return;
-    document.getElementById('nav-login').style.display = 'none';
-    const cta = document.getElementById('nav-cta');
-    cta.removeAttribute('data-en');
-    cta.textContent = r.user.role === 'admin' ? 'Admin Area' : 'Member Area';
-    cta.href = r.user.role === 'admin' ? '/admin' : '/member';
-  }).catch(() => {});
+  // ---- recommended setups teaser
+  let SET = null;
+  function renderSetups() {
+    const box = document.getElementById('setup-cards');
+    const list = SET && SET.setups ? SET.setups.slice(0, 4) : [];
+    box.innerHTML = list.length ? list.map((s) => SITE.setupCard(s, { compact: true })).join('')
+      : `<div class="empty-box" style="grid-column:1/-1">${T2('Setup rekomendasi sedang disiapkan pusat.', 'HQ is preparing the recommended setups.')}</div>`;
+    SITE.reveal(box);
+  }
+  SITE.setups().then((d) => { SET = d; renderSetups(); }).catch(() => { SET = null; renderSetups(); });
+
+  // ---- packages from the catalog (prices: Admin > Produk & Harga)
+  let CAT = null;
+  const renderPlans = () => SITE.renderPlans(document.getElementById('plans'), CAT, { note: document.getElementById('pay-note') });
+  SITE.catalog.then((c) => { CAT = c; renderPlans(); });
+
+  document.addEventListener('ghg:lang', () => { if (LIVE) renderLive(); if (SET) renderSetups(); if (CAT) renderPlans(); });
+})();
 </script>
 </body>
 </html>

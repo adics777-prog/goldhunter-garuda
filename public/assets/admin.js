@@ -54,7 +54,7 @@
   }
 
   const routes = { '': dashboard, ib: ibOrders, pesanan: paidOrders, 'ganti-akun': changesPage, lisensi: licensesPage, build: buildsPage,
-    member: usersPage, profit: profitPage, produk: productsPage, pengaturan: settingsPage, email: emailsPage, konten: contentPage, sosmed: socialPage };
+    member: usersPage, profit: profitPage, produk: productsPage, setup: setupsPage, pengaturan: settingsPage, email: emailsPage, konten: contentPage, sosmed: socialPage };
   async function render() {
     clearInterval(timer);
     const [name, arg] = location.hash.replace(/^#\/?/, '').split('/');
@@ -1021,6 +1021,79 @@
     };
     $('#np').onclick = () => edit(null);
     $$('[data-p]').forEach((b) => b.onclick = () => edit(products.find((x) => x.id == b.dataset.p)));
+  }
+
+  // ------------------------------------------------------------------ recommended setups (/setup, landing, member area)
+  const RISK_L = { low: ['b-green', 'Rendah'], medium: ['b-orange', 'Sedang'], high: ['b-red', 'Tinggi'] };
+  async function setupsPage() {
+    const d = await api('/admin/setups');
+    const rel = d.release;
+    const cap = (s) => s.capital_per_lot > 0 ? `${Number(s.capital_per_lot).toLocaleString('id-ID')} ${s.account_type === 'cent' ? 'USC' : 'USD'}` : '-';
+    const src = (s) => s.preset_source === 'upload' ? `<span class="badge b-blue">upload</span> <span class="tiny">${esc(s.upload_name)}</span>`
+      : s.preset_source === 'release' ? `<span class="badge b-green">rilis builder</span> <span class="tiny">${esc(s.preset_name)}</span>`
+      : `<span class="badge b-orange">belum ada</span>${s.preset_name ? ` <span class="tiny muted">${esc(s.preset_name)} tidak ada di rilis</span>` : ''}`;
+    view.innerHTML = `${title('🎯 Setup Rekomendasi', '<a class="btn btn-ghost btn-sm" href="/setup" target="_blank">Lihat halaman /setup</a><button class="btn btn-gold btn-sm" id="ns">+ Setup</button>')}
+      <p class="small muted" style="margin:-10px 0 14px">Satu kartu per pair (boleh beberapa per pair). Tampil di <b>/setup</b>, landing page dan member area. Preset .set hanya bisa diunduh member yang punya lisensi EA aktif.
+        Pilih preset dari <b>rilis builder</b> (selalu versi terbaru yang disinkronkan builder dengan input EA) atau <b>upload</b> file .set sendiri. Agen member tetap memasang semua preset rilis seperti biasa.</p>
+      ${rel ? `<div class="alert small" style="margin-bottom:14px">📦 Rilis builder: <b>v${esc(rel.version)}</b> · ${fmtDateTime(rel.at)} · ${rel.presets.length} preset</div>` : '<div class="alert warn small" style="margin-bottom:14px">Belum ada rilis builder di web, jadi preset rilis belum bisa dipilih. Jalankan builder atau upload .set.</div>'}
+      <div class="table-wrap"><table><thead><tr><th>Urut</th><th>Pair / nama</th><th>Risiko</th><th>Modal / 0,01 lot</th><th>Preset</th><th>Status</th><th></th></tr></thead><tbody>
+      ${d.setups.map((s) => `<tr><td>${s.sort}</td><td><b>${esc(s.symbol)}</b> · ${esc(s.title)}<div class="tiny muted">${esc(s.style)} · diperbarui ${fmtDate(s.updated_at)}</div></td>
+        <td><span class="badge ${(RISK_L[s.risk] || ['b-gray'])[0]}">${(RISK_L[s.risk] || [0, s.risk])[1]}</span></td><td class="nowrap">${cap(s)}</td><td>${src(s)}</td>
+        <td>${s.active ? '<span class="badge b-green">tampil</span>' : '<span class="badge b-gray">disembunyikan</span>'}</td>
+        <td class="nowrap"><button class="btn btn-ghost btn-sm" data-e="${s.id}">Edit</button></td></tr>`).join('') || '<tr><td colspan="7" class="empty">Belum ada setup. Klik + Setup.</td></tr>'}</tbody></table></div>`;
+    const edit = (s) => {
+      const names = rel ? rel.presets : [];
+      const opts = names.map((n) => `<option value="${esc(n)}" ${s && s.preset_name === n ? 'selected' : ''}>${esc(n)}</option>`).join('');
+      const m = modal(s ? `Edit setup ${s.symbol}` : 'Setup baru', `<form id="sf">
+        <div class="grid c2" style="gap:0 12px">
+          <div class="field"><label>Pair (simbol tanpa akhiran broker)</label><input name="symbol" value="${esc(s?.symbol || '')}" placeholder="XAUUSD" required></div>
+          <div class="field"><label>Nama setup</label><input name="title" value="${esc(s?.title || '')}" placeholder="Emas · Konservatif" required></div>
+          <div class="field"><label>Gaya (singkat)</label><input name="style" value="${esc(s?.style || '')}" placeholder="BARBAR 2 arah · Market Liar aktif"></div>
+          <div class="field"><label>Tingkat risiko (relatif)</label><select name="risk">${Object.entries(RISK_L).map(([k, v]) => `<option value="${k}" ${(s?.risk || 'medium') === k ? 'selected' : ''}>${v[1]}</option>`).join('')}</select></div>
+          <div class="field"><label>Jenis akun</label><select name="account_type"><option value="cent" ${s?.account_type !== 'standard' ? 'selected' : ''}>Cent (USC)</option><option value="standard" ${s?.account_type === 'standard' ? 'selected' : ''}>Standar (USD)</option></select></div>
+          <div class="field"><label>Chart / timeframe</label><input name="timeframe" value="${esc(s?.timeframe || 'M1')}"></div>
+          <div class="field"><label>Modal per 0,01 lot (mata uang akun)</label><input name="capital_per_lot" type="number" min="0" step="any" value="${s?.capital_per_lot ?? ''}" placeholder="40000"></div>
+          <div class="field"><label>Saran modal awal (mata uang akun)</label><input name="budget" type="number" min="0" step="any" value="${s?.budget ?? ''}" placeholder="40000"></div>
+        </div>
+        <div class="field"><label>Ringkasan</label><textarea name="summary">${esc(s?.summary || '')}</textarea></div>
+        <div class="field"><label>Setting penting (bahasa sederhana, satu per baris)</label><textarea name="settings" style="min-height:130px">${esc(s?.settings || '')}</textarea></div>
+        <details style="margin-bottom:14px"><summary class="small" style="cursor:pointer;color:var(--gold)">English (website in English)</summary>
+          <div class="field" style="margin-top:10px"><label>Name</label><input name="title_en" value="${esc(s?.title_en || '')}"></div>
+          <div class="field"><label>Style</label><input name="style_en" value="${esc(s?.style_en || '')}"></div>
+          <div class="field"><label>Summary</label><textarea name="summary_en">${esc(s?.summary_en || '')}</textarea></div>
+          <div class="field"><label>Key settings (one per line)</label><textarea name="settings_en" style="min-height:110px">${esc(s?.settings_en || '')}</textarea></div></details>
+        <div class="summary" style="margin-bottom:14px"><div class="small" style="margin-bottom:8px"><b>Preset .set</b></div>
+          <div class="field"><label>Dari rilis builder</label><select name="preset_name"><option value="">— tidak memakai preset rilis —</option>${opts}${s && s.preset_name && !names.includes(s.preset_name) ? `<option value="${esc(s.preset_name)}" selected>${esc(s.preset_name)} (tidak ada di rilis)</option>` : ''}</select></div>
+          <div class="field" style="margin:0"><label>Atau upload .set sendiri (menang atas preset rilis)</label><input name="file" type="file" accept=".set">
+            ${s && s.preset_file_id ? `<label class="row" style="margin-top:8px;color:var(--text)"><input type="checkbox" name="clear_upload"> Hapus upload (${esc(s.upload_name)}), kembali ke preset rilis</label>` : ''}</div></div>
+        <div class="grid c2" style="gap:0 12px"><div class="field"><label>Urutan</label><input name="sort" type="number" value="${s?.sort ?? (d.setups.length + 1)}"></div>
+          <div class="field"><label>&nbsp;</label><label class="row" style="color:var(--text)"><input type="checkbox" name="active" ${!s || s.active ? 'checked' : ''}> Tampilkan di website</label></div></div>
+        <div class="row between"><button class="btn btn-gold" type="submit">Simpan</button>${s ? '<button class="btn btn-red btn-sm" type="button" data-del>Hapus setup</button>' : ''}</div></form>`, { wide: true });
+      const f = $('#sf', m.el);
+      f.onsubmit = async (e) => {
+        e.preventDefault();
+        const fd = new FormData(f);
+        const body = Object.fromEntries([...fd.entries()].filter(([k]) => k !== 'file' && k !== 'clear_upload'));
+        body.active = !!fd.get('active');
+        const file = fd.get('file');
+        if (file && file.size) {
+          if (!/\.set$/i.test(file.name)) return toast('File preset harus .set', 'err');
+          if (file.size > 150000) return toast('File preset terlalu besar (maks 150 KB)', 'err');
+          body.preset_upload = { name: file.name, data_b64: await new Promise((res, rej) => { const r = new FileReader(); r.onload = () => res(String(r.result).split(',')[1]); r.onerror = rej; r.readAsDataURL(file); }) };
+        }
+        if (fd.get('clear_upload')) body.preset_clear_upload = true;
+        await busy($('button[type=submit]', f), () => api('/admin/setups' + (s ? '/' + s.id : ''), { method: s ? 'PUT' : 'POST', body }));
+        m.close(); toast('Setup disimpan'); render();
+      };
+      const del = $('[data-del]', f);
+      if (del) del.onclick = async () => {
+        if (!(await confirmBox('Hapus setup?', `Setup ${esc(s.symbol)} · ${esc(s.title)} dihapus dari website. File upload-nya ikut dihapus; preset rilis builder tidak tersentuh.`, 'Hapus', true))) return;
+        await api('/admin/setups/' + s.id, { method: 'DELETE' });
+        m.close(); toast('Setup dihapus'); render();
+      };
+    };
+    $('#ns').onclick = () => edit(null);
+    $$('[data-e]').forEach((b) => b.onclick = () => edit(d.setups.find((x) => x.id == b.dataset.e)));
   }
 
   // ------------------------------------------------------------------ VPS agents (inside Pengaturan > EA Live)

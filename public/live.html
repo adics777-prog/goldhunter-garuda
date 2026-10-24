@@ -17,17 +17,12 @@
 <link rel="apple-touch-icon" href="/assets/brand/apple-touch-icon.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@700;900&family=Poppins:wght@300;400;600;700&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@700;900&family=Poppins:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="/assets/app.css?v=52dcd811">
+<link rel="stylesheet" href="/assets/site.css?v=4e34ae4e">
 <style>
-  .pub-top{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:14px clamp(16px,4vw,40px);border-bottom:1px solid var(--line);background:var(--bg-2);position:sticky;top:0;z-index:20}
-  .pub-top .brand{padding:0;flex-shrink:0}
-  .pub-top .row{flex-wrap:nowrap}
-  .pub-top .btn{white-space:nowrap}
-  @media(max-width:420px){.pub-top a[href="/masuk"]{display:none}}@media(max-width:360px){.pub-top a.btn[href="/"]{display:none}}
-  @media(max-width:560px){.pub-top .brand span{display:none}.pub-top .btn{padding:7px 10px;font-size:.78rem}.pub-top .row{gap:6px!important}}
   .pub-wrap{max-width:1180px;margin:0 auto;padding:30px clamp(16px,4vw,32px) 60px}
-  .pub-hero{text-align:center;margin-bottom:22px}
+  .pub-hero{text-align:center;margin-bottom:22px;position:relative}
   .pub-hero h1{font-family:'Cinzel',serif;font-size:clamp(1.5rem,4.5vw,2.3rem);margin:10px 0 8px}
   .pub-hero p{color:var(--muted);max-width:680px;margin:0 auto}
   .pos{color:#6ee7a2;font-weight:700}
@@ -76,16 +71,13 @@
 </style>
 </head>
 <body>
-<header class="pub-top">
-  <a class="brand" href="/"><img src="/assets/brand/goldhunter-garuda-logo-128.png" width="38" height="38" alt="GoldHunter Garuda"><span class="gold-text">GOLDHUNTER</span></a>
-  <div class="row" style="gap:8px"><a href="#" class="btn btn-ghost btn-sm" data-lang-toggle>🌐 EN</a><a class="btn btn-ghost btn-sm" href="/" data-en="🏠 Home">🏠 Beranda</a><span class="row" id="top-btn" style="gap:8px"><a class="btn btn-ghost btn-sm" href="/masuk" data-en="Log in">Masuk</a><a class="btn btn-gold btn-sm" href="/daftar" data-en="Sign Up Free">Daftar Gratis</a></span></div>
-</header>
 <main class="pub-wrap">
   <div id="overview">
     <div class="pub-hero">
       <span class="badge b-gold" data-en="📡 Live · real accounts · every minute">📡 Live · akun nyata · tiap menit</span>
       <h1><span class="gold-text">GOLD HUNTER GARUDA</span> Live</h1>
-      <p data-en="Every EA runs on a real trading account and reports every minute: profit since the start, % of capital, deepest drawdown and the baskets running right now. Nothing is filtered or edited.">Setiap EA berjalan di akun trading nyata dan melapor tiap menit: profit sejak mulai, persen dari modal, drawdown terdalam dan basket yang sedang berjalan. Tidak ada yang disaring atau diedit.</p>
+      <p data-en="Showcase accounts chosen by HQ, each running GOLD HUNTER GARUDA on a real trading account and reporting every minute: profit since the start, % of capital, deepest drawdown and the baskets running right now. The numbers come from the EA itself and are not edited.">Akun contoh pilihan pusat, masing-masing menjalankan GOLD HUNTER GARUDA di akun trading nyata dan melapor tiap menit: profit sejak mulai, persen dari modal, drawdown terdalam dan basket yang sedang berjalan. Angkanya dikirim EA sendiri dan tidak diedit.</p>
+      <p class="small" style="margin-top:10px"><a href="/setup" data-en="🎯 The recommended setups behind these accounts →">🎯 Setup rekomendasi di balik akun-akun ini →</a></p>
     </div>
     <div class="status" id="status"><span><span class="live-dot"></span><span data-en="Loading…">Memuat…</span></span></div>
     <div class="ghl-tabs" id="pairtabs"></div>
@@ -105,13 +97,14 @@
   </div>
 
   <p class="center tiny muted" data-en="Amounts in US dollars (cent account: 100 USC = $1). Capital = start balance plus deposits minus withdrawals. Times in your device's time zone; the page refreshes every 30 seconds.">Nominal dalam dolar AS (akun cent: 100 USC = $1). Modal = saldo awal ditambah deposit dikurangi penarikan. Waktu sesuai jam perangkat Anda; halaman diperbarui otomatis tiap 30 detik.</p>
-  <div class="alert err small center" style="line-height:1.7;margin-top:20px" data-en="<b>⚠️ RISK WARNING.</b> GOLD HUNTER GARUDA is a martingale / averaging EA: it adds positions while price moves against it, so the floating loss can get large before a series closes in profit. Past results are <b>not a guarantee</b> of future results. Trading carries a very high risk and can lead to the loss of part or all of your capital. <a href='/#risiko' style='color:#ff8b95;text-decoration:underline'>Read the full risk warning</a>.">
+  <div class="alert err small center" style="line-height:1.7;margin-top:20px" data-en="<b>⚠️ RISK WARNING.</b> GOLD HUNTER GARUDA is a martingale / averaging EA: it adds positions while price moves against it, so the floating loss can get large before a series closes in profit. Past results are <b>not a guarantee</b> of future results. Trading carries a very high risk and can lead to the loss of part or all of your capital. <a href='#risiko' style='color:#ff8b95;text-decoration:underline'>Read the full risk warning</a>.">
     <b>⚠️ PERINGATAN RISIKO.</b> GOLD HUNTER GARUDA adalah EA martingale / averaging: ia menambah posisi saat harga melawan, sehingga floating rugi bisa membesar sebelum satu seri ditutup profit. Hasil masa lalu <b>bukan jaminan</b> hasil ke depan.
     Trading berisiko sangat tinggi dan dapat menyebabkan kehilangan sebagian atau seluruh modal.
-    <a href="/#risiko" style="color:#ff8b95;text-decoration:underline">Baca peringatan risiko lengkap</a>.
+    <a href="#risiko" style="color:#ff8b95;text-decoration:underline">Baca peringatan risiko lengkap</a>.
   </div>
 </main>
 <script src="/assets/i18n.js?v=489e4256"></script>
+<script src="/assets/site.js?v=63068651"></script>
 <script src="/assets/common.js?v=ed3ae07d"></script>
 <script src="/assets/ghlive.js?v=288b5d0d"></script>
 <script>
@@ -248,7 +241,6 @@
   document.addEventListener('ghg:lang', () => { if (setupId && DT) renderDetail(); else if (OV) renderOverview(); });
   load();
   setInterval(() => { if (!document.hidden) load(); }, 30000);
-  fetch('/api/me', { credentials: 'same-origin' }).then((r) => r.json()).then((me) => { if (me && me.user) $('#top-btn').innerHTML = '<a class="btn btn-gold btn-sm" href="/member">Member Area</a>'; }).catch(() => {});
 })();
 </script>
 </body>

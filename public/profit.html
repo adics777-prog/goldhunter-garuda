@@ -17,16 +17,10 @@
 <link rel="apple-touch-icon" href="/assets/brand/apple-touch-icon.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@700;900&family=Poppins:wght@300;400;600;700&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@700;900&family=Poppins:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="/assets/app.css?v=52dcd811">
+<link rel="stylesheet" href="/assets/site.css?v=4e34ae4e">
 <style>
-  .pub-top{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:14px clamp(16px,4vw,40px);border-bottom:1px solid var(--line);background:var(--bg-2);position:sticky;top:0;z-index:20}
-  .pub-top .brand{padding:0}
-  .pub-top .row{flex-wrap:nowrap}
-  .pub-top .btn{white-space:nowrap}
-  .pub-top .brand{flex-shrink:0}
-  @media(max-width:420px){.pub-top a[href="/masuk"]{display:none}}@media(max-width:360px){.pub-top a.btn[href="/"]{display:none}}
-  @media(max-width:560px){.pub-top .brand span{display:none}.pub-top .btn{padding:7px 10px;font-size:.78rem}.pub-top .row{gap:6px!important}}
   .pub-wrap{max-width:1000px;margin:0 auto;padding:34px clamp(16px,4vw,32px) 60px}
   .pub-hero{text-align:center;margin-bottom:26px}
   .pub-hero h1{font-family:'Cinzel',serif;font-size:clamp(1.6rem,4.5vw,2.4rem);margin-bottom:8px}
@@ -39,10 +33,6 @@
 </style>
 </head>
 <body>
-<header class="pub-top">
-  <a class="brand" href="/"><img src="/assets/brand/goldhunter-garuda-logo-128.png" width="38" height="38" alt="GoldHunter Garuda"><span class="gold-text">GOLDHUNTER</span></a>
-  <div class="row" style="gap:8px"><a href="#" class="btn btn-ghost btn-sm" data-lang-toggle>🌐 EN</a><a class="btn btn-ghost btn-sm" href="/" data-en="🏠 Home">🏠 Beranda</a><a class="btn btn-ghost btn-sm" href="/masuk" data-en="Log in">Masuk</a><a class="btn btn-gold btn-sm" href="/daftar" data-en="Sign Up Free">Daftar Gratis</a></div>
-</header>
 <main class="pub-wrap">
   <div class="pub-hero">
     <span class="badge b-gold" data-en="📈 Reported automatically by the EA">📈 Dilaporkan otomatis oleh EA</span>
@@ -61,14 +51,15 @@
   <div id="list"><div class="loading"><span class="spinner"></span></div></div>
   <p class="center tiny muted" id="note" style="margin-top:12px"></p>
   <div class="center" style="margin:28px 0"><a class="btn btn-gold" href="/live" data-en="📡 See the live reports of our own accounts">📡 Lihat laporan live akun/EA kami</a></div>
-  <div class="alert err small center" style="line-height:1.7" data-en="<b>⚠️ RISK WARNING.</b> These are real member accounts reported automatically by the EA, unedited, and they are <b>not a guarantee</b> of your results. Trading forex, gold and crypto carries a very high risk and can lead to the loss of part or all of your capital. Results differ per account depending on capital, settings, start date and broker. Some members chose not to be shown. <a href='/#risiko' style='color:#ff8b95;text-decoration:underline'>Read the full risk warning</a>.">
+  <div class="alert err small center" style="line-height:1.7" data-en="<b>⚠️ RISK WARNING.</b> These are real member accounts reported automatically by the EA, unedited, and they are <b>not a guarantee</b> of your results. Trading forex, gold and crypto carries a very high risk and can lead to the loss of part or all of your capital. Results differ per account depending on capital, settings, start date and broker. Some members chose not to be shown. <a href='#risiko' style='color:#ff8b95;text-decoration:underline'>Read the full risk warning</a>.">
     <b>⚠️ PERINGATAN RISIKO.</b> Data di atas adalah hasil nyata akun member yang dilaporkan otomatis oleh EA, tanpa diubah, dan <b>bukan jaminan</b> hasil Anda.
     Trading forex, emas &amp; kripto berisiko sangat tinggi dan dapat menyebabkan kehilangan sebagian atau seluruh modal.
     Hasil tiap akun berbeda tergantung modal, setting, waktu mulai dan broker. Sebagian member memilih tidak ditampilkan.
-    <a href="/#risiko" style="color:#ff8b95;text-decoration:underline">Baca peringatan risiko lengkap</a>.
+    <a href="#risiko" style="color:#ff8b95;text-decoration:underline">Baca peringatan risiko lengkap</a>.
   </div>
 </main>
 <script src="/assets/i18n.js?v=489e4256"></script>
+<script src="/assets/site.js?v=63068651"></script>
 <script src="/assets/common.js?v=ed3ae07d"></script>
 <script src="/assets/ghlive.js?v=288b5d0d"></script>
 <script>

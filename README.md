@@ -32,6 +32,21 @@ builder/           program compile EA berlisensi (Python + MetaEditor)
 - Cron: `.github/workflows/daily.yml` (08:00 WIB: sharing mingguan hari Minggu, tagihan, pengingat) dan `payments.yml` (tiap 10 menit: cek USDT).
 - Tes tanda tangan gateway: `node scripts/test-gateway-signature.mjs`.
 
+## Halaman publik (satu produk: EA GOLD HUNTER GARUDA)
+
+| URL | Isi |
+|---|---|
+| `/` | Landing: cara kerja, fitur, akun contoh live, setup rekomendasi, paket (dari `/api/catalog`), pasang 1 file, risiko, FAQ |
+| `/live` | Akun contoh pilihan admin (Pengaturan > EA Live > Akun contoh live) + tabel perbandingan setup |
+| `/setup` | Setup rekomendasi per pair (Admin > Setup Rekomendasi). Preset .set diunduh member berlisensi aktif (`/api/setups/:id/preset`) |
+| `/harga` | Semua paket & durasi, trial, IB, sharing profit, VPS, metode bayar, FAQ lisensi |
+| `/cara-pasang` | Panduan installer 1 file, Defender / SmartScreen, WebRequest, beberapa setup, pindah VPS |
+| `/profit` | Papan hasil member (bila diaktifkan) |
+
+Header, menu, footer, peringatan risiko dan tombol WhatsApp dipasang `public/assets/site.js` (+ `site.css`) di setiap halaman publik.
+Setup rekomendasi (tabel `rec_setups`, migrasi 0044): preset diambil dari preset rilis builder (berdasarkan nama, selalu versi terbaru)
+atau file .set yang di-upload admin. Agen VPS member tetap memasang semua preset rilis seperti biasa.
+
 ## Coba di komputer sendiri
 
 ```powershell
