@@ -115,7 +115,8 @@ body.site{overflow-x:hidden;font-size:15.5px;line-height:1.65}
 .hud-stats span{display:block;font-size:.6rem;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .hud-stats b{display:block;font-size:.95rem;font-variant-numeric:tabular-nums;margin-top:2px;line-height:1.25;overflow-wrap:anywhere}
 .hud-stats b#hudMode{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.hud-radar{display:block;width:100%;height:230px;border-radius:12px;background:radial-gradient(60% 60% at 50% 50%,rgba(245,197,66,.06),transparent 70%)}
+.hud-radar-box{position:relative;height:230px;border-radius:12px;background:radial-gradient(60% 60% at 50% 50%,rgba(245,197,66,.06),transparent 70%)}
+.hud-radar{position:absolute;inset:0;display:block;width:100%;height:100%}
 .hud-bk-head{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-top:8px;font-size:.66rem;letter-spacing:.05em;text-transform:uppercase;color:var(--muted);min-width:0}
 .hud-bk-head>span{white-space:nowrap}
 .hud-bk-head b{font-size:.7rem;color:var(--text);font-variant-numeric:tabular-nums;text-transform:none;letter-spacing:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0}
@@ -138,8 +139,19 @@ body.site{overflow-x:hidden;font-size:15.5px;line-height:1.65}
 .tk i{font-style:normal;font-weight:700}
 .tk small{color:var(--muted)}
 @keyframes hudTick{to{transform:translateX(-50%)}}
-@media (max-width:520px){.ai-hud{padding:12px 10px 10px}.hud-radar{height:210px}.hud-stats{gap:6px}.hud-stats div{padding:6px 7px}.hud-stats b{font-size:.84rem}}
+@media (max-width:520px){.ai-hud{padding:12px 10px 10px}.hud-radar-box{height:210px}.hud-stats{gap:6px}.hud-stats div{padding:6px 7px}.hud-stats b{font-size:.84rem}}
 @media (prefers-reduced-motion:reduce){.tk,.hud-live,.hud-dot,.hud-log .hl,.ai-hud::before{animation:none}}
+/* desktop: HUD top/bottom line up with the copy column; the copy sets the height, the radar takes what is left */
+@media (min-width:900px){
+  .hero-grid{align-items:stretch}
+  .hero-copy{display:flex;flex-direction:column;justify-content:center}
+  .hero-visual{display:flex;align-items:stretch;justify-content:flex-end}
+  .ai-hud{display:flex;flex-direction:column}
+  .hud-radar-box{flex:1 1 0;height:auto;min-height:150px}
+  .hero-copy>.eyebrow{align-self:flex-start}
+  .hud-basket{height:84px}
+  .hud-log{height:56px}
+}
 
 /* ---------- risk banner ---------- */
 .risk-banner{display:flex;gap:14px;align-items:flex-start;background:rgba(230,57,70,.07);border:1px solid rgba(230,57,70,.5);border-radius:16px;padding:16px 18px;font-size:.88rem;color:#e9cdd0}

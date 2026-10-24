@@ -366,6 +366,8 @@
   new IntersectionObserver((es) => { visible = es[0].isIntersecting; setRun(); }, { rootMargin: '80px' }).observe(root);
   document.addEventListener('visibilitychange', setRun);
   let rt = 0;
+  // the radar follows its box (window size, fonts, language switch change the hero height)
+  new ResizeObserver(() => { clearTimeout(rt); rt = setTimeout(() => { size(); if (!running) frame(performance.now(), 0); }, 120); }).observe(cvR.parentElement);
   addEventListener('resize', () => { clearTimeout(rt); rt = setTimeout(() => { size(); if (!running) frame(performance.now(), 0); }, 150); });
 
   // warm start: a series already in progress so the first frame is never empty
