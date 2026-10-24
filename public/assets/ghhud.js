@@ -111,7 +111,7 @@
   const thinking = () => pick([
     T('Membaca <b>kalender berita MT5</b> 7 hari ke depan…', 'Reading the <b>MT5 news calendar</b> for the next 7 days…'),
     T('Menghitung <b>rata-rata</b> & target TP basket BUY dan SELL…', 'Computing the <b>average</b> & TP target of the BUY and SELL baskets…'),
-    T('Cek arah <b>EMA</b> & mode <b>BARBAR</b> 2 arah…', 'Checking the <b>EMA</b> direction & 2-way <b>BARBAR</b> mode…'),
+    T('Membaca arah <b>EMA tren</b> & <b>SMA</b> sesuai mode…', 'Reading the <b>EMA trend</b> & <b>SMA</b> for the mode…'),
     T('Spread, margin & DD akun: <b>aman</b>', 'Spread, margin & account DD: <b>safe</b>'),
     T('Mengukur jarak layer dari volatilitas terkini…', 'Sizing the layer distance from current volatility…'),
     T('Cek TP tiap posisi di server broker: <b>lengkap</b>', 'Checking every position\'s TP at the broker: <b>complete</b>'),

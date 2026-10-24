@@ -5,7 +5,7 @@ const SITE = (() => {
   const TT = (id, en) => (typeof window.T === 'function' ? window.T(id, en) : id);
   const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
   const here = (location.pathname.replace(/\.html$/, '').replace(/\/+$/, '') || '/').toLowerCase();
-  const NAV = [['/', 'Beranda', 'Home'], ['/live', 'Live', 'Live'], ['/setup', 'Pair', 'Pairs'], ['/harga', 'Harga', 'Pricing'], ['/cara-pasang', 'Cara Pasang', 'How to Install']];
+  const NAV = [['/', 'Beranda', 'Home'], ['/live', 'Live', 'Live'], ['/fitur', 'Fitur', 'Features'], ['/setup', 'Pair', 'Pairs'], ['/harga', 'Harga', 'Pricing'], ['/cara-pasang', 'Cara Pasang', 'How to Install']];
   const link = ([href, id, en]) => `<a href="${href}" data-en="${esc(en)}"${here === href ? ' class="on" aria-current="page"' : ''}>${esc(id)}</a>`;
 
   const header = `<header class="site-top" id="site-top"><div class="wrap nav-in">
@@ -35,7 +35,7 @@ const SITE = (() => {
       <div><a class="logo" href="/"><img src="/assets/brand/goldhunter-garuda-logo-128.png" width="36" height="36" alt=""><span><b class="gold-text">GOLD HUNTER</b><small>GARUDA</small></span></a>
         <p data-en="One Expert Advisor for MetaTrader 5. Focus on gold (XAUUSD), runs on every pair, with a preset per pair from HQ.">Satu Expert Advisor untuk MetaTrader 5. Fokus emas (XAUUSD), jalan di semua pair, dengan preset per pair dari pusat.</p></div>
       <div><h4 data-en="Product">Produk</h4><ul>
-        <li><a href="/live" data-en="Live reports">Laporan live</a></li><li><a href="/setup" data-en="Supported pairs">Pair yang didukung</a></li>
+        <li><a href="/live" data-en="Live reports">Laporan live</a></li><li><a href="/fitur" data-en="All features">Semua fitur</a></li><li><a href="/setup" data-en="Supported pairs">Pair yang didukung</a></li>
         <li><a href="/harga" data-en="Pricing &amp; packages">Harga &amp; paket</a></li><li><a href="/cara-pasang" data-en="How to install">Cara pasang</a></li>
         <li><a href="/profit" data-en="Member results">Hasil member</a></li></ul></div>
       <div><h4 data-en="Account">Akun</h4><ul>

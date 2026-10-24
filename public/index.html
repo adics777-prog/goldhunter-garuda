@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title data-en="GOLD HUNTER GARUDA — Gold EA for MT5 (XAUUSD focus, every pair) with Live Reports">GOLD HUNTER GARUDA — EA Emas MT5 (fokus XAUUSD, semua pair) dengan Laporan Live</title>
-<meta name="description" content="GOLD HUNTER GARUDA: satu Expert Advisor MetaTrader 5 untuk emas XAUUSD dan semua pair. Marty basket averaging dengan DD reduction, kantong profit, mode BARBAR 2 arah, Market Liar dan mode berita. Setup rekomendasi per pair, pasang 1 file, update otomatis, trial 7 hari.">
+<meta name="description" content="GOLD HUNTER GARUDA: satu Expert Advisor MetaTrader 5 untuk emas XAUUSD dan semua pair. Marty basket averaging dengan DD reduction, kantong profit, 4 mode arah (BARBAR, EMA tren, SMA, keduanya), Market Liar dan mode berita. Setup rekomendasi per pair, pasang 1 file, update otomatis, trial 7 hari.">
 <link rel="canonical" href="https://goldhuntergaruda.com/">
 <meta name="keywords" content="EA emas, EA XAUUSD MT5, robot trading emas, EA martingale averaging, EA grid MT5, EA USDJPY, EA EURUSD, EA BTCUSD, akun cent, setup EA, GOLD HUNTER GARUDA, GoldHunter Garuda">
 <meta name="robots" content="index,follow,max-image-preview:large">
@@ -27,10 +27,10 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@700;900&family=Poppins:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="/assets/app.css?v=4c97ef78">
-<link rel="stylesheet" href="/assets/site.css?v=0f4268d9">
+<link rel="stylesheet" href="/assets/site.css?v=c9deb3a4">
 <script type="application/ld+json">[{"@context":"https://schema.org","@type":"Organization","name":"GoldHunter Garuda","url":"https://goldhuntergaruda.com/","logo":"https://goldhuntergaruda.com/assets/brand/goldhunter-garuda-logo-512.png"},
 {"@context":"https://schema.org","@type":"WebSite","name":"GoldHunter Garuda","url":"https://goldhuntergaruda.com/","inLanguage":"id-ID"},
-{"@context":"https://schema.org","@type":"SoftwareApplication","name":"GOLD HUNTER GARUDA","applicationCategory":"FinanceApplication","operatingSystem":"MetaTrader 5 (Windows)","description":"Expert Advisor MetaTrader 5 untuk emas XAUUSD dan semua pair: marty basket averaging dengan DD reduction, kantong profit, mode BARBAR, Market Liar dan mode berita. Setup rekomendasi per pair, installer 1 file, update otomatis.","url":"https://goldhuntergaruda.com/","offers":{"@type":"Offer","price":"0","priceCurrency":"IDR","description":"Trial gratis 7 hari; sewa, sharing profit dan EA gratis untuk akun IB"},"publisher":{"@type":"Organization","name":"GoldHunter Garuda"}},
+{"@context":"https://schema.org","@type":"SoftwareApplication","name":"GOLD HUNTER GARUDA","applicationCategory":"FinanceApplication","operatingSystem":"MetaTrader 5 (Windows)","description":"Expert Advisor MetaTrader 5 untuk emas XAUUSD dan semua pair: marty basket averaging dengan DD reduction, kantong profit, 4 mode arah (BARBAR, EMA tren, SMA, keduanya), Market Liar dan mode berita. Setup rekomendasi per pair, installer 1 file, update otomatis.","url":"https://goldhuntergaruda.com/","offers":{"@type":"Offer","price":"0","priceCurrency":"IDR","description":"Trial gratis 7 hari; sewa, sharing profit dan EA gratis untuk akun IB"},"publisher":{"@type":"Organization","name":"GoldHunter Garuda"}},
 {"@context":"https://schema.org","@type":"FAQPage","mainEntity":[
 {"@type":"Question","name":"Apakah GOLD HUNTER GARUDA pasti profit?","acceptedAnswer":{"@type":"Answer","text":"Tidak. Tidak ada sistem trading yang menjamin profit. GOLD HUNTER GARUDA adalah EA martingale / averaging dengan stop loss equity (setting 9.1, batas rugi yang Anda pilih): sebagian besar basket selesai profit, tetapi tren panjang bisa membuat floating dalam dan drawdown besar tetap mungkin."}},
 {"@type":"Question","name":"Pair apa saja yang bisa dipakai?","acceptedAnswer":{"@type":"Answer","text":"Fokus utama emas (XAUUSD), tetapi EA jalan di semua pair. Preset dari pusat otomatis terpasang lewat installer untuk XAUUSD, USDJPY, EURUSD, BTCUSD dan terus bertambah."}},
@@ -82,7 +82,7 @@
 
 
 <!-- ============ PENGAMAN BERLAPIS ============ -->
-<section class="sec" id="aman">
+<section class="sec alt" id="aman">
   <div class="wrap">
     <div class="sec-head reveal">
       <span class="eyebrow" data-en="🛡️ Layered protection">🛡️ Pengaman berlapis</span>
@@ -106,7 +106,7 @@
       <p class="sec-sub" data-en="No predictions. The EA follows the same four steps on every chart, all day.">Tanpa ramalan. EA menjalankan empat langkah yang sama di setiap chart, sepanjang hari.</p>
     </div>
     <ol class="flow">
-      <li class="reveal"><h3 data-en="Opens BUY and SELL">Buka BUY dan SELL</h3><p data-en="In BARBAR mode a BUY series and a SELL series run at the same time, so one side is always working in the direction of the market.">Di mode BARBAR seri BUY dan seri SELL jalan bersamaan, jadi selalu ada sisi yang searah dengan pasar.</p>
+      <li class="reveal"><h3 data-en="Opens a series by mode">Buka seri sesuai mode</h3><p data-en="BARBAR opens BUY and SELL together; EMA TREND, SMA or BOTH only open a series in the market direction.">Mode BARBAR membuka BUY dan SELL bersamaan; mode EMA TREN, SMA atau KEDUANYA hanya membuka seri searah arah pasar.</p>
         <svg viewBox="0 0 200 64" aria-hidden="true"><path d="M10 44 C50 40 70 20 100 26 S150 50 190 18" fill="none" stroke="#f5c542" stroke-width="2"/><g font-size="9" font-weight="700"><rect x="30" y="8" width="34" height="14" rx="4" fill="rgba(72,152,255,.25)" stroke="#4da3ff"/><text x="37" y="18" fill="#8cc4ff">BUY</text><rect x="120" y="44" width="38" height="14" rx="4" fill="rgba(255,150,72,.25)" stroke="#ff9f43"/><text x="126" y="54" fill="#ffc58a">SELL</text></g></svg></li>
       <li class="reveal"><h3 data-en="Adds layers when price moves against it">Tambah layer saat harga melawan</h3><p data-en="Each new layer is a little bigger (lot ×1.15) and, after layer 4, a little further away (step ×1.1), so the basket does not get too tight in a trend.">Tiap layer baru sedikit lebih besar (lot ×1,15) dan, sesudah layer 4, sedikit lebih jauh (jarak ×1,1), sehingga basket tidak terlalu rapat saat tren.</p>
         <svg viewBox="0 0 200 64" aria-hidden="true"><path d="M10 10 L190 56" stroke="rgba(255,255,255,.25)" stroke-width="1.5"/><g fill="#4da3ff"><circle cx="24" cy="14" r="3"/><circle cx="58" cy="23" r="3.6"/><circle cx="96" cy="33" r="4.2"/><circle cx="140" cy="44" r="5"/><circle cx="182" cy="54" r="5.8"/></g></svg></li>
@@ -118,8 +118,47 @@
   </div>
 </section>
 
+<!-- ============ MODE ============ -->
+<section class="sec alt" id="mode">
+  <div class="wrap">
+    <div class="sec-head reveal">
+      <span class="eyebrow" data-en="🎛️ EA modes">🎛️ Mode EA</span>
+      <h2 class="sec-title" data-en="Many Modes, &lt;span class=&quot;gold-text&quot;&gt;One EA&lt;/span&gt;">Banyak Mode, <span class="gold-text">Satu EA</span></h2>
+      <p class="sec-sub" data-en="Choose how the EA opens a series to fit the pair and your style, from both ways to trend follow. Everything can be changed in the inputs; the HQ presets already pick what suits each pair.">Pilih cara EA membuka seri sesuai karakter pair dan gaya Anda, dari 2 arah sampai ikut tren. Semua bisa diganti di input; preset dari pusat sudah memilih yang cocok per pair.</p>
+    </div>
+    <h3 class="mode-h" data-en="Direction mode &lt;small&gt;setting 3.1&lt;/small&gt;">Mode arah <small>setting 3.1</small></h3>
+    <div class="modes">
+      <div class="mode-card reveal"><div class="mc-art"><svg viewBox="0 0 200 80" aria-hidden="true"><path d="M8 46 L34 30 L58 50 L84 24 L110 48 L136 22 L162 44 L192 28" fill="none" stroke="#f5c542" stroke-width="2"/><path d="M34 36 l5 8 h-10z" fill="#2ecc71"/><path d="M58 44 l5 -8 h-10z" fill="#ef4d5a"/><path d="M84 30 l5 8 h-10z" fill="#2ecc71"/><path d="M110 42 l5 -8 h-10z" fill="#ef4d5a"/><path d="M136 28 l5 8 h-10z" fill="#2ecc71"/><path d="M162 38 l5 -8 h-10z" fill="#ef4d5a"/><text x="8" y="74" font-size="9" fill="#a3a3b2">BUY + SELL</text></svg></div>
+        <div class="mc-head"><span class="mc-ico" aria-hidden="true">⇅</span><b data-en="BARBAR both ways">BARBAR 2 arah</b><span class="mc-tag" data-en="Trades the most">Paling sering trading</span></div>
+        <p data-en="No direction reading: a BUY and a SELL series always run together. One side keeps closing baskets while the other waits.">Tanpa membaca arah: seri BUY dan SELL selalu jalan bersamaan. Satu sisi terus menutup basket sementara sisi lain menunggu.</p></div>
+      <div class="mode-card reveal"><div class="mc-art"><svg viewBox="0 0 200 80" aria-hidden="true"><path d="M8 66 C50 62 80 52 110 40 S160 22 192 12" fill="none" stroke="#9b7bff" stroke-width="1.6"/><path d="M8 58 C50 54 80 44 110 32 S160 16 192 8" fill="none" stroke="#4da3ff" stroke-width="1.6"/><path d="M8 50 C40 44 70 40 96 26 S150 12 192 4" fill="none" stroke="#f5c542" stroke-width="1.6"/><path d="M8 44 L30 36 L46 42 L70 28 L86 34 L110 20 L126 26 L150 12 L166 16 L192 4" fill="none" stroke="#ececf1" stroke-width="2"/><path d="M46 46 l5 8 h-10z" fill="#2ecc71"/><path d="M86 38 l5 8 h-10z" fill="#2ecc71"/><path d="M126 30 l5 8 h-10z" fill="#2ecc71"/><path d="M166 20 l5 8 h-10z" fill="#2ecc71"/><text x="8" y="76" font-size="9" fill="#a3a3b2">EMA 20 · 50 · 200 → BUY</text></svg></div>
+        <div class="mc-head"><span class="mc-ico" aria-hidden="true">📈</span><b data-en="EMA TREND">EMA TREN</b><span class="mc-tag" data-en="Trend follow">Trend follow</span></div>
+        <p data-en="New series only in the direction of the EMA 20 / 50 / 200 trend on the timeframe you choose (for example M15). Rule: 3 EMAs in line (clearest) or 2 EMAs (more often).">Seri baru hanya searah tren EMA 20 / 50 / 200 di timeframe pilihan (misalnya M15). Syarat 3 EMA sejajar (paling jelas) atau 2 EMA (lebih sering).</p></div>
+      <div class="mode-card reveal"><div class="mc-art"><svg viewBox="0 0 200 80" aria-hidden="true"><path d="M8 40 C40 40 60 38 100 40 S160 42 192 40" fill="none" stroke="#4da3ff" stroke-width="1.8"/><path d="M8 56 C30 54 40 30 64 24 S96 54 120 58 S160 26 192 20" fill="none" stroke="#ececf1" stroke-width="2"/><path d="M44 42 l5 8 h-10z" fill="#2ecc71"/><path d="M98 46 l5 -8 h-10z" fill="#ef4d5a"/><path d="M152 42 l5 8 h-10z" fill="#2ecc71"/><text x="8" y="76" font-size="9" fill="#a3a3b2">SMA 26</text></svg></div>
+        <div class="mc-head"><span class="mc-ico" aria-hidden="true">〰️</span><b data-en="CLASSIC SMA">SMA KLASIK</b><span class="mc-tag" data-en="Responsive">Responsif</span></div>
+        <p data-en="New series follow where the candle closes against the SMA (SMA 26 on M1 by default). Reacts fast when the direction turns.">Seri baru mengikuti posisi close candle terhadap SMA (bawaan SMA 26 di M1). Cepat bereaksi saat arah berbalik.</p></div>
+      <div class="mode-card reveal"><div class="mc-art"><svg viewBox="0 0 200 80" aria-hidden="true"><path d="M8 60 C60 56 110 40 192 18" fill="none" stroke="#f5c542" stroke-width="1.6"/><path d="M8 52 C50 50 90 44 120 36 S170 26 192 24" fill="none" stroke="#4da3ff" stroke-width="1.6"/><path d="M8 48 L40 40 L60 46 L92 30 L112 36 L142 20 L160 24 L192 10" fill="none" stroke="#ececf1" stroke-width="2"/><path d="M142 26 l5 8 h-10z" fill="#2ecc71"/><circle cx="142" cy="12" r="7" fill="rgba(46,204,113,.18)" stroke="#2ecc71"/><path d="M138.5 12 l2.5 2.5 l4.5 -5" fill="none" stroke="#2ecc71" stroke-width="1.6"/><text x="8" y="76" font-size="9" fill="#a3a3b2">EMA ✓ + SMA ✓</text></svg></div>
+        <div class="mc-head"><span class="mc-ico" aria-hidden="true">🎯</span><b data-en="BOTH">KEDUANYA</b><span class="mc-tag" data-en="Most selective">Paling selektif</span></div>
+        <p data-en="The EMA trend and the SMA must agree before a new series opens. Fewer entries, a better confirmed direction.">EMA tren dan SMA harus searah dulu sebelum seri baru dibuka. Lebih jarang masuk, arah lebih terkonfirmasi.</p></div>
+    </div>
+    <h3 class="mode-h" data-en="Works with every mode">Pendukung di semua mode</h3>
+    <div class="mode-sups">
+      <div class="mode-sup reveal"><span class="ms-ico" aria-hidden="true">🚦</span><div><b data-en="Trend brake">Rem tren</b><p data-en="In any mode, the side against the EMA trend uses a wider layer distance (×2 by default), so a basket against the trend does not pile up fast.">Di mode apa pun, sisi yang melawan tren EMA memakai jarak layer lebih lebar (bawaan ×2), jadi basket yang melawan tren tidak cepat menumpuk.</p></div></div>
+      <div class="mode-sup reveal"><span class="ms-ico" aria-hidden="true">⚡</span><div><b data-en="Wild market">Market Liar</b><p data-en="Wild moves detected (2 M1 candles moving ≥ 3× the layer distance): the EA re-enters faster with a smaller TP (70% of the target).">Gerak liar terdeteksi (2 candle M1 bergerak ≥ 3× jarak layer): EA masuk lagi lebih cepat dengan TP lebih kecil (70% target).</p></div></div>
+    </div>
+    <h3 class="mode-h" data-en="News mode &lt;small&gt;setting 10.1 · 7-day MT5 calendar&lt;/small&gt;">Mode berita <small>setting 10.1 · kalender MT5 7 hari</small></h3>
+    <ul class="news-modes reveal">
+        <li><b data-en="GASPOL">GASPOL</b><span data-en="Keeps trading as usual during news.">Tetap trading seperti biasa saat berita.</span></li>
+        <li><b data-en="HOLD">TAHAN</b><span data-en="No new series or layers inside the news window.">Tidak membuka seri dan layer baru di jendela berita.</span></li>
+        <li><b data-en="SCALP">COPET</b><span data-en="Quick BUY &amp; SELL with a small TP during the news window.">BUY & SELL cepat dengan TP kecil selama jendela berita.</span></li>
+        <li><b data-en="FOLLOW TREND">IKUT TREN</b><span data-en="After the release, new series only follow the news result (confirmed by price).">Sesudah rilis, seri baru hanya searah hasil berita (dikonfirmasi harga).</span></li>
+        <li><b data-en="AUTO">AUTO</b><span data-en="The EA decides: a strong result = follow the trend, weak = scalp.">EA memilih sendiri: hasil kuat = ikut tren, lemah = copet.</span></li>
+    </ul>
+  </div>
+</section>
+
 <!-- ============ FITUR ============ -->
-<section class="sec alt" id="fitur">
+<section class="sec" id="fitur">
   <div class="wrap">
     <div class="sec-head reveal">
       <span class="eyebrow" data-en="Key features">Fitur utama</span>
@@ -130,19 +169,20 @@
       <div class="feat reveal"><div class="ico">🪜</div><h3 data-en="Marty Basket Averaging">Marty Basket Averaging</h3><p data-en="Layers with a growing lot and widening steps, one shared take profit from the average price, net of swap.">Layer dengan lot naik dan jarak melebar, satu take profit bersama dari harga rata-rata, bersih swap.</p></div>
       <div class="feat reveal"><div class="ico">♻️</div><h3 data-en="Two-Step DD Reduction">DD Reduction Dua Tahap</h3><p data-en="From 6 positions the newest profit closes the oldest loss, only after the profit is really received, so the basket shrinks without a loss.">Mulai 6 posisi, profit terbaru menutup rugi terlama, baru setelah profitnya benar-benar diterima, jadi basket menyusut tanpa rugi.</p></div>
       <div class="feat reveal"><div class="ico">👛</div><h3 data-en="Profit Pocket">Kantong Profit</h3><p data-en="Part of every closed profit is saved. When a basket gets long, the pocket pays off its oldest stuck position.">Sebagian setiap profit tertutup disisihkan. Saat basket panjang, kantong melunasi posisi terlama yang macet.</p></div>
-      <div class="feat reveal"><div class="ico">⇅</div><h3 data-en="BARBAR Both-Direction Mode">Mode BARBAR 2 Arah</h3><p data-en="BUY and SELL always run together. Prefer a direction filter? Switch to EMA trend or SMA mode in the inputs.">BUY dan SELL selalu jalan bersamaan. Mau pakai filter arah? Ganti ke mode EMA tren atau SMA di input.</p></div>
+      <div class="feat reveal"><div class="ico">🎛️</div><h3 data-en="4 Direction Modes">4 Mode Arah</h3><p data-en="BARBAR both ways, EMA TREND (trend follow), CLASSIC SMA or BOTH, plus a trend brake. &lt;a href=&quot;#mode&quot;&gt;See every mode ↓&lt;/a&gt;">BARBAR 2 arah, EMA TREN (trend follow), SMA KLASIK atau KEDUANYA, plus rem tren. <a href="#mode">Lihat semua mode ↓</a></p></div>
       <div class="feat reveal"><div class="ico">⚡</div><h3 data-en="Market Liar Fast Mode">Mode Market Liar</h3><p data-en="When two M1 candles move at least 3× the layer step, the EA re-enters at once and takes profit sooner (70% of the target).">Saat dua candle M1 bergerak minimal 3× jarak layer, EA langsung masuk lagi dan mengambil profit lebih cepat (70% target).</p></div>
       <div class="feat reveal"><div class="ico">📰</div><h3 data-en="News Modes">Mode Berita</h3><p data-en="High-impact news from the MT5 calendar: GASPOL, TAHAN, COPET (quick BUY &amp; SELL with a small TP in the news window), IKUT TREN (new series in the news direction) or AUTO (strong move = follow, weak = copet).">Berita berdampak tinggi dari kalender MT5: GASPOL, TAHAN, COPET (BUY &amp; SELL cepat dengan TP kecil di jendela berita), IKUT TREN (seri baru searah berita) atau AUTO (gerak kuat = ikut, lemah = copet).</p></div>
-      <div class="feat reveal"><div class="ico">📈</div><h3 data-en="Lot Follows the Capital">Lot Ikut Modal</h3><p data-en="The first lot is calculated from the balance or a budget per setup: it grows with the account and shrinks after a loss.">Lot pertama dihitung dari balance atau anggaran per setup: ikut membesar saat akun tumbuh dan mengecil setelah rugi.</p></div>
+      <div class="feat reveal"><div class="ico">🪂</div><h3 data-en="Trailing Profit">Trailing Profit</h3><p data-en="Once price has moved the trailing start from the average, the SL locks the profit and follows price step by step; the TP can be released so a strong trend runs further. REAL or VIRTUAL mode.">Begitu harga maju sejauh trailing start dari rata-rata, SL mengunci profit lalu ikut naik tiap step; TP bisa dilepas supaya tren kuat berjalan lebih jauh. Mode RIIL atau VIRTUAL.</p></div>
       <div class="feat reveal"><div class="ico">🧩</div><h3 data-en="Many Setups, One EA">Banyak Setup, Satu EA</h3><p data-en="Run the EA on several charts with a different magic number each: every chart is its own setup, reported and compared on the web.">Jalankan EA di beberapa chart dengan magic number berbeda: tiap chart jadi setup sendiri, dilaporkan dan dibandingkan di web.</p></div>
       <div class="feat reveal"><div class="ico">🖥️</div><h3 data-en="Panel, Licence &amp; Updates">Panel, Lisensi &amp; Update</h3><p data-en="Average lines, basket TP, next layer, pocket and today's result on the chart, plus the licence type and countdown. New versions install themselves.">Garis rata-rata, TP basket, layer berikutnya, kantong dan hasil hari ini di chart, plus jenis lisensi dan hitung mundurnya. Versi baru terpasang sendiri.</p></div>
     </div>
+    <div class="sec-foot"><a href="/fitur" class="btn btn-gold" data-en="📚 Every feature explained, one by one">📚 Penjelasan semua fitur, satu per satu</a></div>
   </div>
 </section>
 
 <!-- ============ LIVE ============ -->
 <span id="member" aria-hidden="true"></span>
-<section class="sec" id="live">
+<section class="sec alt" id="live">
   <div class="wrap">
     <div class="sec-head reveal">
       <span class="eyebrow" data-en="📡 Live now">📡 Live sekarang</span>
@@ -155,7 +195,7 @@
 </section>
 
 <!-- ============ PAIR ============ -->
-<section class="sec alt" id="pair">
+<section class="sec" id="pair">
   <div class="wrap">
     <div class="sec-head reveal">
       <span class="eyebrow" data-en="🌐 Pairs">🌐 Pair</span>
@@ -168,7 +208,7 @@
 </section>
 
 <!-- ============ HARGA ============ -->
-<section class="sec" id="harga">
+<section class="sec alt" id="harga">
   <div class="wrap">
     <div class="sec-head reveal">
       <span class="eyebrow" data-en="Packages">Paket</span>
@@ -182,7 +222,7 @@
 </section>
 
 <!-- ============ PASANG 1 FILE ============ -->
-<section class="sec alt" id="pasang">
+<section class="sec" id="pasang">
   <div class="wrap">
     <div class="sec-head reveal">
       <span class="eyebrow" data-en="📦 Install">📦 Pemasangan</span>
@@ -200,7 +240,7 @@
 </section>
 
 <!-- ============ HASIL & RISIKO ============ -->
-<section class="sec" id="jujur">
+<section class="sec alt" id="jujur">
   <div class="wrap split">
     <div class="reveal">
       <span class="eyebrow" data-en="🛡️ Results &amp; risk, honestly">🛡️ Hasil &amp; risiko, apa adanya</span>
@@ -226,7 +266,7 @@
 </section>
 
 <!-- ============ FAQ ============ -->
-<section class="sec alt" id="faq">
+<section class="sec" id="faq">
   <div class="wrap">
     <div class="sec-head reveal">
       <span class="eyebrow">FAQ</span>
@@ -262,9 +302,9 @@
 </main>
 
 <script src="/assets/i18n.js?v=489e4256"></script>
-<script src="/assets/site.js?v=40e45176"></script>
+<script src="/assets/site.js?v=52bb80aa"></script>
 <script src="/assets/ghlive.js?v=288b5d0d"></script>
-<script src="/assets/ghhud.js?v=b3fe8a04"></script>
+<script src="/assets/ghhud.js?v=09fca75b"></script>
 <script>
 (() => {
   const T2 = SITE.TT;

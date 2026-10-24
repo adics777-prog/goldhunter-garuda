@@ -1172,6 +1172,42 @@ route('POST', '/builder/vps-release', 'builder', async ({ request, env }) => {
   await putSetting(env, 'vps_release', JSON.stringify(rel));
   return json({ ok: true, sha: rel.sha });
 });
+// ---------- EA feature documentation (the /*@GHG-FEATURES*/ block of the EA source, sent by the builder) ----------
+// stored as one file (kind ea_features) so the big JSON is not loaded with every settings read; /fitur renders it
+function cleanFeatures(doc) {
+  const L = (x, n) => ({ id: str(x && x.id, n), en: str(x && (x.en || x.id), n) });
+  const groups = (Array.isArray(doc && doc.groups) ? doc.groups : []).slice(0, 40).map((g) => {
+    const out = { id: str(g.id, 30).replace(/[^a-z0-9-]/gi, '').toLowerCase(), icon: str(g.icon, 8), title: L(g.title, 80), intro: L(g.intro, 300),
+      features: (Array.isArray(g.features) ? g.features : []).slice(0, 40).map((f) => ({ title: L(f.title, 90), setting: str(f.setting, 40), how: L(f.how, 700), use: L(f.use, 500) }))
+        .filter((f) => f.title.id) };
+    if (g.badge) out.badge = L(g.badge, 40);
+    if (g.note) out.note = L(g.note, 400);
+    if (Array.isArray(g.flow)) out.flow = g.flow.slice(0, 8).map((x) => ({ icon: str(x.icon, 8), title: L(x.title, 60), sub: L(x.sub, 90) }));
+    return out;
+  }).filter((g) => g.id && g.title.id && g.features.length);
+  return { schema: 1, groups };
+}
+route('POST', '/builder/features', 'builder', async ({ request, env }) => {
+  const b = await readJson(request);
+  let doc;
+  try { doc = JSON.parse(new TextDecoder().decode(unb64(String(b.json_b64 || '')))); } catch { fail(400, 'Dokumentasi fitur bukan JSON yang valid'); }
+  const clean = cleanFeatures(doc);
+  if (!clean.groups.length) fail(400, 'Dokumentasi fitur kosong');
+  const data = b64(new TextEncoder().encode(JSON.stringify({ ...clean, version: str(b.version, 12), at: now() })));
+  const t = now();
+  const old = await env.DB.prepare("SELECT id FROM files WHERE kind='ea_features'").all();
+  await env.DB.prepare("INSERT INTO files (user_id, kind, name, mime, size, data_b64, created_at) VALUES (NULL, 'ea_features', 'features.json', 'application/json', ?, ?, ?)")
+    .bind(b64Len(data), data, t).run();
+  if (old.results.length) await env.DB.batch(old.results.map((x) => env.DB.prepare('DELETE FROM files WHERE id=?').bind(x.id)));
+  const meta = { version: str(b.version, 12), sha: str(b.sha, 80), at: t, groups: clean.groups.length, features: clean.groups.reduce((a, g) => a + g.features.length, 0) };
+  await putSetting(env, 'ea_features_meta', JSON.stringify(meta));
+  return json({ ok: true, ...meta });
+});
+route('GET', '/features', 'public', async ({ env }) => {
+  const f = await env.DB.prepare("SELECT data_b64 FROM files WHERE kind='ea_features' ORDER BY id DESC LIMIT 1").first();
+  if (!f) return json({ schema: 1, groups: [], version: '' }, 200, { 'cache-control': 'public, max-age=60' });
+  return new Response(unb64(f.data_b64), { headers: { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'public, max-age=300' } });
+});
 route('GET', '/vps/release', 'public', async ({ request, env, url }) => {
   const rel = vpsRelease(await vpsAuth(env, request));
   if (!rel) return json({ ok: true, none: true, ...agentUpdate });

@@ -526,6 +526,67 @@ def sync_vps_release(cfg, server):
         restart_local_mt5(p)
 
 
+FEATURES_RE = re.compile(r'/\*@GHG-FEATURES\s*(.*?)\s*@GHG-FEATURES\*/', re.S)
+FEATURES_STATE = os.path.join(WORK, 'features_sent.txt')
+
+
+def setting_numbers(text):
+    """'3.1 · 3.5–3.9' -> {'3.1', '3.5', '3.6', '3.7', '3.8', '3.9'}"""
+    out = set()
+    for a, b in re.findall(r'(\d+\.\d+[a-z]?)(?:\s*[–-]\s*(\d+\.\d+))?', text or ''):
+        out.add(a)
+        if b and a.split('.')[0] == b.split('.')[0] and a.split('.')[1].isdigit():
+            for n in range(int(a.split('.')[1]) + 1, int(b.split('.')[1]) + 1):
+                out.add(f"{a.split('.')[0]}.{n}")
+    return out
+
+
+def sync_features(cfg):
+    """The EA source carries its own feature documentation; the website page /fitur shows exactly that block,
+    so a new feature documented in the EA reaches the website with the next build loop (no web deploy)."""
+    p, src, name, ex5, sets = vps_paths(cfg)
+    if not src or not os.path.exists(src) or time.time() - os.path.getmtime(src) < 20:
+        return
+    text = read_text(src)
+    m = FEATURES_RE.search(text)
+    if not m:
+        return
+    raw = m.group(1)
+    sha = hashlib.sha256(raw.encode('utf-8')).hexdigest()
+    try:
+        if open(FEATURES_STATE, encoding='utf-8').read().strip() == sha:
+            return
+    except OSError:
+        pass
+    try:
+        doc = json.loads(raw)
+    except ValueError as e:
+        if VPS_STATE.get('features_bad') != sha:
+            VPS_STATE['features_bad'] = sha
+            log(f'FITUR: blok @GHG-FEATURES di {name}.mq5 bukan JSON yang valid ({e}); web /fitur tidak diperbarui')
+        return
+    vm = re.search(r'#property\s+version\s+"([^"]+)"', text)
+    # inputs that no feature mentions yet: a reminder to document new features
+    documented = set()
+    for g in doc.get('groups', []):
+        for f in g.get('features', []):
+            documented |= setting_numbers(f.get('setting', ''))
+    inputs = set(re.findall(r'^input\s+(?!group)\S+\s+\w+\s*=[^;]*;\s*//\s*(\d+\.\d+[a-z]?)\b', text, re.M))
+    missing = sorted(inputs - documented, key=lambda x: [int(y) if y.isdigit() else y for y in re.split(r'[.]', re.sub(r'[a-z]$', '', x))])
+    try:
+        api(cfg, '/api/builder/features', {'version': vm.group(1) if vm else '', 'sha': sha,
+                                           'json_b64': base64.b64encode(raw.encode('utf-8')).decode()})
+    except Exception as e:
+        if VPS_STATE.get('features_err') != sha:       # once per version of the block, retried quietly every loop
+            VPS_STATE['features_err'] = sha
+            log(f'FITUR: dokumentasi fitur belum terkirim ke web ({e}), dicoba lagi otomatis')
+        return
+    os.makedirs(WORK, exist_ok=True)
+    open(FEATURES_STATE, 'w', encoding='utf-8').write(sha)
+    n = sum(len(g.get('features', [])) for g in doc.get('groups', []))
+    log(f'FITUR: {n} fitur dari {name}.mq5 diterbitkan ke web /fitur' + (f' (input belum dijelaskan: {", ".join(missing[:20])})' if missing else ''))
+
+
 def sync_content(cfg):
     """Promo videos: take one queued job from the website, render it here (garuda_video.py), keep the MP4 in the
     content folder and hand it to Telegram / social networks through the website. Only educational videos (kind
@@ -606,6 +667,10 @@ def main():
                     sync_vps_release(cfg, res.get('vps_release') or {})
                 except Exception as e:
                     log(f'VPS: gagal menerbitkan rilis: {e}')
+            try:
+                sync_features(cfg)
+            except Exception as e:
+                log(f'FITUR: gagal menerbitkan dokumentasi fitur: {e}')
             if job:
                 handle(cfg, job)
                 continue          # look for the next job right away
