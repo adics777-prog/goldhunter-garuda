@@ -70,7 +70,7 @@ body.site{overflow-x:hidden;font-size:15.5px;line-height:1.65}
 .hero-points{display:flex;flex-wrap:wrap;gap:8px 16px;justify-content:center;margin-top:22px;color:var(--muted);font-size:.86rem}
 .hero-points span{white-space:nowrap}
 .hero-points b{color:var(--gold-3);font-weight:600}
-.hero-visual{position:relative;display:grid;place-items:center;order:-1}
+.hero-visual{position:relative;display:grid;place-items:center;min-width:0}
 .hero-visual img{width:min(150px,40vw);height:auto;filter:drop-shadow(0 0 38px rgba(245,197,66,.42));animation:float 6s ease-in-out infinite}
 @keyframes float{50%{transform:translateY(-12px)}}
 @media (prefers-reduced-motion:reduce){.hero-visual img{animation:none}}
@@ -85,9 +85,61 @@ body.site{overflow-x:hidden;font-size:15.5px;line-height:1.65}
   .hero-copy{text-align:left}
   .hero-lead{margin-left:0}
   .hero-btns,.hero-points{justify-content:flex-start}
-  .hero-visual{order:0}
   .hero-visual img{width:min(380px,100%)}
 }
+
+/* ---------- hero: GARUDA AI ENGINE panel (assets/ghhud.js) ---------- */
+.ai-hud{position:relative;width:100%;max-width:520px;min-width:0;border-radius:20px;border:1px solid rgba(245,197,66,.3);padding:14px 14px 12px;
+  background:radial-gradient(120% 70% at 50% 0%,rgba(245,197,66,.08),transparent 60%),linear-gradient(180deg,rgba(20,20,28,.94),rgba(9,9,13,.96));
+  box-shadow:0 24px 70px rgba(0,0,0,.55),0 0 0 1px rgba(255,255,255,.02) inset,0 0 60px rgba(245,197,66,.08)}
+.ai-hud::before{content:"";position:absolute;inset:-1px;border-radius:inherit;padding:1px;pointer-events:none;
+  background:conic-gradient(from var(--hud-a,0deg),transparent 0 70%,rgba(245,197,66,.85) 80%,transparent 90%);
+  -webkit-mask:linear-gradient(#000 0 0) content-box,linear-gradient(#000 0 0);-webkit-mask-composite:xor;mask-composite:exclude;animation:hudSpin 7s linear infinite}
+@property --hud-a{syntax:"<angle>";inherits:false;initial-value:0deg}
+@keyframes hudSpin{to{--hud-a:360deg}}
+.ai-hud .lab{display:block;margin-top:8px;text-align:right;font-size:.6rem;font-weight:500;letter-spacing:.04em;color:var(--muted);opacity:.75}
+.hud-top{display:flex;align-items:center;gap:8px;font-size:.8rem;letter-spacing:.08em;min-width:0}
+.hud-top b{display:inline-flex;align-items:center;gap:7px;white-space:nowrap;font-weight:700}
+.ai-hud .gold{color:var(--gold)}
+.ai-hud .green,.ai-hud .pos{color:var(--green)}
+.ai-hud .neg{color:#ff8b95}
+.ai-hud .blue{color:var(--blue)}
+.ai-hud .orange{color:var(--orange)}
+.hud-dot{width:8px;height:8px;border-radius:50%;background:var(--green);box-shadow:0 0 0 0 rgba(46,204,113,.6);animation:hudPing 1.8s infinite}
+@keyframes hudPing{70%{box-shadow:0 0 0 7px rgba(46,204,113,0)}100%{box-shadow:0 0 0 0 rgba(46,204,113,0)}}
+.hud-live{font-size:.6rem;font-weight:800;color:#06210f;background:var(--green);border-radius:4px;padding:1px 5px;letter-spacing:.08em;animation:hudBlink 1.6s steps(2,start) infinite}
+.hud-clock{margin-left:auto;font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:.72rem;color:var(--muted);white-space:nowrap}
+@keyframes hudBlink{to{opacity:.35}}
+.hud-stats{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;margin:10px 0 8px}
+.hud-stats div{border:1px solid var(--line);border-radius:10px;padding:7px 9px;background:rgba(255,255,255,.02);min-width:0}
+.hud-stats span{display:block;font-size:.6rem;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.hud-stats b{display:block;font-size:.95rem;font-variant-numeric:tabular-nums;margin-top:2px;line-height:1.25;overflow-wrap:anywhere}
+.hud-stats b#hudMode{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.hud-radar{display:block;width:100%;height:230px;border-radius:12px;background:radial-gradient(60% 60% at 50% 50%,rgba(245,197,66,.06),transparent 70%)}
+.hud-bk-head{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-top:8px;font-size:.66rem;letter-spacing:.05em;text-transform:uppercase;color:var(--muted);min-width:0}
+.hud-bk-head>span{white-space:nowrap}
+.hud-bk-head b{font-size:.7rem;color:var(--text);font-variant-numeric:tabular-nums;text-transform:none;letter-spacing:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0}
+.hud-basket{display:block;width:100%;height:104px;margin-top:5px;border-radius:10px;border:1px solid var(--line);background:rgba(255,255,255,.015)}
+.hud-log{height:74px;overflow:hidden;margin-top:8px;font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:.68rem;line-height:18px;color:#c9c9d6}
+.hud-log .hl{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;animation:hudIn .35s ease-out}
+.hud-log .hl:first-child{color:var(--text)}
+.hud-log .hl.think{color:#93c5fd}
+.hud-log .ts{color:var(--muted);opacity:.7}
+.hud-log b{color:var(--gold-3)}
+.hud-log .ok{color:var(--green);font-weight:700}
+.hud-log .nw{color:var(--blue);font-weight:700}
+.hud-log .wd{color:var(--orange);font-weight:700}
+@keyframes hudIn{from{opacity:0;transform:translateY(-6px)}}
+.hud-real{display:flex;align-items:center;gap:8px;margin-top:8px;padding-top:8px;border-top:1px solid var(--line);font-size:.74rem;min-width:0}
+.hud-real[hidden]{display:none}
+.hud-real-lab{flex:none;font-size:.6rem;font-weight:800;letter-spacing:.06em;text-transform:uppercase;color:#1a1400;background:var(--gold);border-radius:4px;padding:2px 6px}
+.tk-wrap{overflow:hidden;min-width:0;flex:1;-webkit-mask-image:linear-gradient(90deg,transparent,#000 8%,#000 92%,transparent);mask-image:linear-gradient(90deg,transparent,#000 8%,#000 92%,transparent)}
+.tk{display:inline-flex;gap:18px;white-space:nowrap;animation:hudTick 40s linear infinite}
+.tk i{font-style:normal;font-weight:700}
+.tk small{color:var(--muted)}
+@keyframes hudTick{to{transform:translateX(-50%)}}
+@media (max-width:520px){.ai-hud{padding:12px 10px 10px}.hud-radar{height:210px}.hud-stats{gap:6px}.hud-stats div{padding:6px 7px}.hud-stats b{font-size:.84rem}}
+@media (prefers-reduced-motion:reduce){.tk,.hud-live,.hud-dot,.hud-log .hl,.ai-hud::before{animation:none}}
 
 /* ---------- risk banner ---------- */
 .risk-banner{display:flex;gap:14px;align-items:flex-start;background:rgba(230,57,70,.07);border:1px solid rgba(230,57,70,.5);border-radius:16px;padding:16px 18px;font-size:.88rem;color:#e9cdd0}

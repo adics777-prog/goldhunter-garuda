@@ -27,7 +27,7 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@700;900&family=Poppins:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="/assets/app.css?v=52dcd811">
-<link rel="stylesheet" href="/assets/site.css?v=4e34ae4e">
+<link rel="stylesheet" href="/assets/site.css?v=df52535a">
 <script type="application/ld+json">[{"@context":"https://schema.org","@type":"Organization","name":"GoldHunter Garuda","url":"https://goldhuntergaruda.com/","logo":"https://goldhuntergaruda.com/assets/brand/goldhunter-garuda-logo-512.png"},
 {"@context":"https://schema.org","@type":"WebSite","name":"GoldHunter Garuda","url":"https://goldhuntergaruda.com/","inLanguage":"id-ID"},
 {"@context":"https://schema.org","@type":"SoftwareApplication","name":"GOLD HUNTER GARUDA","applicationCategory":"FinanceApplication","operatingSystem":"MetaTrader 5 (Windows)","description":"Expert Advisor MetaTrader 5 untuk emas XAUUSD dan semua pair: marty basket averaging dengan DD reduction, kantong profit, mode BARBAR, Market Liar dan mode berita. Setup rekomendasi per pair, installer 1 file, update otomatis.","url":"https://goldhuntergaruda.com/","offers":{"@type":"Offer","price":"0","priceCurrency":"IDR","description":"Trial gratis 7 hari; sewa, sharing profit dan EA gratis untuk akun IB"},"publisher":{"@type":"Organization","name":"GoldHunter Garuda"}},
@@ -62,10 +62,19 @@
       </div>
     </div>
     <div class="hero-visual reveal">
-      <img src="/assets/brand/goldhunter-garuda-logo-512.png" width="380" height="380" alt="Logo GOLD HUNTER GARUDA">
-      <div class="hero-chips">
-        <div class="chip"><span class="dot"></span><span data-en="Live accounts">Akun live</span><b id="hv-on">…</b></div>
-        <div class="chip">📈 <span data-en="Showcase today">Akun contoh hari ini</span><b id="hv-day">…</b></div>
+      <div class="ai-hud" id="aiHud">
+        <div class="hud-top"><b><span class="hud-dot"></span>GARUDA <span class="gold">AI ENGINE</span></b><span class="hud-live">LIVE</span><span class="hud-clock" id="hudClock">--:--:-- WIB</span></div>
+        <div class="hud-stats">
+          <div><span data-en="Live accounts">Akun live</span><b id="hv-on">…</b></div>
+          <div><span data-en="Showcase today">Contoh hari ini</span><b class="gold" id="hv-day">…</b></div>
+          <div><span data-en="Engine mode">Mode mesin</span><b class="gold" id="hudMode">BASKET</b></div>
+        </div>
+        <canvas class="hud-radar" aria-hidden="true"></canvas>
+        <div class="hud-bk-head"><span>XAUUSD · <span data-en="basket engine">mesin basket</span></span><b id="hudBk">BUY · 1 layer</b></div>
+        <canvas class="hud-basket" aria-hidden="true"></canvas>
+        <div class="hud-log" id="hudLog" aria-live="off"></div>
+        <div class="hud-real" id="hudReal" hidden><span class="hud-real-lab" data-en="Real results">Hasil nyata</span><div class="tk-wrap"><div class="tk"></div></div></div>
+        <span class="lab" data-en="Visualisation of how the EA works · pairs, layers &amp; numbers are illustrative">Visualisasi cara kerja EA · pair, layer &amp; angka ilustratif</span>
       </div>
     </div>
   </div>
@@ -246,6 +255,7 @@
 <script src="/assets/i18n.js?v=489e4256"></script>
 <script src="/assets/site.js?v=63068651"></script>
 <script src="/assets/ghlive.js?v=288b5d0d"></script>
+<script src="/assets/ghhud.js?v=7dd2c601"></script>
 <script>
 (() => {
   const T2 = SITE.TT;
@@ -257,6 +267,8 @@
     document.getElementById('hv-on').textContent = list.length ? `${on}/${list.length} online` : T2('disiapkan', 'being prepared');
     const dayUsd = list.reduce((a, x) => a + (GHL.toUsd(x.day, x.currency) || 0), 0);
     document.getElementById('hv-day').textContent = list.length ? GHL.usd(dayUsd) : T2('segera', 'soon');
+    window.GHL_LIVE = list;
+    window.dispatchEvent(new CustomEvent('ghl:live', { detail: list }));
     const top = list.slice().sort((a, b) => (b.online - a.online) || ((b.total_pct ?? -1e9) - (a.total_pct ?? -1e9))).slice(0, 6);
     document.getElementById('live-cards').innerHTML = top.length ? top.map((x) => GHL.card(x)).join('')
       : `<div class="empty-box" style="grid-column:1/-1"><b>${T2('Akun contoh live sedang disiapkan.', 'The live showcase accounts are being prepared.')}</b><br>${T2('Laporan live tampil di sini begitu akun pilihan pusat mulai mengirim data.', 'Live reports appear here as soon as the accounts chosen by HQ start sending data.')}</div>`;
