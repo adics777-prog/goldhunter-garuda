@@ -339,6 +339,17 @@ function eaCfg(s) {
     // Telegram = one picture with every EA's closed profit; text per event (series, warnings, offline) only when switched on
     every: Math.max(0, Math.min(24, int(s.ea_report_every) || 0)), events: s.ea_tg_events === '1' };
 }
+// ---- Showcase accounts: the public board (/live, landing, member home, /api/live, Telegram picture + messages) shows
+// ONLY the EA rows whose account login the admin listed in settings.showcase_logins (and that are visible).
+// Empty list = nothing public ("akun live sedang disiapkan"). Filtered here on the server: hidden rows never leave it.
+const showcaseLogins = (s) => [...new Set(String(s.showcase_logins || '').split(/[\s,;]+/).map((x) => x.trim()).filter((x) => /^[0-9A-Za-z_-]{1,20}$/.test(x)))];
+// SQL condition (+ binds) for the public rows of ea_setups; alias = table alias in joins ('' = no alias)
+function eaPublicWhere(s, alias = '') {
+  const L = showcaseLogins(s), p = alias ? alias + '.' : '';
+  if (!L.length) return { sql: '0', binds: [] };
+  return { sql: `${p}visible=1 AND ${p}login IN (${L.map(() => '?').join(',')})`, binds: L };
+}
+const eaIsPublic = (s, r) => !!r && !!r.visible && showcaseLogins(s).includes(String(r.login));
 async function eaTg(env, cfg, text, base, setupId) {
   if (!cfg.tg) return;
   const link = base ? `\n📈 <a href="${base}/live${setupId ? '?setup=' + setupId : ''}">goldhuntergaruda.com/live</a>` : '';
@@ -377,7 +388,8 @@ async function eaOfflineCheck(env, s, base) {
   const cfg = eaCfg(s);
   if (!cfg.key) return;
   const t = now();
-  const { results } = await env.DB.prepare('SELECT * FROM ea_setups WHERE visible=1 AND offline_state=0 AND updated_at > 0 AND updated_at < ?').bind(t - cfg.offlineMin * 60).all();
+  const pw = eaPublicWhere(s);
+  const { results } = await env.DB.prepare(`SELECT * FROM ea_setups WHERE ${pw.sql} AND offline_state=0 AND updated_at > 0 AND updated_at < ?`).bind(...pw.binds, t - cfg.offlineMin * 60).all();
   if (!results.length) return;
   await env.DB.batch(results.map((r) => env.DB.prepare('UPDATE ea_setups SET offline_state=1 WHERE id=?').bind(r.id)));
   if (!cfg.events) return;
@@ -391,9 +403,10 @@ async function eaClaim(env, key, value) {
   return (r.meta && r.meta.changes) === 1;
 }
 // Data of the picture: every visible EA, closed profit only (today, since start, % of capital).
-async function eaReportRows(env, t, cfg) {
+async function eaReportRows(env, s, t, cfg) {
+  const pw = eaPublicWhere(s);
   const [{ results: rows }, { results: ser }] = await Promise.all([
-    env.DB.prepare('SELECT * FROM ea_setups WHERE visible=1').all(),
+    env.DB.prepare(`SELECT * FROM ea_setups WHERE ${pw.sql}`).bind(...pw.binds).all(),
     env.DB.prepare(`SELECT setup_id, COUNT(*) AS n, COALESCE(SUM(CASE WHEN profit>0 THEN 1 ELSE 0 END),0) AS wins FROM ea_series WHERE closed_at >= ? GROUP BY setup_id`).bind(wibDayStart(t)).all(),
   ]);
   rows.sort(EA_SETUP_ORDER);
@@ -405,9 +418,10 @@ async function eaReportRows(env, t, cfg) {
   const sum = (k) => Math.round(out.reduce((a, x) => a + (x[k] || 0), 0) * 100) / 100;
   return { rows: out, head: { date: wibDate(t), clock: wibClock(t), total_day_usd: sum('day_usd'), total_usd: sum('total_usd'), online: out.filter((x) => x.online).length, count: out.length } };
 }
-async function eaSendReport(env, t, cfg, base) {
-  const { rows, head } = await eaReportRows(env, t, cfg);
-  if (!rows.length) return { ok: false, error: 'Belum ada EA yang melapor' };
+async function eaSendReport(env, s, t, cfg, base) {
+  if (tgHeld(s)) return { ok: false, held: true, error: 'Semua notifikasi Telegram sedang DITAHAN (Media Sosial > Telegram). Matikan "Tahan semua notifikasi Telegram" dulu.' };
+  const { rows, head } = await eaReportRows(env, s, t, cfg);
+  if (!rows.length) return { ok: false, error: 'Belum ada akun contoh live yang tampil di web (Pengaturan > EA Live > Akun contoh live)' };
   const png = await reportPng(rows, head);
   const caption = [`📊 <b>GOLD HUNTER GARUDA</b> · ${head.date} ${head.clock}`,
     `Profit hari ini ${eaMoney(head.total_day_usd)} USD · sejak mulai ${eaMoney(head.total_usd)} USD`,
@@ -417,14 +431,14 @@ async function eaSendReport(env, t, cfg, base) {
 }
 // Picture report: once a day after ea_report_hour (WIB), plus every x hours when ea_report_every > 0.
 async function eaDailyReport(env, s, cfg, t, base) {
-  if (!cfg.tg) return;
+  if (!cfg.tg || tgHeld(s)) return;
   const day = wibDay(t);
   let due = wibHour(t) >= cfg.hour && s.ea_report_day !== day && await eaClaim(env, 'ea_report_day', day);
   if (!due && cfg.every > 0) {
     const slot = Math.floor(t / (cfg.every * 3600));
     due = String(s.ea_report_slot || '') !== String(slot) && await eaClaim(env, 'ea_report_slot', slot);
   }
-  if (due) await eaSendReport(env, t, cfg, base);
+  if (due) await eaSendReport(env, s, t, cfg, base);
 }
 
 // Key: the master key (owner's own accounts) or a licence key lic.<id>.<token> compiled into a member's EA
@@ -519,8 +533,8 @@ route('POST', '/ea/live', 'public', async ({ request, env, waitUntil, base }) =>
     }
   }
   if (row.offline_state === 1) msgs.push(`🟢 <b>${esc(label)} online kembali</b>`);
-  // hidden member EAs never post to the public Telegram channel
-  if (cfg.events && (!lic || row.visible)) for (const m of msgs) waitUntil(eaTg(env, cfg, m, base, row.id));
+  // only showcase accounts (listed by the admin + visible) ever post to the public Telegram channel
+  if (cfg.events && !tgHeld(s) && eaIsPublic(s, row)) for (const m of msgs) waitUntil(eaTg(env, cfg, m, base, row.id));
   waitUntil(eaDailyReport(env, s, cfg, t, base).catch((e) => console.error('ea daily', e)));
   return json({ ok: true, next: 60, since: row.since });
 });
@@ -532,8 +546,10 @@ route('GET', '/live', 'public', async ({ env, url, waitUntil, base }) => {
   const t = now();
   waitUntil(eaOfflineCheck(env, s, base).catch((e) => console.error('ea offline', e)));
   const id = int(url.searchParams.get('setup')) || 0;
+  const pw = eaPublicWhere(s), spw = eaPublicWhere(s, 's');
+  const prepared = !showcaseLogins(s).length;   // no showcase account chosen yet: pages say the live accounts are being prepared
   if (id) {
-    const r = await env.DB.prepare('SELECT * FROM ea_setups WHERE id=? AND visible=1').bind(id).first();
+    const r = await env.DB.prepare(`SELECT * FROM ea_setups WHERE id=? AND ${pw.sql}`).bind(id, ...pw.binds).first();
     if (!r) fail(404, 'EA tidak ditemukan');
     const from = wibDay(r.since || 0);
     const [series, days, events, stat] = await Promise.all([
@@ -548,34 +564,34 @@ route('GET', '/live', 'public', async ({ env, url, waitUntil, base }) => {
     return json({ ok: true, configured: !!cfg.key, server_time: t, offline_min: cfg.offlineMin, setup: { ...eaSetupView(r, t, cfg), stats: stat, snapshot: snap },
       series: series.results, days: days.results, events: events.results });
   }
-  const { results: rows } = await env.DB.prepare('SELECT * FROM ea_setups WHERE visible=1').all();
+  const { results: rows } = await env.DB.prepare(`SELECT * FROM ea_setups WHERE ${pw.sql}`).bind(...pw.binds).all();
   rows.sort(EA_SETUP_ORDER);
   const d30 = wibDay(t - 29 * DAY);
-  const [{ results: days }, { results: ser }] = await Promise.all([
-    env.DB.prepare('SELECT d.setup_id, d.day, d.profit FROM ea_setup_days d JOIN ea_setups s ON s.id=d.setup_id WHERE s.visible=1 AND d.day >= ? ORDER BY d.day').bind(d30).all(),
+  const [{ results: days }, { results: ser }] = rows.length ? await Promise.all([
+    env.DB.prepare(`SELECT d.setup_id, d.day, d.profit FROM ea_setup_days d JOIN ea_setups s ON s.id=d.setup_id WHERE ${spw.sql} AND d.day >= ? ORDER BY d.day`).bind(...spw.binds, d30).all(),
     env.DB.prepare(`SELECT e.setup_id, COUNT(*) AS n, COALESCE(SUM(CASE WHEN e.profit>0 THEN 1 ELSE 0 END),0) AS wins FROM ea_series e JOIN ea_setups s ON s.id=e.setup_id
-        WHERE s.visible=1 AND e.closed_at >= s.since GROUP BY e.setup_id`).all(),
-  ]);
+        WHERE ${spw.sql} AND e.closed_at >= s.since GROUP BY e.setup_id`).bind(...spw.binds).all(),
+  ]) : [{ results: [] }, { results: [] }];
   const setups = rows.map((r) => {
     const v = eaSetupView(r, t, cfg);
     const sr = ser.find((x) => x.setup_id === r.id) || { n: 0, wins: 0 };
     const sinceDay = wibDay(r.since || 0);
     return { ...v, series: sr.n, wins: sr.wins, spark: days.filter((x) => x.setup_id === r.id && x.day >= sinceDay).map((x) => [x.day, x.profit]) };
   });
-  return json({ ok: true, configured: !!cfg.key, server_time: t, offline_min: cfg.offlineMin, setups });
+  return json({ ok: true, configured: !!cfg.key, prepared, server_time: t, offline_min: cfg.offlineMin, setups });
 });
 
 // Admin: preview the Telegram picture / send it now.
 route('GET', '/admin/ea/report.png', 'admin', async ({ env }) => {
   const s = await getSettings(env);
   const t = now();
-  const { rows, head } = await eaReportRows(env, t, eaCfg(s));
+  const { rows, head } = await eaReportRows(env, s, t, eaCfg(s));
   return new Response(await reportPng(rows, head), { headers: { 'content-type': 'image/png', 'cache-control': 'no-store' } });
 });
 route('POST', '/admin/ea/report-send', 'admin', async ({ env, base }) => {
   const s = await getSettings(env);
   const cfg = eaCfg(s);
-  const r = await eaSendReport(env, now(), cfg, base);
+  const r = await eaSendReport(env, s, now(), cfg, base);
   if (!r.ok) fail(400, r.error || 'Telegram belum aktif atau belum ada target (Media Sosial > Telegram)');
   return json(r);
 });
@@ -587,8 +603,9 @@ route('GET', '/admin/ea/setups', 'admin', async ({ env }) => {
   const t = now();
   const { results } = await env.DB.prepare('SELECT s.*, u.name AS owner_name, u.email AS owner_email FROM ea_setups s LEFT JOIN users u ON u.id=s.user_id').all();
   results.sort(EA_SETUP_ORDER);
-  return json({ setups: results.map((r) => ({ ...eaSetupView(r, t, cfg), login: r.login, server: r.server, magic: r.magic,
-    label_admin: r.label, visible: r.visible, sort: r.sort, created_at: r.created_at,
+  const L = showcaseLogins(s);
+  return json({ showcase_logins: L, setups: results.map((r) => ({ ...eaSetupView(r, t, cfg), login: r.login, server: r.server, magic: r.magic,
+    label_admin: r.label, visible: r.visible, sort: r.sort, created_at: r.created_at, listed: L.includes(String(r.login)), public: eaIsPublic(s, r),
     license_id: r.license_id || null, owner_name: r.license_id ? r.owner_name || '' : '', owner_email: r.license_id ? r.owner_email || '' : '' })) });
 });
 route('PUT', '/admin/ea/setups/:id', 'admin', async ({ request, env, params }) => {
@@ -621,11 +638,14 @@ route('DELETE', '/admin/ea/setups/:id', 'admin', async ({ env, params }) => {
 
 // ======================= TELEGRAM (EA live reports, content videos, admin tests) =======================
 // Configured in Admin > Media Sosial > Telegram: bot token (stored encrypted) and any number of target channels / groups.
+// Hold switch (settings.telegram_hold, default ON when missing): while held NOTHING goes to Telegram automatically
+// (EA live messages / picture reports, content videos). Only the admin's explicit "Kirim pesan tes" still sends.
+const tgHeld = (s) => String(s.telegram_hold ?? '1') !== '0';
 async function tgConfig(env) {
   const s = await getSettings(env);
   const token = s.telegram_bot_token_enc ? await decrypt(env, s.telegram_bot_token_enc) : '';
   const targets = (Array.isArray(s.telegram_targets) ? s.telegram_targets : []).filter((t) => t.active !== false && t.chat_id);
-  return { on: s.telegram_enabled === '1' && !!token && targets.length > 0, token, targets };
+  return { on: s.telegram_enabled === '1' && !!token && targets.length > 0, hold: tgHeld(s), token, targets };
 }
 
 // One message (or photo with caption) to one chat; returns { ok, message_id, error }
@@ -664,7 +684,7 @@ async function tgSend(token, chatId, text, { photo, replyTo } = {}) {
 // Send to every active target; replyTo is the {chat_id: message_id} map of the original post
 async function tgBroadcast(env, text, { photo, replyTo } = {}) {
   const c = await tgConfig(env);
-  if (!c.on) return null;
+  if (!c.on || c.hold) return null;           // held: returns before any fetch to Telegram
   const out = {};
   await Promise.all(c.targets.map(async (t) => {
     const r = await tgSend(c.token, t.chat_id, text, { photo, replyTo: replyTo ? replyTo[t.chat_id] : null });
@@ -768,7 +788,7 @@ route('POST', '/builder/content/claim', 'builder', async ({ env }) => {
   await env.DB.prepare("UPDATE content_jobs SET status='rendering' WHERE id=?").bind(job.id).run();
   try {
     const out = { id: job.id, kind: job.kind, lang: job.lang, voice: job.lang === 'en' ? 'en-US-AndrewNeural' : (s.content_voice || 'id-ID-ArdiNeural'),
-      send_telegram: s.content_tg === '1', send_social: Object.entries(socialReady(s)).filter(([k, ok]) => ok && s['content_' + k] === '1').map(([k]) => k),
+      send_telegram: s.content_tg === '1' && !tgHeld(s), send_social: Object.entries(socialReady(s)).filter(([k, ok]) => ok && s['content_' + k] === '1').map(([k]) => k),
       topic: job.topic || '' };
     let script = job.script ? JSON.parse(job.script) : null;
     if (!script) {
@@ -795,6 +815,7 @@ route('POST', '/builder/content/:id/telegram', 'builder', async ({ request, env,
   const job = await env.DB.prepare('SELECT * FROM content_jobs WHERE id=?').bind(int(params.id)).first();
   if (!job) fail(404, 'Konten tidak ditemukan');
   const c = await tgConfig(env);
+  if (c.hold) return json({ ok: false, held: true, error: 'Telegram ditahan (Admin > Media Sosial > Telegram)' });
   if (!c.on) return json({ ok: false, error: 'Telegram belum aktif' });
   const buf = await request.arrayBuffer();
   if (!buf.byteLength || buf.byteLength > 45 * 1024 * 1024) fail(400, 'Ukuran video tidak valid');
@@ -1180,25 +1201,27 @@ function agentScript(f) {
   return null;
 }
 const agentConfig = (base, fields) => agentFile('config.json', JSON.stringify(agentDefaults(base, fields), null, 2), 'application/json');
-// ---- One-file installer GHG-Installer-<account>.cmd: a CMD that elevates itself (UAC), unpacks the agent + config.json
-// (base64 blocks after the batch part, never executed by cmd) into C:\GHG-Agent, runs the agent with -Setup (EA + presets,
-// latest chart-profile backup restored as "GHG Restore", Algo Trading / WebRequest on, MetaTrader opened again) and
-// registers the "GHG VPS Agent" task exactly like Pasang-Agen-VPS.bat. Admin (master key): same without -Setup.
+// ---- One-file installer "GOLD HUNTER GARUDA - Installer <account>.cmd": a CMD that elevates itself (UAC) and unpacks
+// the agent + config.json (base64 blocks after the batch part, never executed by cmd) into THE FOLDER WHERE THE .cmd ITSELF
+// IS (recommended C:\GOLD HUNTER GARUDA). Re-run from another folder = the old agent / task is stopped and moved there.
+// The agent then runs -Setup: EA + presets into every MetaTrader logged into the account; a backed-up chart profile is
+// restored ONLY into a terminal whose active profile has no GOLD HUNTER GARUDA EA yet (running setups are never changed),
+// and the "GHG VPS Agent" task (logon, highest rights) is registered by the PowerShell part. Admin (master key): same, all accounts.
 const crlf = (s) => String(s).replace(/\r?\n/g, '\r\n');
 const b64Block = (name, text) => `::BEGIN ${name}\r\n${b64(new TextEncoder().encode(text)).match(/.{1,76}/g).join('\r\n')}\r\n::END ${name}`;
 const INSTALLER_BAT = String.raw`@echo off
 rem ============================================================================
-rem  GHG Installer __LABEL__ - GOLD HUNTER GARUDA (goldhuntergaruda.com)
-rem  Klik dua kali file ini di PC / VPS yang sudah ada MetaTrader-nya, lalu klik Yes
-rem  saat Windows meminta izin Administrator.
-rem  Memasang agen update otomatis di C:\GHG-Agent, EA berlisensi + preset, memulihkan
-rem  setup EA terakhir (chart, input) dan mendaftarkan task "GHG VPS Agent".
+rem  GOLD HUNTER GARUDA - Installer __LABEL__  (goldhuntergaruda.com)
+rem  1. Buat folder C:\GOLD HUNTER GARUDA dan taruh file ini di sana.
+rem  2. Klik dua kali file ini, klik Yes saat Windows meminta izin Administrator.
+rem  Agen update otomatis dipasang di folder tempat file ini berada, EA berlisensi +
+rem  preset dipasang di setiap MetaTrader yang login di akun ini. Setup chart yang
+rem  sudah berjalan TIDAK diubah. Task "GHG VPS Agent" didaftarkan otomatis.
 rem  Berisi kunci lisensi akun ini: JANGAN dibagikan ke orang lain.
 rem ============================================================================
 setlocal
-title GHG Installer __LABEL__
+title GOLD HUNTER GARUDA - Installer __LABEL__
 set "GHG_SELF=%~f0"
-set "GHG_DIR=C:\GHG-Agent"
 net session >nul 2>&1
 if not errorlevel 1 goto run
 if /i "%~1"=="elevated" goto noadmin
@@ -1216,23 +1239,14 @@ exit /b 1
 set "GHG_BOOT=%TEMP%\ghg-installer-%RANDOM%%RANDOM%.ps1"
 powershell -NoProfile -ExecutionPolicy Bypass -Command "$t=[IO.File]::ReadAllLines($env:GHG_SELF); $s=[array]::IndexOf($t,'::BEGIN BOOT'); $e=[array]::IndexOf($t,'::END BOOT'); [IO.File]::WriteAllBytes($env:GHG_BOOT,[Convert]::FromBase64String(($t[($s+1)..($e-1)] -join '')))"
 if not exist "%GHG_BOOT%" goto broken
-powershell -NoProfile -ExecutionPolicy Bypass -File "%GHG_BOOT%" -Installer "%GHG_SELF%" -Dir "%GHG_DIR%"
+powershell -NoProfile -ExecutionPolicy Bypass -File "%GHG_BOOT%" -Installer "%GHG_SELF%"
 set "GHG_RC=%errorlevel%"
 del "%GHG_BOOT%" >nul 2>&1
-if "%GHG_RC%"=="2" goto finish
-echo.
-echo === Jalan otomatis setiap Windows login, hak tertinggi (Task Scheduler "GHG VPS Agent") ===
-schtasks /Create /F /TN "GHG VPS Agent" /SC ONLOGON /RL HIGHEST /TR "powershell.exe -NoProfile -WindowStyle Hidden -ExecutionPolicy Bypass -File \"%GHG_DIR%\GHG-VPS-Agent.ps1\""
-schtasks /Run /TN "GHG VPS Agent"
-echo.
-echo SELESAI. Agen update otomatis aktif (cek tiap menit, backup setup tiap 10 menit).
-echo Log: %GHG_DIR%\agent.log  -  status tampil di web, menu Lisensi ^& VPS.
-:finish
 echo.
 pause
 exit /b %GHG_RC%
 :broken
-echo Installer rusak / terpotong. Unduh ulang dari member area.
+echo Installer rusak / terpotong, atau diblokir antivirus. Unduh ulang dari member area.
 pause
 exit /b 1
 `;
@@ -1249,7 +1263,7 @@ const agentDefaults = (base, fields) => ({ web: base || 'https://goldhuntergarud
 route('GET', '/admin/vps/installer', 'admin', async ({ env, base }) => {
   const key = String((await getSettings(env)).ea_master_key || '').trim();
   if (!key) fail(400, 'Buat & simpan kunci master dulu (Pengaturan > EA Live)');
-  return installerFile('GHG-Installer-Admin.cmd', installerCmd('VPS admin', agentDefaults(base, { key })));
+  return installerFile('GOLD HUNTER GARUDA - Installer Admin.cmd', installerCmd('VPS admin', agentDefaults(base, { key })));
 });
 route('GET', '/admin/vps/download', 'admin', async ({ env, url, base }) => {
   const f = url.searchParams.get('f');
@@ -1266,15 +1280,32 @@ route('GET', '/admin/vps/download', 'admin', async ({ env, url, base }) => {
 
 // ---- Member VPS agent (licence mode): installs the member's own licence-locked EA build on their VPS.
 // GET /vps/lic/release?have=<build_id> -> none | same | the current build + the generic presets of the owner's release
+// Presets fingerprint: the builder republishes presets via /builder/vps-release without a new licence build, so the
+// release carries sha_presets (fallback: names + sizes). Agent 1.5+ sends it back as ?presets=<fp>; when the build is the
+// same but the fingerprint differs, the reply carries the new preset list (presets_changed) and the agent installs only
+// the presets (no MetaTrader restart).
+async function presetsFp(rel) {
+  if (!rel || !Array.isArray(rel.presets) || !rel.presets.length) return '';
+  if (rel.sha_presets) return String(rel.sha_presets);
+  return (await sha256(rel.presets.map((p) => `${p.name}:${p.size}`).sort().join('|'))).slice(0, 40);
+}
 route('GET', '/vps/lic/release', 'public', async ({ request, env, url }) => {
   const l = await licAuth(env, request.headers.get('x-lic-key'));
   const b = await licCurrentFile(env, l);
   if (!b) return json({ ok: true, none: true, account: l.account_number, platform: l.platform, ...licAgentUpdate });
-  if (String(url.searchParams.get('have') || '') === String(b.id)) return json({ ok: true, same: true, build_id: b.id, version: b.ea_version || '', account: l.account_number, ...licAgentUpdate });
   const rel = vpsRelease(await getSettings(env));
+  const presets = rel ? rel.presets : [];
+  const presets_sha = await presetsFp(rel);
+  if (String(url.searchParams.get('have') || '') === String(b.id)) {
+    const out = { ok: true, same: true, build_id: b.id, version: b.ea_version || '', account: l.account_number, presets_sha, ...licAgentUpdate };
+    const hp = url.searchParams.get('presets');
+    // only agents that send ?presets= (1.5+) get the list; older agents keep the light answer
+    if (hp !== null && hp !== presets_sha && presets.length) Object.assign(out, { presets_changed: true, presets });
+    return json(out);
+  }
   return json({ ok: true, build_id: b.id, version: b.ea_version || '', platform: l.platform, account: l.account_number,
     ex5: { id: b.file_id, name: str(b.name, 120).replace(/[\\/:*?"<>|]/g, '') || `GOLD HUNTER GARUDA_${l.account_number}.${l.platform === 'mt4' ? 'ex4' : 'ex5'}`, size: b.size },
-    presets: rel ? rel.presets : [], expires_at: b.expires_at || 0, license_expires_at: l.expires_at || 0, ...licAgentUpdate });
+    presets, presets_sha, expires_at: b.expires_at || 0, license_expires_at: l.expires_at || 0, ...licAgentUpdate });
 });
 // the agent script (licence key), so a running member agent can self-update
 route('GET', '/vps/lic/agent', 'public', async ({ request, env }) => {
@@ -1424,7 +1455,7 @@ route('POST', '/admin/telegram/test', 'admin', async ({ env }) => {
     const r = await tgSend(c.token, t.chat_id, '🦅 <b>GOLD HUNTER GARUDA</b>\nTes koneksi berhasil. Laporan live EA GOLD HUNTER GARUDA (gambar laporan, peringatan) dan video konten akan dikirim ke sini.');
     return { name: t.name, chat_id: t.chat_id, ok: r.ok, error: r.error || '' };
   }));
-  return json({ ok: true, enabled: c.on, results });
+  return json({ ok: true, enabled: c.on, held: c.hold, results });
 });
 // Chats the bot has seen recently (helps the admin find the chat id of a group / channel)
 route('POST', '/admin/telegram/chats', 'admin', async ({ env }) => {
@@ -1689,7 +1720,7 @@ route('GET', '/licenses/:id/installer', 'member', async ({ env, user, params, ba
   if (l.status !== 'active') fail(409, 'Lisensi belum / tidak aktif');
   const account = String(l.account_number).replace(/[^0-9A-Za-z]/g, '') || String(l.id);
   const cfg = agentDefaults(base, { license: { id: l.id, key: licKey(l.id, await ensureReportToken(env, l.id)), account: l.account_number, platform: l.platform } });
-  return installerFile(`GHG-Installer-${account}.cmd`, installerCmd(`akun ${account}`, cfg));
+  return installerFile(`GOLD HUNTER GARUDA - Installer ${account}.cmd`, installerCmd(`akun ${account}`, cfg));
 });
 
 route('POST', '/licenses/:id/renew', 'member', async ({ request, env, user, params, base }) => {
@@ -2092,13 +2123,14 @@ route('PUT', '/admin/products/:id', 'admin', async ({ request, env, params }) =>
 const EDITABLE_SETTINGS = ['durations', 'discounts', 'bank_list', 'admin_notify_email', 'whatsapp', 'pay_deadline_hours', 'reminder_days', 'mt4_enabled',
   'ib_brokers', 'auto_complete_ea', 'auto_process_paid', 'welcome_email_password', 'email_provider', 'email_from', 'email_from_name', 'vps_spec',
   'min_capital_usd', 'invoice_days_before', 'auto_rebuild_on_version', 'report_interval_min', 'board_enabled', 'board_name_mode', 'board_landing_top', 'board_stale_days', 'profit_est_enabled', 'profit_est_min_idr', 'profit_est_max_idr', 'profit_est_basis',
-  'telegram_enabled', 'telegram_targets', 'usdt_enabled', 'usdt_address',
-  'ea_master_key', 'ea_report_hour', 'ea_report_every', 'ea_tg_min_layers', 'ea_offline_min', 'ea_tg_enabled', 'ea_tg_events'];
+  'telegram_enabled', 'telegram_targets', 'telegram_hold', 'usdt_enabled', 'usdt_address',
+  'ea_master_key', 'showcase_logins', 'ea_report_hour', 'ea_report_every', 'ea_tg_min_layers', 'ea_offline_min', 'ea_tg_enabled', 'ea_tg_events'];
 route('GET', '/admin/settings', 'admin', async ({ env }) => {
   const s = await getSettings(env);
   const out = Object.fromEntries(EDITABLE_SETTINGS.map((k) => [k, s[k] ?? '']));
   out.email_api_key_set = !!s.email_api_key_enc;
   out.telegram_bot_token_set = !!s.telegram_bot_token_enc;
+  out.telegram_hold = tgHeld(s) ? '1' : '0';
   out.usdt_qr_set = !!s.usdt_qr_file_id;
   out._env = { email_provider: env.EMAIL_PROVIDER || 'log', email_from: env.EMAIL_FROM || '', site_url: env.SITE_URL || '',
     builder_token_set: !!env.BUILDER_TOKEN, cron_secret_set: !!env.CRON_SECRET, data_key_set: !!env.DATA_KEY };
@@ -2124,7 +2156,13 @@ route('PUT', '/admin/settings', 'admin', async ({ request, env }) => {
       for (const x of v) if (!/^(-?\d+|@[A-Za-z0-9_]{4,})$/.test(x.chat_id)) fail(400, `Chat ID "${x.chat_id}" tidak valid (angka seperti -1001234567890 atau @namachannel)`);
     }
     if (k === 'usdt_address' && v && !TRC20_RE.test(str(v, 60))) fail(400, 'Alamat USDT TRC20 tidak valid (34 karakter, diawali huruf T)');
-    if (k === 'usdt_enabled') v = v === '1' || v === true ? '1' : '0';
+    if (k === 'usdt_enabled' || k === 'telegram_hold') v = v === '1' || v === true ? '1' : '0';
+    if (k === 'showcase_logins') {
+      const L = String(v || '').split(/[\s,;]+/).map((x) => x.trim()).filter(Boolean);
+      const bad = L.filter((x) => !/^[0-9A-Za-z_-]{1,20}$/.test(x));
+      if (bad.length) fail(400, `Nomor akun contoh live tidak valid: ${bad.slice(0, 3).join(', ')} (isi nomor akun, pisahkan koma)`);
+      v = [...new Set(L)].slice(0, 40).join(', ');
+    }
     if (k === 'ib_brokers') v = v.map((x) => ({ name: str(x.name, 40), link: str(x.link, 300), active: !!x.active })).filter((x) => x.name);
     if (k === 'email_provider' && !['', 'log', 'resend', 'brevo'].includes(v)) fail(400, 'Penyedia email tidak dikenal');
     if (k === 'email_from' && v && !isEmail(str(v, 120))) fail(400, 'Alamat pengirim email tidak valid');

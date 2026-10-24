@@ -529,6 +529,7 @@
     if (msg) { const m = decodeURIComponent(msg); toast(m === 'ok' ? 'Akun TikTok terhubung ✔' : m, m === 'ok' ? 'ok' : 'err'); history.replaceState(null, '', '#/sosmed'); }
     const [s, so] = await Promise.all([api('/admin/settings'), api('/admin/social')]);
     const tgOn = s.telegram_enabled === '1' && s.telegram_bot_token_set;
+    const held = s.telegram_hold !== '0';
     const badge = (ok, yes = 'Terhubung', no = 'Belum terhubung') => `<span class="badge ${ok ? 'b-green' : 'b-orange'}">${ok ? yes : no}</span>`;
     const chkNet = (k, label, ready, hint) => `<label class="row small" style="color:var(--text);margin-bottom:10px;align-items:flex-start"><input type="checkbox" name="content_${k}" ${so['content_' + k] ? 'checked' : ''} ${ready ? '' : 'disabled'} style="margin-top:4px">
       <span><b>${label}</b> ${ready ? '' : '<span class="tiny muted">(hubungkan dulu di tab-nya)</span>'}<div class="help" style="margin:2px 0 0">${hint}</div></span></label>`;
@@ -547,12 +548,16 @@
           <button class="btn btn-gold btn-sm" type="submit">Simpan</button>
           <p class="help" style="margin-top:12px">Laporan live EA (gambar harian &amp; peringatan) hanya dikirim ke Telegram, diatur di Pengaturan › EA Live. Jadwal &amp; topik video diatur di <a href="#/konten">🎬 Konten Video</a>.</p></form>
         <div class="card" data-tab="ringkas"><h3>Status</h3>
-          <div class="conn">✈️ <b>Telegram</b> ${badge(tgOn, 'Aktif', 'Belum aktif')} <span class="tiny muted">${(s.telegram_targets || []).filter((t) => t.active !== false).length} target</span></div>
+          <div class="conn">✈️ <b>Telegram</b> ${held ? '<span class="badge b-red">DITAHAN</span>' : badge(tgOn, 'Aktif', 'Belum aktif')} <span class="tiny muted">${(s.telegram_targets || []).filter((t) => t.active !== false).length} target</span></div>
           <div class="conn">📘 <b>Facebook</b> ${badge(so.ready.fb)} <span class="tiny muted">${esc(so.meta_page_name)}</span></div>
           <div class="conn">📸 <b>Instagram</b> ${badge(so.ready.ig)} <span class="tiny muted">${so.meta_ig_username ? '@' + esc(so.meta_ig_username) : ''}</span></div>
           <div class="conn">🎵 <b>TikTok</b> ${badge(so.ready.tt)} <span class="tiny muted">${esc(so.tiktok_name)}</span></div></div>
 
-        <form class="card" id="tgf" style="grid-column:1/-1" data-tab="tg"><div class="row between"><h3 style="margin:0">✈️ Telegram (laporan EA &amp; video)</h3>${badge(tgOn, 'Aktif', 'Belum aktif')}</div>
+        <form class="card" id="tgf" style="grid-column:1/-1" data-tab="tg"><div class="row between"><h3 style="margin:0">✈️ Telegram (laporan EA &amp; video)</h3>${held ? '<span class="badge b-red">DITAHAN</span>' : badge(tgOn, 'Aktif', 'Belum aktif')}</div>
+          <label class="tg-hold ${held ? 'on' : ''}" style="display:flex;gap:12px;align-items:flex-start;margin:14px 0 0;padding:12px 14px;border-radius:12px;border:1px solid ${held ? 'rgba(255,139,149,.55)' : 'var(--line)'};background:${held ? 'rgba(255,139,149,.08)' : 'transparent'};color:var(--text);cursor:pointer">
+            <input type="checkbox" name="telegram_hold" ${held ? 'checked' : ''} style="margin-top:4px;flex:none;width:18px;height:18px">
+            <span style="min-width:0"><b>Tahan semua notifikasi Telegram</b> <span class="badge ${held ? 'b-red' : 'b-green'}">${held ? 'ON · ditahan' : 'OFF · terkirim'}</span>
+              <span class="help" style="display:block;margin:4px 0 0">Selama ON, <b>tidak ada</b> yang dikirim otomatis ke Telegram: gambar laporan EA, pesan kejadian / peringatan EA, EA offline, dan video konten. Hanya tombol <b>Kirim pesan tes</b> di bawah yang tetap mengirim (sengaja, untuk uji). Matikan lalu <b>Simpan Telegram</b> bila sudah siap.</span></span></label>
           <div class="grid c2" style="margin-top:14px;align-items:start">
             <div>
               <label class="row small" style="color:var(--text);margin-bottom:12px"><input type="checkbox" name="telegram_enabled" ${s.telegram_enabled === '1' ? 'checked' : ''}> Aktifkan pengiriman ke Telegram (laporan live EA GOLD HUNTER GARUDA &amp; video konten)</label>
@@ -561,7 +566,7 @@
               <div id="tgl">${(s.telegram_targets || []).map(tgRow).join('')}</div>
               <div class="row" style="margin:4px 0 14px"><button type="button" class="btn btn-ghost btn-sm" id="addtg">+ Tambah target</button>
                 <button type="button" class="btn btn-outline btn-sm" id="tg-find">🔎 Cari chat ID</button>
-                <button type="button" class="btn btn-outline btn-sm" id="tg-test">Kirim pesan tes</button></div>
+                <button type="button" class="btn btn-outline btn-sm" id="tg-test" title="Tetap terkirim walau notifikasi ditahan">Kirim pesan tes</button></div>
               <div class="field"><label>Link channel publik (ditampilkan ke member &amp; website)</label><input name="telegram_public_link" value="${esc(so.telegram_public_link)}" placeholder="https://t.me/namachannel"></div>
               <button class="btn btn-gold btn-sm" type="submit">Simpan Telegram</button>
             </div>
@@ -642,14 +647,14 @@
       const r = await busy(e.target, () => post('/admin/telegram/test', {}));
       if (r.error) return toast(r.error, 'err');
       const bad = r.results.filter((x) => !x.ok);
-      if (!bad.length) toast(`Pesan tes terkirim ke ${r.results.length} target ✔${r.enabled ? '' : ' (pengiriman Telegram masih mati: centang lalu Simpan)'}`);
+      if (!bad.length) toast(`Pesan tes terkirim ke ${r.results.length} target ✔${r.held ? ' (notifikasi otomatis tetap DITAHAN)' : r.enabled ? '' : ' (pengiriman Telegram masih mati: centang lalu Simpan)'}`);
       else toast('Gagal ke: ' + bad.map((x) => `${x.name || x.chat_id} (${x.error})`).join(', '), 'err');
     };
     $('#tgf').onsubmit = async (e) => {
       e.preventDefault();
       const d = Object.fromEntries(new FormData(e.target));
       await busy($('#tgf button[type=submit]'), async () => {
-        await api('/admin/settings', { method: 'PUT', body: { telegram_enabled: d.telegram_enabled ? '1' : '0', telegram_bot_token: secretVal('telegram_bot_token'),
+        await api('/admin/settings', { method: 'PUT', body: { telegram_enabled: d.telegram_enabled ? '1' : '0', telegram_hold: d.telegram_hold ? '1' : '0', telegram_bot_token: secretVal('telegram_bot_token'),
           telegram_targets: $$('.tgr').map((r) => ({ name: $('.tg-name', r).value.trim(), chat_id: $('.tg-id', r).value.trim(), active: $('.tg-act', r).checked })).filter((x) => x.chat_id) } });
         await api('/admin/social', { method: 'PUT', body: { telegram_public_link: d.telegram_public_link } });
       });
@@ -959,6 +964,8 @@
     let list = [];
     try { list = (await api('/admin/ea/setups')).setups; } catch (err) { box.innerHTML = `<div class="small" style="color:#ff8b95">${esc(err.message)}</div>`; return; }
     if (!list.length) { box.innerHTML = '<div class="small muted">Belum ada EA yang melapor. Pasang EA v2.51+ dengan input 13.2 = kunci di atas, lalu tunggu ±1 menit.</div>'; return; }
+    const pubBadge = (x) => x.public ? '<span class="badge b-green">tampil di web</span>'
+      : `<span class="badge b-orange" title="${x.listed ? 'Centang Tampil supaya muncul di web' : 'Nomor akun ini belum ada di Akun contoh live'}">tidak tampil</span><div class="tiny muted">${x.listed ? 'Tampil belum dicentang' : 'akun belum di daftar contoh live'}</div>`;
     const pad = (n) => String(n).padStart(2, '0');
     const local = (t) => { const d = new Date(t * 1000); return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`; };
     const usd = (v) => v == null ? '-' : (v < 0 ? '-$' : '+$') + Math.abs(v).toLocaleString('id-ID', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -966,7 +973,7 @@
       ${list.map((x) => `<tr data-id="${x.id}" style="${x.visible ? '' : 'opacity:.55'}">
         <td class="nowrap"><b>${esc(x.symbol)}</b> <span class="tiny muted">${esc(x.broker_symbol)}</span><div class="tiny muted">akun ${esc(x.login)} · magic ${x.magic}${x.setup_name ? ' · ' + esc(x.setup_name) : ''} · v${esc(x.version)}</div>
           ${x.license_id ? `<div class="tiny">👤 <a href="#/lisensi/${x.license_id}">${esc(x.owner_name || 'member')}</a> <span class="muted">${esc(x.owner_email)}</span></div>` : ''}
-          <div class="tiny">${x.online ? '<span style="color:#6ee7a2">● online</span>' : '<span style="color:#ff8b95">● offline</span>'} ${ago(x.at)}</div></td>
+          <div class="tiny">${x.online ? '<span style="color:#6ee7a2">● online</span>' : '<span style="color:#ff8b95">● offline</span>'} ${ago(x.at)}</div><div style="margin-top:4px">${pubBadge(x)}</div></td>
         <td><input data-k="label" value="${esc(x.label_admin)}" placeholder="${esc(x.label)}" style="min-width:130px"></td>
         <td><input type="checkbox" data-k="visible" ${x.visible ? 'checked' : ''}></td>
         <td><input data-k="sort" type="number" value="${x.sort}" style="width:64px"></td>
@@ -1101,18 +1108,21 @@
             <div class="field"><label>Pesan "seri selesai" (bila pesan kejadian aktif) hanya bila posisinya &ge; </label><input name="ea_tg_min_layers" type="number" min="0" max="50" value="${esc(s.ea_tg_min_layers === '' || s.ea_tg_min_layers == null ? 4 : s.ea_tg_min_layers)}"></div>
             <div class="field"><label>Peringatan EA offline bila tidak ada data selama (menit)</label><input name="ea_offline_min" type="number" min="2" max="120" value="${esc(s.ea_offline_min || 5)}"></div>
           </div>
+          <div class="field"><label>Akun contoh live (nomor akun, pisahkan koma)</label><input name="showcase_logins" class="mono" value="${esc(s.showcase_logins || '')}" placeholder="contoh: 12345678, 87654321" autocomplete="off" inputmode="numeric">
+            <div class="help">Hanya EA dari nomor akun ini yang tampil di <a href="/live" target="_blank" rel="noopener">/live</a>, halaman utama, beranda member dan gambar / pesan Telegram (baris EA-nya juga harus dicentang <b>Tampil</b> di daftar bawah). <b>Kosong = tidak ada akun yang tampil</b>, web menulis "akun live sedang disiapkan". Daftar EA di bawah tetap menampilkan semua akun untuk admin.</div></div>
+          ${s.telegram_hold !== '0' ? '<div class="alert warn small" style="margin:6px 0 10px">⏸ Semua notifikasi Telegram sedang <b>DITAHAN</b>: laporan &amp; peringatan EA tidak dikirim. Lepas di <a href="#/sosmed" id="go-tg-hold">📣 Media Sosial › Telegram</a>.</div>' : ''}
           <label class="row small" style="color:var(--text)"><input type="checkbox" name="ea_tg_enabled" ${s.ea_tg_enabled !== '0' ? 'checked' : ''}> Kirim laporan &amp; peringatan EA ke Telegram (bot &amp; target diatur di <a href="#/sosmed">📣 Media Sosial</a>)</label>
           <label class="row small" style="color:var(--text)"><input type="checkbox" name="ea_tg_events" ${s.ea_tg_events === '1' ? 'checked' : ''}> Kirim juga pesan teks per kejadian (seri selesai, kantong, peringatan floating, EA offline)</label>
           <p class="help">Isi Telegram: <b>satu gambar</b> berisi hasil semua akun, profit tertutup saja (hari ini, sejak mulai, persen modal, lama berjalan), tanpa floating. Pesan per kejadian mati kecuali dicentang di atas.</p>
           <div class="row" style="gap:8px"><a class="btn btn-ghost btn-sm" href="/api/admin/ea/report.png" target="_blank" rel="noopener">👁 Lihat gambar laporan</a><button type="button" class="btn btn-outline btn-sm" id="ea-report-send">📤 Kirim laporan ke Telegram sekarang</button></div></div>
         <div class="card" style="grid-column:1/-1" data-tab="live"><h3>🎚️ EA yang melapor</h3>
-          <p class="help" style="margin-top:0">Muncul otomatis begitu EA pertama kali mengirim data. <b>Mulai hitung</b> = awal track record (profit, persen modal, lama berjalan, DD terdalam dihitung sejak itu); ubah tanggalnya atau klik <b>Mulai ulang</b> bila akun dipakai ulang. EA yang disembunyikan tidak tampil di web dan tidak memicu peringatan offline.</p>
+          <p class="help" style="margin-top:0">Muncul otomatis begitu EA pertama kali mengirim data. <b>Mulai hitung</b> = awal track record (profit, persen modal, lama berjalan, DD terdalam dihitung sejak itu); ubah tanggalnya atau klik <b>Mulai ulang</b> bila akun dipakai ulang. Yang tampil di web hanya baris dengan badge <b>tampil di web</b>: nomor akunnya ada di <b>Akun contoh live</b> di atas <i>dan</i> kolom Tampil dicentang. Baris lain tidak dikirim ke browser pengunjung, tidak masuk gambar Telegram dan tidak memicu peringatan offline.</p>
           <div id="ea-setups"><div class="small muted">Memuat…</div></div></div>
         <div class="card" style="grid-column:1/-1" data-tab="live"><h3>🖥️ VPS: update otomatis EA &amp; preset</h3>
           <p class="help" style="margin-top:0">Naikkan <span class="mono">#property version</span> di GOLD HUNTER GARUDA.mq5 → builder di PC Anda meng-compile dan menerbitkan rilis (EA + semua preset) → agen di setiap VPS memasangnya ke semua MT5 dan me-restart MT5 (chart &amp; input tersimpan). Perubahan tanpa naik versi tidak diterbitkan; preset yang berubah tetap diterbitkan.</p>
           <ol class="small" style="margin:0 0 12px 18px;line-height:1.8">
-            <li><b>Pindah VPS?</b> <a href="/api/admin/vps/installer"><b>⬇ installer 1 file</b></a> (GHG-Installer-Admin.cmd): pasang ke-3 MT5 dari broker &amp; login tiap akun di VPS baru, jalankan installer sekali → EA + setup SEMUA akun (chart, input, WebRequest) dipulihkan otomatis. Atau manual:</li>
-            <li>Unduh 3 file ini, taruh di <b>satu folder</b> di VPS (mis. <span class="mono">C:\\GHG-Agent</span>): <a href="/api/admin/vps/download?f=agent">GHG-VPS-Agent.ps1</a> · <a href="/api/admin/vps/download?f=install">Pasang-Agen-VPS.bat</a> · <a href="/api/admin/vps/download?f=config">config.json</a> (berisi kunci master, jangan dibagikan).</li>
+            <li><b>Pindah VPS?</b> <a href="/api/admin/vps/installer"><b>⬇ installer 1 file</b></a> (GOLD HUNTER GARUDA - Installer Admin.cmd): pasang ke-3 MT5 dari broker &amp; login tiap akun di VPS baru, buat folder <span class="mono">C:\\GOLD HUNTER GARUDA</span>, taruh installer di sana lalu klik dua kali → agen terpasang di folder itu, EA + setup akun yang <b>belum</b> menjalankan EA dipulihkan (chart, input, WebRequest). MT5 yang sudah menjalankan EA tidak diubah, hanya file EA + preset. Atau manual:</li>
+            <li>Unduh 3 file ini, taruh di <b>satu folder</b> di VPS (mis. <span class="mono">C:\\GOLD HUNTER GARUDA</span>): <a href="/api/admin/vps/download?f=agent">GHG-VPS-Agent.ps1</a> · <a href="/api/admin/vps/download?f=install">Pasang-Agen-VPS.bat</a> · <a href="/api/admin/vps/download?f=config">config.json</a> (berisi kunci master, jangan dibagikan).</li>
             <li>Di VPS klik dua kali <b>Pasang-Agen-VPS.bat</b>: uji koneksi, lalu agen jalan tersembunyi dan otomatis jalan lagi setiap Windows login.</li>
             <li>Pasang tiap MT5 + EA sekali secara manual (Load preset). Rilis berikutnya masuk sendiri; status VPS tampil di bawah.</li></ol>
           <div id="vps-box"><div class="small muted">Memuat…</div></div></div>
@@ -1124,6 +1134,8 @@
     $('#ea-report-send').onclick = async (e) => {
       try { const r = await busy(e.target, () => api('/admin/ea/report-send', { method: 'POST' })); toast(`Laporan gambar terkirim ke ${r.targets} target Telegram`); } catch (err) { toast(err.message, 'err'); }
     };
+    const goTg = $('#go-tg-hold');
+    if (goTg) goTg.onclick = () => { try { sessionStorage.setItem('tab_sosmed', 'tg'); } catch {} };
     $('#ea-key-gen').onclick = () => { const a = new Uint8Array(16); crypto.getRandomValues(a); $('input[name=ea_master_key]').value = 'ghg-' + Array.from(a, (x) => x.toString(16).padStart(2, '0')).join(''); };
     $('#addib').onclick = () => $('#ibl').insertAdjacentHTML('beforeend', brokerRow());
     $('#addbk').onclick = () => $('#bkl').insertAdjacentHTML('beforeend', bankRow());
@@ -1162,6 +1174,7 @@
         email_provider: d.email_provider, email_from: d.email_from, email_from_name: d.email_from_name, email_api_key: secretVal('email_api_key'),
         welcome_email_password: d.welcome_email_password ? '1' : '0',
         ea_master_key: (d.ea_master_key || '').trim(), ea_report_hour: d.ea_report_hour, ea_report_every: d.ea_report_every, ea_tg_min_layers: d.ea_tg_min_layers, ea_offline_min: d.ea_offline_min, ea_tg_enabled: d.ea_tg_enabled ? '1' : '0', ea_tg_events: d.ea_tg_events ? '1' : '0',
+        showcase_logins: (d.showcase_logins || '').trim(),
       };
       await busy($('#sf button[type=submit]'), () => api('/admin/settings', { method: 'PUT', body }));
       toast('Pengaturan disimpan'); render();

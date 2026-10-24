@@ -155,7 +155,7 @@
   function renderOverview() {
     const d = OV, list = d.setups || [];
     if (!list.length) {
-      $('#status').innerHTML = `<span><span class="live-dot"></span>${T('Belum ada EA yang melapor. Akun live tampil di sini begitu EA-nya mengirim data.', 'No EA is reporting yet. Live accounts appear here as soon as their EA sends data.')}</span>`;
+      $('#status').innerHTML = `<span><span class="live-dot"></span>${T('Akun live sedang disiapkan. Laporan live tampil di sini begitu akunnya siap.', 'The live accounts are being prepared. Live reports appear here as soon as they are ready.')}</span>`;
       $('#pairtabs').innerHTML = ''; $('#groups').innerHTML = '';
       return;
     }

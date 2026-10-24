@@ -11,18 +11,24 @@
 #    folder data MT5, lalu semua MT5 di-restart. Status tampil di Admin > Pengaturan > EA Live > VPS.
 #    Tiap ~10 menit profil chart tiap terminal yang BERJALAN & login (chart, EA + input) + baris [Experts] di-backup
 #    ke web per akun (login + server). Pindah VPS: installer admin -Setup memulihkan setup SEMUA akun di VPS baru.
+#  Preset (mode lisensi, agen 1.5+): bila admin menerbitkan preset baru tanpa build EA baru, sidik preset dari web
+#    berubah dan agen hanya menyalin preset baru ke MetaTrader akun ini (tanpa restart MetaTrader).
 #  Agen memeriksa versi dirinya ke web (kedua mode) dan memperbarui dirinya otomatis (self-update) lalu restart.
 #  Jalankan sekali:  Pasang-Agen-VPS.bat   (otomatis jalan lagi setiap Windows login)
 #  Uji tanpa menyalin / me-restart:  powershell -ExecutionPolicy Bypass -File GHG-VPS-Agent.ps1 -DryRun -Once
-#  Pasang di VPS baru (dipakai installer 1 file):  GHG-VPS-Agent.ps1 -Setup [-Only <id lisensi>]
-#    = tutup MetaTrader akun berlisensi, pasang EA + preset, pulihkan backup profil terakhir sebagai profil
-#      "GHG Restore", nyalakan Algo Trading + WebRequest (+ daftar URL dari backup), buka MetaTrader lagi.
+#  Pasang di PC / VPS baru (dipakai installer 1 file):  GHG-VPS-Agent.ps1 -Setup [-Only <id lisensi>] [-DryRun]
+#    = EA + preset ke SETIAP MetaTrader yang login di akun berlisensi (master: semua akun yang login).
+#      MetaTrader yang profil aktifnya SUDAH berisi EA GOLD HUNTER GARUDA (atau log hari ini mencatat EA itu dimuat)
+#      TIDAK diubah: chart, input & profil tetap; hanya file EA + preset, dan Algo Trading / WebRequest dinyalakan
+#      hanya bila mati DAN MetaTrader itu tidak sedang berjalan (yang berjalan tidak pernah ditutup).
+#      Hanya bila belum ada MetaTrader akun itu yang menjalankan EA: satu MetaTrader ditutup, backup profil terakhir
+#      dipulihkan sebagai profil "GHG Restore", Algo Trading + WebRequest (+ daftar URL dari backup) aktif, dibuka lagi.
 #    Kode keluar: 0 selesai, 2 MetaTrader belum login di akun lisensi, 3 file EA belum ada di web, 1 gagal.
 #  MT4: update EA + backup/pulih profil (folder profiles\<profil>, profiles\lastprofile.ini) didukung; setelan
 #  [Experts] (Algo Trading / WebRequest) hanya untuk MT5 - di MT4 atur sekali lewat Tools > Options.
 # =====================================================================================
 param([switch]$Once, [switch]$DryRun, [switch]$Setup, [string]$Only = '')
-$AgentVersion = '1.4'
+$AgentVersion = '1.5'
 $ErrorActionPreference = 'Stop'
 $Here = Split-Path -Parent $MyInvocation.MyCommand.Path
 $LogFile = Join-Path $Here 'agent.log'
@@ -436,6 +442,84 @@ function Install-LicBuild($lic, $rel) {
   return $matched.Count
 }
 
+# preset saja (build EA sama, preset baru di web): unduh lalu salin ke Presets (+ Profiles\Tester MT5) MetaTrader akun ini.
+# Tidak ada MetaTrader yang ditutup / di-restart, chart & input tidak disentuh. Hasil: jumlah preset yang dipasang.
+function Install-LicPresets($lic, $rel) {
+  $Plat = Get-Plat $lic.platform
+  $terms = @(Get-LicTerminals $lic)
+  if (-not $terms) { Log ('  tidak ada folder data {0}: preset dipasang nanti' -f $Plat.name); return 0 }
+  $H = Lic-Headers $lic
+  $tmp = Join-Path $env:TEMP ('ghg-lic-pre-' + $lic.id + '-' + ([guid]::NewGuid().ToString('N').Substring(0, 8)))
+  New-Item -ItemType Directory -Path $tmp -Force | Out-Null
+  $sets = @()
+  foreach ($p in @($rel.presets)) {
+    if (-not $p -or -not $p.name) { continue }
+    $f = Join-Path $tmp (Safe-Name ([string]$p.name))
+    try { Get-File ('/vps/lic/file/' + $p.id) $f $H; $sets += $f } catch { Log ("  preset {0} dilewati: {1}" -f $p.name, (Err-Text $_)) }
+  }
+  $matched = @($terms | Where-Object { $_.matched })
+  $targets = if ($matched.Count) { $matched } else { $terms }
+  foreach ($t in $targets) {
+    $dirs = @((Join-Path $t.data ($Plat.mql + '\Presets')))
+    if ($lic.platform -ne 'mt4') { $dirs += (Join-Path $t.data 'MQL5\Profiles\Tester') }
+    if ($DryRun) { Log ("  [uji] akan menyalin {0} preset ke {1} (login {2})" -f $sets.Count, $t.data, $(if ($t.login) { $t.login } else { '?' })); continue }
+    foreach ($x in $dirs) { if (-not (Test-Path $x)) { New-Item -ItemType Directory -Path $x -Force | Out-Null } }
+    foreach ($f in $sets) { foreach ($x in $dirs) { Copy-Item $f $x -Force } }
+    Log ("  {0} preset -> {1} (login {2})" -f $sets.Count, $t.data, $(if ($t.login) { $t.login } else { '?' }))
+  }
+  Remove-Item $tmp -Recurse -Force -ErrorAction SilentlyContinue
+  return $sets.Count
+}
+
+# ---------------------------------------------------------------- setup yang sedang berjalan TIDAK pernah diubah (-Setup)
+# Isi log terminal hari ini (MT5 UTF-16, MT4 ANSI)
+function Read-TermLog($t) {
+  $log = Join-Path $t.data ('logs\' + (Get-Date -Format 'yyyyMMdd') + '.log')
+  if (-not (Test-Path $log)) { return '' }
+  try {
+    $fs = [IO.File]::Open($log, 'Open', 'Read', 'ReadWrite')
+    try { $ms = New-Object IO.MemoryStream; $fs.CopyTo($ms); $b = $ms.ToArray() } finally { $fs.Close() }
+    if ($b.Length -ge 2 -and ($b[0] -eq 0xFF -or $b[1] -eq 0)) { return [Text.Encoding]::Unicode.GetString($b) }
+    return [Text.Encoding]::Default.GetString($b)
+  } catch { return '' }
+}
+# jumlah chart di profil aktif yang memuat EA GOLD HUNTER GARUDA
+function Get-GhgCharts($t, [string]$platform) {
+  $p = Get-ProfileDir $t $platform
+  $n = 0
+  if (-not (Test-Path $p.dir)) { return 0 }
+  foreach ($f in (Get-ChildItem $p.dir -File -Filter '*.chr' -ErrorAction SilentlyContinue)) {
+    try { $fs = [IO.File]::Open($f.FullName, 'Open', 'Read', 'ReadWrite'); try { [void][GhgChr]::Process($fs, $false, $null, $null); $n += [GhgChr]::LastGhg } finally { $fs.Close() } } catch { }
+  }
+  return $n
+}
+# MetaTrader ini sudah menjalankan EA GOLD HUNTER GARUDA? Profil aktif berisi EA, atau (bila berjalan) log hari ini
+# mencatat EA itu dimuat (profil yang belum disimpan ke disk). Ragu = dianggap sudah ada (tidak diubah).
+function Test-HasGhg($t, [string]$platform, [bool]$running) {
+  if ((Get-GhgCharts $t $platform) -gt 0) { return $true }
+  if ($running -and ((Read-TermLog $t) -match 'GOLD HUNTER GARUDA[^\r\n]*loaded successfully')) { return $true }
+  return $false
+}
+# MetaTrader yang setup-nya dipertahankan: hanya Algo Trading / WebRequest yang MATI dinyalakan, dan hanya bila MetaTrader
+# itu tidak berjalan (MetaTrader yang berjalan tidak pernah ditutup). Chart, profil, input & daftar URL tidak disentuh.
+function Set-FlagsIfOff($t, [string]$platform, [bool]$running) {
+  if ($platform -eq 'mt4') { return @{ note = ''; warn = $false } }
+  $iniPath = Join-Path $t.data 'config\common.ini'
+  if (-not (Test-Path $iniPath)) { return @{ note = ''; warn = $false } }
+  $ini = Read-Ini $iniPath
+  $off = @()
+  if ([string](Ini-Get $ini 'Experts' 'Enabled') -ne '1') { $off += 'Enabled' }
+  if ([string](Ini-Get $ini 'Experts' 'WebRequest') -ne '1') { $off += 'WebRequest' }
+  if (-not $off.Count) { return @{ note = 'Algo Trading & WebRequest sudah aktif.'; warn = $false } }
+  $names = (@($off | ForEach-Object { if ($_ -eq 'Enabled') { 'Algo Trading' } else { 'WebRequest' } })) -join ' & '
+  if ($running) { return @{ note = ($names + ' di MetaTrader ini MATI. MetaTrader sedang berjalan dan tidak ditutup: nyalakan sendiri (tombol Algo Trading / Tools > Options > Expert Advisors).'); warn = $true } }
+  if ($DryRun) { Log ('  [uji] akan menyalakan ' + $names + ' di ' + $iniPath); return @{ note = ('[uji] ' + $names + ' akan dinyalakan.'); warn = $false } }
+  foreach ($k in $off) { Ini-Set $ini 'Experts' $k '1' }
+  Write-Ini $ini
+  Log ('  ' + $names + ' dinyalakan (MetaTrader tidak berjalan; chart & input tidak diubah)')
+  return @{ note = ($names + ' dinyalakan (hanya setelan ini, chart & input tidak diubah).'); warn = $false }
+}
+
 # ---------------------------------------------------------------- backup / pulih profil chart
 # Profil aktif: MT5 = <data>\MQL5\Profiles\Charts\<[Charts] ProfileLast di config\common.ini>;
 #               MT4 = <data>\profiles\<isi profiles\lastprofile.ini>.
@@ -595,14 +679,14 @@ function Find-Installs([string]$platform) {
   return $out
 }
 
-# state.json mode lisensi: { "lic": { "<id>": { "build_id": 12, "version": "2.83" } }, "prof": { "<id>": { "fp": "...", "sha": "...", "ok": true } } }
+# state.json mode lisensi: { "lic": { "<id>": { "build_id": 12, "version": "2.83", "presets_sha": "..." } }, "prof": { "<id>": { "fp": "...", "sha": "...", "ok": true } } }
 $script:LicMap = @{}; $script:ProfMap = @{}
 function Load-LicState {
   $script:LicMap = @{}; $script:ProfMap = @{}
   if (Test-Path $StateFile) {
     try {
       $j = Get-Content $StateFile -Raw | ConvertFrom-Json
-      if ($j.lic) { foreach ($p in $j.lic.PSObject.Properties) { $script:LicMap[$p.Name] = [pscustomobject]@{ build_id = [string]$p.Value.build_id; version = [string]$p.Value.version } } }
+      if ($j.lic) { foreach ($p in $j.lic.PSObject.Properties) { $script:LicMap[$p.Name] = [pscustomobject]@{ build_id = [string]$p.Value.build_id; version = [string]$p.Value.version; presets_sha = [string]$p.Value.presets_sha } } }
       if ($j.prof) { foreach ($p in $j.prof.PSObject.Properties) { $script:ProfMap[$p.Name] = [pscustomobject]@{ fp = [string]$p.Value.fp; sha = [string]$p.Value.sha; ok = [bool]$p.Value.ok } } }
     } catch { }
   }
@@ -612,8 +696,8 @@ function Save-LicState($map = $script:LicMap) { if ($DryRun) { return }; @{ lic 
 
 function Check-Lic($lic, $map, $last) {
   $st = $map[$lic.id]
-  if (-not $st) { $st = [pscustomobject]@{ build_id = ''; version = '' }; $map[$lic.id] = $st }
-  $rel = Get-Json ('/vps/lic/release?have=' + [uri]::EscapeDataString([string]$st.build_id)) (Lic-Headers $lic)
+  if (-not $st) { $st = [pscustomobject]@{ build_id = ''; version = ''; presets_sha = '' }; $map[$lic.id] = $st }
+  $rel = Get-Json ('/vps/lic/release?have=' + [uri]::EscapeDataString([string]$st.build_id) + '&presets=' + [uri]::EscapeDataString([string]$st.presets_sha)) (Lic-Headers $lic)
   Try-SelfUpdate ([string]$rel.agent_version) ([string]$rel.agent_url) (Lic-Headers $lic) | Out-Null
   # nomor akun lisensi bisa diganti admin (ganti akun disetujui): ikuti akun dari web, bukan dari config.json lama
   if ($rel.account -and [string]$rel.account -ne $lic.account) { Log ("[akun {0}] lisensi kini untuk akun {1} (dari web)" -f $lic.account, $rel.account); $lic.account = [string]$rel.account }
@@ -623,11 +707,19 @@ function Check-Lic($lic, $map, $last) {
   } elseif (-not $rel.same) {
     Log ("[akun {0}] build EA baru #{1} v{2} - memasang..." -f $lic.account, $rel.build_id, $rel.version)
     $n = @(Install-LicBuild $lic $rel)[-1]
-    if (-not $DryRun) { $st = [pscustomobject]@{ build_id = [string]$rel.build_id; version = [string]$rel.version }; $map[$lic.id] = $st; Save-LicState $map }
-    else { $st = [pscustomobject]@{ build_id = [string]$rel.build_id; version = [string]$rel.version } }
+    $st = [pscustomobject]@{ build_id = [string]$rel.build_id; version = [string]$rel.version; presets_sha = [string]$rel.presets_sha }
+    if (-not $DryRun) { $map[$lic.id] = $st; Save-LicState $map }
     $note = if ($n -gt 0) { 'terpasang ' + (Get-Date -Format 'yyyy-MM-dd HH:mm') } else { 'terpasang ' + (Get-Date -Format 'yyyy-MM-dd HH:mm') + ', MetaTrader akun ini tidak ditemukan: restart manual' }
     Log ("[akun {0}] build #{1} terpasang" -f $lic.account, $rel.build_id)
     Send-LicStatus $lic $st $note (-not $DryRun)
+    $last[$lic.id] = Get-Date
+  } elseif ($rel.presets_changed) {
+    # preset baru tanpa build EA baru (builder menerbitkan ulang preset): hanya preset disalin, MetaTrader tidak di-restart
+    Log ("[akun {0}] preset baru di web ({1} file) - memasang preset saja, MetaTrader tidak di-restart" -f $lic.account, @($rel.presets).Count)
+    $n = Install-LicPresets $lic $rel
+    $st = [pscustomobject]@{ build_id = [string]$st.build_id; version = [string]$st.version; presets_sha = [string]$rel.presets_sha }
+    if (-not $DryRun) { $map[$lic.id] = $st; Save-LicState $map }
+    Send-LicStatus $lic $st ('preset diperbarui ' + (Get-Date -Format 'yyyy-MM-dd HH:mm') + ' (' + $n + ' preset)') $false
     $last[$lic.id] = Get-Date
   } elseif ($due) {
     $ok = @(Get-LicTerminals $lic | Where-Object { $_.matched }).Count
@@ -637,16 +729,50 @@ function Check-Lic($lic, $map, $last) {
 }
 
 # ================================================================ -Setup: pasang di PC / VPS baru (installer 1 file)
+# Hasil per MetaTrader (installer menampilkannya per terminal): kept = setup lama dipertahankan, dup = EA akun ini sudah
+# jalan di MetaTrader lain (tidak dipulihkan di sini), restored = backup dipulihkan
+function New-SetupRes($account, $platform, $t) {
+  return [ordered]@{ account = $account; platform = $platform; code = 1; message = ''; ea = ''; version = ''; data = $(if ($t) { $t.data } else { '' }); terminal = $(if ($t) { $t.origin } else { '' })
+    kept = $false; dup = $false; restored = $false; backup_at = 0; backup_host = ''; ea_charts = 0; webrequest_urls = $false; loaded = @(); flags_note = ''; flags_warn = $false }
+}
+# status tiap terminal: berjalan? sudah menjalankan EA GOLD HUNTER GARUDA? (+ waktu common.ini untuk memilih target pulih)
+function Get-SetupInfo($terms, [string]$label) {
+  return @(foreach ($m in $terms) {
+    $run = @(Get-TerminalProcs $m.origin $m.platform).Count -gt 0
+    $ini = Join-Path $m.data 'config\common.ini'
+    $i = [pscustomobject]@{ t = $m; running = $run; has = (Test-HasGhg $m $m.platform $run); at = $(if (Test-Path $ini) { (Get-Item $ini).LastWriteTimeUtc } else { [datetime]::MinValue }) }
+    Log ("[{0}] {1}: {2} | berjalan: {3} | EA GOLD HUNTER GARUDA sudah ada: {4}" -f $label, (Get-Plat $m.platform).name, $m.data, $i.running, $i.has)
+    $i
+  })
+}
+# satu target pulih per akun, hanya bila belum ada terminal akun itu yang menjalankan EA (berjalan dulu, lalu common.ini terbaru)
+function Pick-RestoreTarget($info) {
+  if ($info | Where-Object { $_.has }) { return $null }
+  return @($info | Sort-Object @{ Expression = { $_.running }; Descending = $true }, @{ Expression = { $_.at }; Descending = $true })[0]
+}
+# terminal yang tidak dipulihkan: setup dipertahankan, hanya file EA + preset ($copy) dan flag yang mati (bila tertutup)
+function Setup-KeepTerminal($i, $res, [scriptblock]$copy, [string]$eaText) {
+  & $copy
+  if ($i.has) {
+    $res.kept = $true
+    $f = Set-FlagsIfOff $i.t $i.t.platform $i.running; $res.flags_note = $f.note; $res.flags_warn = $f.warn
+    $res.message = ('{0} + preset diperbarui; chart, setting & input MetaTrader ini tidak diubah.' -f $eaText)
+  } else {
+    $res.dup = $true
+    $res.message = ('{0} + preset terpasang. Setup tidak dipulihkan di MetaTrader ini karena EA akun ini sudah berjalan di MetaTrader lain (mencegah EA dobel di satu akun).' -f $eaText)
+  }
+  $res.code = 0; Log ('  ' + $res.message)
+  return [pscustomobject]$res
+}
 function Setup-Lic($lic) {
   $Plat = Get-Plat $lic.platform
   $H = Lic-Headers $lic
-  $res = [ordered]@{ account = $lic.account; platform = $lic.platform; code = 1; message = ''; ea = ''; version = ''; data = ''; terminal = ''
-    restored = $false; backup_at = 0; backup_host = ''; ea_charts = 0; webrequest_urls = $false; loaded = @() }
   $rel = Get-Json '/vps/lic/release?have=' $H
-  if ($rel.account -and [string]$rel.account -ne $lic.account) { Log ("[akun {0}] lisensi kini untuk akun {1} (dari web)" -f $lic.account, $rel.account); $lic.account = [string]$rel.account; $res.account = $lic.account }
+  if ($rel.account -and [string]$rel.account -ne $lic.account) { Log ("[akun {0}] lisensi kini untuk akun {1} (dari web)" -f $lic.account, $rel.account); $lic.account = [string]$rel.account }
   $terms = @(Get-LicTerminals $lic)
   $matched = @($terms | Where-Object { $_.matched })
   if (-not $matched) {
+    $res = New-SetupRes $lic.account $lic.platform $null
     $inst = @(Find-Installs $lic.platform)
     $logins = @($terms | Where-Object { $_.login } | ForEach-Object { $_.login }) -join ', '
     if (-not $inst -and -not $terms) {
@@ -654,62 +780,76 @@ function Setup-Lic($lic) {
     } else {
       $res.message = ('{0} di PC ini belum login di akun {1}{2}. Buka {0}, menu File > Login to Trade Account, isi akun {1} + password TRADING (bukan investor), centang "Save password", tunggu terhubung, tutup {0}, lalu jalankan installer ini lagi.' -f $Plat.name, $lic.account, $(if ($logins) { ' (yang login: ' + $logins + ')' } else { '' }))
     }
-    $res.code = 2; Log ('BELUM SIAP: ' + $res.message); return $res
+    $res.code = 2; Log ('BELUM SIAP: ' + $res.message); return @([pscustomobject]$res)
   }
-  if ($rel.none) { $res.code = 3; $res.message = 'File EA akun ini belum ada di web (pesanan belum selesai atau EA sedang dibuat). Agen memasangnya otomatis begitu file EA siap.'; Log $res.message; return $res }
-  # MetaTrader yang sedang berjalan didahulukan; lalu yang common.ini-nya paling baru
-  $t = @($matched | Sort-Object @{ Expression = { @(Get-TerminalProcs $_.origin $lic.platform).Count -gt 0 }; Descending = $true }, @{ Expression = { (Get-Item (Join-Path $_.data 'config\common.ini')).LastWriteTimeUtc }; Descending = $true })[0]
-  $res.data = $t.data; $res.terminal = $t.origin
-  if (-not $t.origin -or -not (Test-Path (Join-Path $t.origin $Plat.exe))) { $res.message = ('Folder instalasi {0} untuk {1} tidak ditemukan (origin.txt)' -f $Plat.name, $t.data); Log $res.message; return $res }
-  if (-not (Test-Path (Join-Path $t.data 'config\accounts.dat'))) { Log ('  PERHATIAN: password akun belum tersimpan di {0} ini (centang "Save password" saat login), EA tidak bisa trading tanpa login.' -f $Plat.name) }
-  Log ("[akun {0}] SETUP {1}: {2} | data {3}" -f $lic.account, $Plat.name, $t.origin, $t.data)
+  if ($rel.none) { $res = New-SetupRes $lic.account $lic.platform $null; $res.code = 3; $res.message = 'File EA akun ini belum ada di web (pesanan belum selesai atau EA sedang dibuat). Agen memasangnya otomatis begitu file EA siap.'; Log $res.message; return @([pscustomobject]$res) }
+  foreach ($m in $matched) { Add-Member -InputObject $m -NotePropertyName platform -NotePropertyValue $lic.platform -Force }
+  $info = Get-SetupInfo $matched ('akun ' + $lic.account)
+  # backup dipulihkan HANYA bila belum ada MetaTrader akun ini yang menjalankan EA (PC / MT5 baru), ke satu MetaTrader saja
+  $target = Pick-RestoreTarget $info
   $prof = $null
-  try { $prof = Get-Json '/vps/lic/profile' $H; if ($prof.none) { $prof = $null } } catch { Log ('  backup profil tidak bisa diambil: ' + (Err-Text $_)) }
-  if ($prof -and $lic.platform -ne [string]$prof.platform -and $prof.platform) { Log ('  backup profil dari {0}, lisensi {1}: tidak dipulihkan' -f $prof.platform, $lic.platform); $prof = $null }
-  if ($prof) { Log ("  backup profil terakhir: '{0}' dari {1}, {2} chart ({3} dengan EA)" -f $prof.profile_name, $prof.host, $prof.charts, $prof.ea_charts) } else { Log '  belum ada backup profil di web' }
+  if ($target) {
+    try { $prof = Get-Json '/vps/lic/profile' $H; if ($prof.none) { $prof = $null } } catch { Log ('  backup profil tidak bisa diambil: ' + (Err-Text $_)) }
+    if ($prof -and $lic.platform -ne [string]$prof.platform -and $prof.platform) { Log ('  backup profil dari {0}, lisensi {1}: tidak dipulihkan' -f $prof.platform, $lic.platform); $prof = $null }
+    if ($prof) { Log ("  backup profil terakhir: '{0}' dari {1}, {2} chart ({3} dengan EA)" -f $prof.profile_name, $prof.host, $prof.charts, $prof.ea_charts) } else { Log '  belum ada backup profil di web' }
+  } else { Log ("[akun {0}] EA sudah berjalan di MetaTrader akun ini: backup TIDAK dipulihkan, setup yang ada tidak diubah" -f $lic.account) }
   $pkg = Fetch-LicBuild $lic $rel
-  $res.ea = $pkg.name; $res.version = [string]$rel.version
-  # 1) tutup MetaTrader ini (normal, paksa bila menggantung > 2 menit)
-  $run = @(Get-TerminalProcs $t.origin $lic.platform)
-  $argLine = ''
-  foreach ($p in $run) {
-    if (-not $argLine) { $argLine = Cmd-Args $p }
-    if ($DryRun) { Log ("  [uji] akan menutup {0} PID {1}" -f $Plat.name, $p.ProcessId); continue }
-    Log ("  menutup {0} PID {1}..." -f $Plat.name, $p.ProcessId)
-    if (-not (Close-Terminal $p $lic.platform $true)) { $res.message = ('{0} tidak bisa ditutup. Tutup {0} secara manual lalu jalankan installer lagi.' -f $Plat.name); Log $res.message; return $res }
+  $eaText = ('EA {0} v{1}' -f $pkg.name, $rel.version)
+  $results = @()
+  foreach ($i in $info) {
+    $t = $i.t
+    $res = New-SetupRes $lic.account $lic.platform $t
+    $res.ea = $pkg.name; $res.version = [string]$rel.version
+    if (-not $target -or $t.data -ne $target.t.data) { $results += Setup-KeepTerminal $i $res { Copy-LicBuild $lic $pkg $t } $eaText; continue }
+    # MetaTrader baru (belum ada EA): tutup, EA + preset, pulihkan backup, Algo Trading / WebRequest, buka lagi
+    if (-not $t.origin -or -not (Test-Path (Join-Path $t.origin $Plat.exe))) {
+      Copy-LicBuild $lic $pkg $t
+      $res.message = ('Folder instalasi {0} untuk {1} tidak ditemukan (origin.txt): EA + preset disalin, setup tidak dipulihkan.' -f $Plat.name, $t.data); Log $res.message; $results += [pscustomobject]$res; continue
+    }
+    if (-not (Test-Path (Join-Path $t.data 'config\accounts.dat'))) { Log ('  PERHATIAN: password akun belum tersimpan di {0} ini (centang "Save password" saat login), EA tidak bisa trading tanpa login.' -f $Plat.name) }
+    Log ("[akun {0}] SETUP {1} (belum ada EA): {2} | data {3}" -f $lic.account, $Plat.name, $t.origin, $t.data)
+    $run = @(Get-TerminalProcs $t.origin $lic.platform)
+    $argLine = ''; $closed = $true
+    foreach ($p in $run) {
+      if (-not $argLine) { $argLine = Cmd-Args $p }
+      if ($DryRun) { Log ("  [uji] akan menutup {0} PID {1}" -f $Plat.name, $p.ProcessId); continue }
+      Log ("  menutup {0} PID {1}..." -f $Plat.name, $p.ProcessId)
+      if (-not (Close-Terminal $p $lic.platform $true)) { $closed = $false }
+    }
+    if (-not $argLine -and $t.origin -eq $t.data) { $argLine = '/portable' }
+    if (-not $closed -or (-not $DryRun -and @(Get-TerminalProcs $t.origin $lic.platform).Count)) { $res.message = ('{0} tidak bisa ditutup. Tutup {0} secara manual lalu jalankan installer lagi.' -f $Plat.name); Log $res.message; $results += [pscustomobject]$res; continue }
+    Start-Sleep -Seconds $(if ($run.Count -and -not $DryRun) { 3 } else { 0 })
+    Copy-LicBuild $lic $pkg $t
+    if ($prof -and @($prof.files).Count) {
+      $res.ea_charts = Restore-LicProfile $lic $t $prof $pkg.name
+      $res.restored = $true; $res.backup_at = [int64]$prof.updated_at; $res.backup_host = [string]$prof.host
+    }
+    if ($lic.platform -ne 'mt4') { $res.webrequest_urls = Set-ExpertsIni $t $prof }
+    $since = Get-Date
+    $exe = Join-Path $t.origin $Plat.exe
+    if ($DryRun) { Log ("  [uji] akan membuka {0} {1}" -f $exe, $argLine) }
+    else {
+      Start-Terminal $exe $argLine; Log ("  {0} dibuka: {1} {2}" -f $Plat.name, $exe, $argLine)
+      if ($res.restored -and $res.ea_charts -gt 0) {
+        $res.loaded = @(Wait-EaLoaded $t ([IO.Path]::GetFileNameWithoutExtension($pkg.name)) $since 75 | ForEach-Object { ($_ -split "`t")[-1] })
+        foreach ($x in $res.loaded) { Log ('  ' + $Plat.name + ': ' + $x) }
+      }
+    }
+    $res.code = 0
+    if ($res.restored) { $res.message = ('{0} terpasang, setup terakhir ({1} chart, EA di {2} chart) dipulihkan.' -f $eaText, $prof.charts, $res.ea_charts) }
+    else { $res.message = ('{0} terpasang. Belum ada backup setup di web: pasang EA di chart sekali (drag dari Navigator), agen mem-backup-nya otomatis.' -f $eaText) }
+    Log ('SELESAI: ' + $res.message)
+    $results += [pscustomobject]$res
   }
-  if (-not $argLine -and $t.origin -eq $t.data) { $argLine = '/portable' }
-  if (-not $DryRun -and @(Get-TerminalProcs $t.origin $lic.platform).Count) { $res.message = ('{0} masih berjalan. Tutup {0} lalu jalankan installer lagi.' -f $Plat.name); Log $res.message; return $res }
-  Start-Sleep -Seconds $(if ($run.Count -and -not $DryRun) { 3 } else { 0 })
-  # 2) EA + preset ke semua folder data akun ini
-  foreach ($m in $matched) { Copy-LicBuild $lic $pkg $m }
-  # 3) profil + [Experts]
-  if ($prof -and @($prof.files).Count) {
-    $res.ea_charts = Restore-LicProfile $lic $t $prof $pkg.name
-    $res.restored = $true; $res.backup_at = [int64]$prof.updated_at; $res.backup_host = [string]$prof.host
-  }
-  if ($lic.platform -ne 'mt4') { $res.webrequest_urls = Set-ExpertsIni $t $prof }
-  # 4) buka lagi
-  $since = Get-Date
-  $exe = Join-Path $t.origin $Plat.exe
-  if ($DryRun) { Log ("  [uji] akan membuka {0} {1}" -f $exe, $argLine) }
-  else { Start-Terminal $exe $argLine; Log ("  {0} dibuka: {1} {2}" -f $Plat.name, $exe, $argLine) }
   if (-not $DryRun) {
-    $script:LicMap[$lic.id] = [pscustomobject]@{ build_id = [string]$rel.build_id; version = [string]$rel.version }
+    $script:LicMap[$lic.id] = [pscustomobject]@{ build_id = [string]$rel.build_id; version = [string]$rel.version; presets_sha = [string]$rel.presets_sha }
     $script:ProfMap.Remove($lic.id)
     Save-LicState
-    Send-LicStatus $lic $script:LicMap[$lic.id] ('setup ' + (Get-Date -Format 'yyyy-MM-dd HH:mm') + $(if ($res.restored) { ', profil dipulihkan' } else { ', belum ada backup profil' })) $true
-    if ($res.restored -and $res.ea_charts -gt 0) {
-      $res.loaded = @(Wait-EaLoaded $t ([IO.Path]::GetFileNameWithoutExtension($pkg.name)) $since 75 | ForEach-Object { ($_ -split "`t")[-1] })
-      foreach ($x in $res.loaded) { Log ('  ' + $Plat.name + ': ' + $x) }
-    }
+    $kept = @($results | Where-Object { $_.kept }).Count; $rest = @($results | Where-Object { $_.restored }).Count
+    Send-LicStatus $lic $script:LicMap[$lic.id] ('setup ' + (Get-Date -Format 'yyyy-MM-dd HH:mm') + $(if ($rest) { ', profil dipulihkan' } elseif ($kept) { ', setup lama dipertahankan' } else { ', belum ada backup profil' })) $true
   }
   Remove-Item $pkg.tmp -Recurse -Force -ErrorAction SilentlyContinue
-  $res.code = 0
-  if ($res.restored) { $res.message = ('EA {0} v{1} terpasang, setup terakhir ({2} chart, EA di {3} chart) dipulihkan.' -f $pkg.name, $rel.version, $prof.charts, $res.ea_charts) }
-  else { $res.message = ('EA {0} v{1} terpasang. Belum ada backup setup di web: pasang EA di chart sekali (drag dari Navigator), agen mem-backup-nya otomatis.' -f $pkg.name, $rel.version) }
-  Log ('SELESAI: ' + $res.message)
-  return $res
+  return $results
 }
 
 # ================================================================ self-update (kedua mode): agen lama -> unduh & ganti dirinya
@@ -869,7 +1009,24 @@ function Setup-Master {
       }
     }
   }
-  foreach ($t in $terms) { $results += [pscustomobject](Setup-MasterTerminal $t $rel $relNone $pkg) }
+  # setup yang sudah berjalan tidak pernah diubah: terminal yang sudah menjalankan EA GOLD HUNTER GARUDA hanya mendapat
+  # file EA + preset; backup akun dipulihkan hanya ke satu terminal akun itu, dan hanya bila belum ada yang menjalankan EA
+  $logged = @($terms | Where-Object { $_.login })
+  foreach ($t in @($terms | Where-Object { -not $_.login })) { $results += [pscustomobject](Setup-MasterTerminal $t $rel $relNone $pkg) }
+  if ($relNone) { foreach ($t in $logged) { $results += [pscustomobject](Setup-MasterTerminal $t $rel $relNone $pkg) } }
+  else {
+    foreach ($g in @($logged | Group-Object { '{0}|{1}' -f $_.login, $_.platform })) {
+      $info = Get-SetupInfo @($g.Group) ('akun ' + $g.Group[0].login)
+      $target = Pick-RestoreTarget $info
+      foreach ($i in $info) {
+        if ($target -and $i.t.data -eq $target.t.data) { $results += [pscustomobject](Setup-MasterTerminal $i.t $rel $relNone $pkg); continue }
+        $res = New-SetupRes $i.t.login $i.t.platform $i.t
+        $res.version = [string]$rel.version
+        $tt = $i.t
+        $results += Setup-KeepTerminal $i $res { Copy-MasterBuild $tt $pkg } ('EA v' + [string]$rel.version)
+      }
+    }
+  }
   if ($pkg) { Remove-Item $pkg.tmp -Recurse -Force -ErrorAction SilentlyContinue }
   if (-not $DryRun) { try { Send-Status ([string]$rel.version) ([string]$rel.sha) ('setup ' + (Get-Date -Format 'yyyy-MM-dd HH:mm')) $true } catch { } }
   $ok = @($results | Where-Object { [int]$_.code -eq 0 }).Count
@@ -904,9 +1061,12 @@ if ($Setup) {
     [void](Load-LicState)
     $results = @(); $code = 0
     foreach ($lic in $Lics) {
-      try { $r = Setup-Lic $lic } catch { $r = [ordered]@{ account = $lic.account; platform = $lic.platform; code = 1; message = 'Gagal: ' + (Err-Text $_) }; Log ("[akun {0}] {1}" -f $lic.account, $r.message) }
-      $results += [pscustomobject]$r
-      if ($r.code -ne 0 -and ($code -eq 0 -or $r.code -lt $code)) { $code = $r.code }
+      $rs = @()
+      try { $rs = @(Setup-Lic $lic) } catch { $r = New-SetupRes $lic.account $lic.platform $null; $r.message = 'Gagal: ' + (Err-Text $_); Log ("[akun {0}] {1}" -f $lic.account, $r.message); $rs = @([pscustomobject]$r) }
+      foreach ($r in $rs) {
+        $results += [pscustomobject]$r
+        if ([int]$r.code -ne 0 -and ($code -eq 0 -or [int]$r.code -lt $code)) { $code = [int]$r.code }
+      }
     }
     try { ConvertTo-Json -InputObject @($results) -Depth 5 | Set-Content -Path $SetupResultFile -Encoding UTF8 } catch { }
     exit $code

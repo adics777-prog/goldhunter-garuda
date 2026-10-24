@@ -1,15 +1,22 @@
 # =====================================================================================
-#  GHG Installer - dijalankan oleh GHG-Installer-<akun>.cmd (hak administrator), jangan dijalankan sendiri.
+#  GOLD HUNTER GARUDA Installer - dijalankan oleh "GOLD HUNTER GARUDA - Installer <akun>.cmd" (hak administrator),
+#  jangan dijalankan sendiri.
+#  Folder agen = folder tempat file .cmd berada (disarankan C:\GOLD HUNTER GARUDA). Dijalankan lagi dari folder lain:
+#  agen + task lama dihentikan dan dipindah ke folder baru (config.json lama digabung, state.json dibawa).
 #  1. hentikan agen GHG lama (+ shortcut Startup lama)
 #  2. tulis GHG-VPS-Agent.ps1 + config.json (digabung dengan config.json lama: beberapa akun di 1 VPS tetap jalan)
-#  3. agen -Setup  = pasang EA + preset, pulihkan setup terakhir (profil chart + EA + input), Algo Trading &
-#     WebRequest aktif, buka MetaTrader lagi.  Member: satu akun berlisensi.  Admin (kunci master): SEMUA MT5 yang
-#     login di akun yang backup-nya ada di web (owner pindah VPS: 3 broker sekaligus).
-#  Task Scheduler "GHG VPS Agent" didaftarkan oleh file .cmd sesudah ini (sama persis dengan Pasang-Agen-VPS.bat).
-#  Kode keluar: 0 selesai, 2 MetaTrader belum login (task tidak didaftarkan), 3 file EA belum ada di web, 1 gagal.
+#  3. agen -Setup = EA + preset ke setiap MetaTrader yang login di akun ini. Backup setup (chart + input) HANYA
+#     dipulihkan ke MetaTrader yang profil aktifnya BELUM berisi EA GOLD HUNTER GARUDA (PC / MT5 baru). MetaTrader yang
+#     sudah menjalankan EA tidak diubah: chart & input tetap, hanya file EA + preset yang diperbarui.
+#     Member: satu akun berlisensi. Admin (kunci master): semua MT5 yang login.
+#  4. task "GHG VPS Agent" (saat Windows login, hak tertinggi) menunjuk ke folder ini, lalu dijalankan.
+#  Kode keluar: 0 selesai, 2 MetaTrader belum login, 3 file EA belum ada di web, 1 gagal.
+#  Uji tanpa mengubah apa pun:  -DryRun  (agen -Setup -DryRun, tidak menghentikan agen, tidak mendaftarkan task)
+#  Uji pemasangan file tanpa task:  -NoTask  (folder agen ditulis & -Setup jalan, task tidak didaftarkan / dijalankan)
 # =====================================================================================
-param([Parameter(Mandatory = $true)][string]$Installer, [string]$Dir = 'C:\GHG-Agent')
+param([Parameter(Mandatory = $true)][string]$Installer, [string]$Dir = '', [switch]$DryRun, [switch]$NoTask, [string]$TaskName = 'GHG VPS Agent')
 $ErrorActionPreference = 'Stop'
+$Recommended = 'C:\GOLD HUNTER GARUDA'
 function Say([string]$m, [string]$c = 'Gray') { Write-Host $m -ForegroundColor $c }
 function Block([string[]]$t, [string]$n) {
   $s = [array]::IndexOf($t, '::BEGIN ' + $n); $e = [array]::IndexOf($t, '::END ' + $n)
@@ -17,79 +24,163 @@ function Block([string[]]$t, [string]$n) {
   return [Convert]::FromBase64String((($t[($s + 1)..($e - 1)]) -join ''))
 }
 try {
+  $Installer = [IO.Path]::GetFullPath($Installer)
   $t = [IO.File]::ReadAllLines($Installer)
   $agentBytes = Block $t 'AGENT'
   $new = [Text.Encoding]::UTF8.GetString((Block $t 'CONFIG')) | ConvertFrom-Json
 } catch { Say ('GAGAL: ' + $_.Exception.Message) 'Red'; exit 1 }
+
+# ---- folder agen: folder file .cmd ini (bukan folder sementara Windows / browser)
+if (-not $Dir) { $Dir = Split-Path -Parent $Installer }
+$Dir = [IO.Path]::GetFullPath($Dir).TrimEnd('\')
+if ($Dir -match '^[A-Za-z]:$') { $Dir += '\' }
+$tmpRoots = @($env:TEMP, $env:TMP, [IO.Path]::GetTempPath()) | Where-Object { $_ } | ForEach-Object { [IO.Path]::GetFullPath($_).TrimEnd('\').ToLower() }
+$low = $Dir.ToLower()
+if (($tmpRoots | Where-Object { $low -eq $_ -or $low.StartsWith($_ + '\') }) -or $low -match '\\(inetcache|temporary internet files)(\\|$)') {
+  Say ('File installer dijalankan dari folder sementara (' + $Dir + '): agen dipasang di ' + $Recommended) 'DarkYellow'
+  $Dir = $Recommended
+}
+
 $lic = $new.license
 $member = [bool]($lic -and $lic.id)
 Say ''
-Say ('=== GHG Installer: ' + $(if ($member) { 'akun ' + $lic.account + ' (' + ([string]$lic.platform).ToUpper() + ')' } else { 'VPS admin (kunci master)' }) + ' ===') 'Yellow'
+Say ('=== GOLD HUNTER GARUDA Installer: ' + $(if ($member) { 'akun ' + $lic.account + ' (' + ([string]$lic.platform).ToUpper() + ')' } else { 'VPS admin (kunci master)' }) + $(if ($DryRun) { ' - MODE UJI' } else { '' }) + ' ===') 'Yellow'
 Say ('Folder agen: ' + $Dir)
+if ($Dir.TrimEnd('\') -ine $Recommended) { Say ('  (disarankan: ' + $Recommended + '. Folder ini tetap dipakai: jangan dihapus / dipindah, agen berjalan dari sini.)') 'DarkGray' }
+
+# folder agen lama: dari task "GHG VPS Agent" yang ada (-File "...\GHG-VPS-Agent.ps1"), lalu C:\GHG-Agent (installer lama)
+$oldDirs = @()
+try {
+  $tk = Get-ScheduledTask -TaskName $TaskName -ErrorAction Stop
+  foreach ($a in @($tk.Actions)) { if ([string]$a.Arguments -match '-File\s+"?([^"]*GHG-VPS-Agent\.ps1)"?') { $oldDirs += (Split-Path -Parent $Matches[1]) } }
+} catch { }
+$oldDirs += 'C:\GHG-Agent'
+$oldDirs = @($oldDirs | Where-Object { $_ -and ($_.TrimEnd('\') -ine $Dir.TrimEnd('\')) -and (Test-Path (Join-Path $_ 'config.json')) } | Select-Object -Unique)
 
 Say ''
-Say '=== 1/3 Hentikan agen lama (bila ada) ===' 'Cyan'
+Say '=== 1/4 Hentikan agen lama (bila ada) ===' 'Cyan'
 $me = $PID
-Get-CimInstance Win32_Process -Filter "Name='powershell.exe'" | Where-Object { $_.ProcessId -ne $me -and $_.CommandLine -match 'GHG-VPS-Agent\.ps1' -and $_.CommandLine -notmatch 'Get-CimInstance' } | ForEach-Object {
-  Stop-Process -Id $_.ProcessId -Force; Say ('agen lama dihentikan: PID ' + $_.ProcessId) }
-$lnk = [Environment]::GetFolderPath('Startup') + '\GHG VPS Agent.lnk'
-if (Test-Path $lnk) { Remove-Item $lnk -Force; Say 'shortcut Startup lama dihapus' }
-Start-Sleep -Seconds 1
+$running = @(Get-CimInstance Win32_Process -Filter "Name='powershell.exe'" | Where-Object { $_.ProcessId -ne $me -and $_.CommandLine -match 'GHG-VPS-Agent\.ps1' -and $_.CommandLine -notmatch 'Get-CimInstance' })
+if ($DryRun) { foreach ($p in $running) { Say ('[uji] agen lama akan dihentikan: PID ' + $p.ProcessId) } }
+else {
+  foreach ($p in $running) { Stop-Process -Id $p.ProcessId -Force; Say ('agen lama dihentikan: PID ' + $p.ProcessId) }
+  $lnk = [Environment]::GetFolderPath('Startup') + '\GHG VPS Agent.lnk'
+  if (Test-Path $lnk) { Remove-Item $lnk -Force; Say 'shortcut Startup lama dihapus' }
+  if ($running.Count) { Start-Sleep -Seconds 1 }
+}
+if (-not $running.Count) { Say 'tidak ada agen yang berjalan' }
 
 Say ''
-Say '=== 2/3 Tulis agen + config.json ===' 'Cyan'
-New-Item -ItemType Directory -Path $Dir -Force | Out-Null
+Say '=== 2/4 Tulis agen + config.json ===' 'Cyan'
 $agentPath = Join-Path $Dir 'GHG-VPS-Agent.ps1'
-[IO.File]::WriteAllBytes($agentPath, $agentBytes)
-# config.json lama dipertahankan (extra_data_dirs, akun lain); lisensi ini ditambah / diganti, alamat web diperbarui
 $cfgPath = Join-Path $Dir 'config.json'
+# config.json lama dipertahankan (extra_data_dirs, akun lain): folder ini dulu, lalu folder agen lama; lisensi ini ditambah / diganti
 $cfg = [ordered]@{}
-if (Test-Path $cfgPath) {
-  try { $old = Get-Content $cfgPath -Raw -Encoding UTF8 | ConvertFrom-Json; foreach ($p in $old.PSObject.Properties) { $cfg[$p.Name] = $p.Value }; Say 'config.json lama ditemukan: digabung' }
-  catch { Copy-Item $cfgPath ($cfgPath + '.rusak') -Force; Say 'config.json lama rusak: disimpan sebagai config.json.rusak' 'DarkYellow' }
+foreach ($src in @($cfgPath) + @($oldDirs | ForEach-Object { Join-Path $_ 'config.json' })) {
+  if (-not (Test-Path $src)) { continue }
+  try {
+    $old = Get-Content $src -Raw -Encoding UTF8 | ConvertFrom-Json
+    foreach ($p in $old.PSObject.Properties) {
+      if ($p.Name -in @('license', 'licenses')) { $cfg['_lics'] = @(@($cfg['_lics']) + @($p.Value) | Where-Object { $_ }) }
+      elseif (-not $cfg.Contains($p.Name)) { $cfg[$p.Name] = $p.Value }
+    }
+    Say ('config.json lama digabung: ' + $src)
+  } catch { if ($src -eq $cfgPath -and -not $DryRun) { Copy-Item $cfgPath ($cfgPath + '.rusak') -Force; Say 'config.json lama rusak: disimpan sebagai config.json.rusak' 'DarkYellow' } }
 }
 foreach ($p in $new.PSObject.Properties) { if ($p.Name -notin @('license', 'licenses') -and -not $cfg.Contains($p.Name)) { $cfg[$p.Name] = $p.Value } }
 $cfg['web'] = $new.web
 if ($new.key) { $cfg['key'] = $new.key }
+$others = @()
+foreach ($x in @($cfg['_lics'])) { if ($x -and $x.id -and (-not $member -or [string]$x.id -ne [string]$lic.id) -and -not ($others | Where-Object { [string]$_.id -eq [string]$x.id })) { $others += $x } }
+$cfg.Remove('_lics')
 if ($member) {
-  $list = @(@($cfg['license']) + @($cfg['licenses']) | Where-Object { $_ -and $_.id -and [string]$_.id -ne [string]$lic.id })
-  $cfg.Remove('license'); $cfg.Remove('licenses')
-  if ($list.Count) { $cfg['licenses'] = @($list + $lic); Say ('lisensi lain di config.json tetap aktif: ' + (($list | ForEach-Object { $_.account }) -join ', ')) } else { $cfg['license'] = $lic }
-}
+  if ($others.Count) { $cfg['licenses'] = @($others + $lic); Say ('lisensi lain di config.json tetap aktif: ' + (($others | ForEach-Object { $_.account }) -join ', ')) } else { $cfg['license'] = $lic }
+} elseif ($others.Count) { $cfg['licenses'] = @($others) }
+if ($DryRun) {
+  $agentPath = Join-Path $env:TEMP ('ghg-uji-' + [guid]::NewGuid().ToString('N').Substring(0, 8))
+  New-Item -ItemType Directory -Path $agentPath -Force | Out-Null
+  Say ('[uji] folder agen tidak ditulis; agen diuji dari ' + $agentPath)
+  $runDir = $agentPath; $agentPath = Join-Path $runDir 'GHG-VPS-Agent.ps1'; $cfgPath = Join-Path $runDir 'config.json'
+} else { New-Item -ItemType Directory -Path $Dir -Force | Out-Null; $runDir = $Dir }
+[IO.File]::WriteAllBytes($agentPath, $agentBytes)
 [IO.File]::WriteAllText($cfgPath, (ConvertTo-Json -InputObject $cfg -Depth 6), (New-Object Text.UTF8Encoding($false)))
-Get-ChildItem -Path $Dir -File | Unblock-File
+# state.json dari folder lama dibawa (build yang sudah terpasang, backup profil): tidak dipasang / di-restart ulang tanpa perlu
+foreach ($od in $oldDirs) {
+  $os = Join-Path $od 'state.json'; $ns = Join-Path $runDir 'state.json'
+  if ((Test-Path $os) -and -not (Test-Path $ns)) { Copy-Item $os $ns -Force; Say ('state.json dibawa dari ' + $od) }
+}
+Get-ChildItem -Path $runDir -File | Unblock-File
 Say ('ditulis: ' + $agentPath)
 Say ('ditulis: ' + $cfgPath + ' (berisi kunci, jangan dibagikan)')
 
 Say ''
-Say '=== 3/3 Pasang EA + pulihkan setup terakhir ===' 'Cyan'
-$resFile = Join-Path $Dir 'setup-result.json'
+Say '=== 3/4 Pasang EA + preset di setiap MetaTrader akun ini ===' 'Cyan'
+$resFile = Join-Path $runDir 'setup-result.json'
 if (Test-Path $resFile) { Remove-Item $resFile -Force }
-if ($member) { & powershell.exe -NoProfile -ExecutionPolicy Bypass -File $agentPath -Setup -Only ([string]$lic.id) }
-else { & powershell.exe -NoProfile -ExecutionPolicy Bypass -File $agentPath -Setup }
+$agentArgs = @('-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', $agentPath, '-Setup')
+if ($member) { $agentArgs += @('-Only', [string]$lic.id) }
+if ($DryRun) { $agentArgs += '-DryRun' }
+& powershell.exe @agentArgs
 $rc = $LASTEXITCODE
 
 $results = @()
 # PS 5.1: piping a JSON array straight into @() nests it; assign first, then wrap.
 try { $parsed = Get-Content $resFile -Raw -Encoding UTF8 | ConvertFrom-Json; $results = @($parsed) } catch { }
+
+$taskOk = $false
+# task selalu didaftarkan (juga bila MetaTrader belum login): agen lama sudah dihentikan, agen baru menunggu login sendiri
+if ($true) {
+  Say ''
+  Say ('=== 4/4 Jalan otomatis setiap Windows login, hak tertinggi (Task Scheduler "' + $TaskName + '") ===') 'Cyan'
+  $arg = '-NoProfile -WindowStyle Hidden -ExecutionPolicy Bypass -File "' + (Join-Path $Dir 'GHG-VPS-Agent.ps1') + '"'
+  if ($DryRun -or $NoTask) { Say ('[uji] task akan didaftarkan: powershell.exe ' + $arg) ; $taskOk = $true }
+  else {
+    try {
+      $user = [Security.Principal.WindowsIdentity]::GetCurrent().Name
+      $action = New-ScheduledTaskAction -Execute 'powershell.exe' -Argument $arg -WorkingDirectory $Dir
+      $trigger = New-ScheduledTaskTrigger -AtLogOn -User $user
+      $principal = New-ScheduledTaskPrincipal -UserId $user -LogonType Interactive -RunLevel Highest
+      $settings = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -ExecutionTimeLimit ([TimeSpan]::Zero) -MultipleInstances IgnoreNew -StartWhenAvailable
+      Register-ScheduledTask -TaskName $TaskName -Action $action -Trigger $trigger -Principal $principal -Settings $settings -Force | Out-Null
+      Start-ScheduledTask -TaskName $TaskName
+      Say ('task "' + $TaskName + '" -> ' + (Join-Path $Dir 'GHG-VPS-Agent.ps1')) 'Green'
+      $taskOk = $true
+    } catch {
+      Say ('Register-ScheduledTask gagal (' + $_.Exception.Message + '), memakai schtasks...') 'DarkYellow'
+      & schtasks.exe /Create /F /TN $TaskName /SC ONLOGON /RL HIGHEST /TR ('powershell.exe ' + $arg.Replace('"', '\"')) | Out-Host
+      if ($LASTEXITCODE -eq 0) { & schtasks.exe /Run /TN $TaskName | Out-Host; $taskOk = $true }
+    }
+  }
+  foreach ($od in $oldDirs) { Say ('folder agen lama tidak dipakai lagi (boleh dihapus): ' + $od) 'DarkGray' }
+}
+
 Say ''
-Say '================ RINGKASAN ================' 'Yellow'
+Say '================ RINGKASAN PER METATRADER ================' 'Yellow'
 $needLogin = $false
 foreach ($r in $results) {
-  $head = if ($r.account) { 'Akun ' + $r.account } else { $r.terminal }
+  $head = if ($r.account) { 'Akun ' + $r.account } else { 'MetaTrader' }
+  if ($r.terminal) { $head += ' - ' + $r.terminal }
   if ([int]$r.code -eq 0) {
-    Say ('BERHASIL: ' + $head) 'Green'
-    if ($r.terminal) { Say ('  MetaTrader : ' + $r.terminal) }
-    if ($r.data) { Say ('  Folder data: ' + $r.data) }
-    if ($r.restored) {
-      Say ('  Setup dipulihkan dari backup ' + (Get-Date ([DateTimeOffset]::FromUnixTimeSeconds([int64]$r.backup_at).LocalDateTime) -Format 'dd-MM-yyyy HH:mm') + ' (VPS ' + $r.backup_host + ') sebagai profil "GHG Restore"')
+    if ($r.kept) {
+      Say ('SETUP LAMA DIPERTAHANKAN: ' + $head) 'Green'
+      Say '  EA GOLD HUNTER GARUDA sudah berjalan di MetaTrader ini: chart, setting & input TIDAK diubah.'
+      Say '  Hanya file EA + preset yang diperbarui.'
+    } elseif ($r.restored) {
+      Say ('SETUP DIPULIHKAN: ' + $head) 'Green'
+      Say ('  MetaTrader ini belum berisi EA: setup terakhir dari backup ' + (Get-Date ([DateTimeOffset]::FromUnixTimeSeconds([int64]$r.backup_at).LocalDateTime) -Format 'dd-MM-yyyy HH:mm') + ' (VPS ' + $r.backup_host + ') dipasang sebagai profil "GHG Restore"')
       if (@($r.loaded).Count) { Say ('  EA aktif di chart: ' + (@($r.loaded) -join ' | ')) 'Green' }
       else { Say '  Cek di MetaTrader: tab Experts harus menampilkan "GOLD HUNTER GARUDA ... loaded successfully".' }
+    } elseif ($r.dup) {
+      Say ('EA + PRESET TERPASANG: ' + $head) 'Green'
+      Say '  Setup tidak dipulihkan di MetaTrader ini: EA akun ini sudah berjalan di MetaTrader lain (mencegah EA dobel).'
     } else {
-      Say '  Belum ada backup setup di web untuk akun ini: buka chart, drag EA GOLD HUNTER GARUDA dari Navigator ke chart, atur input, OK.' 'DarkYellow'
+      Say ('EA + PRESET TERPASANG: ' + $head) 'Green'
+      Say '  Belum ada backup setup di web: buka chart, drag EA GOLD HUNTER GARUDA dari Navigator ke chart, pilih preset, OK.' 'DarkYellow'
       Say '  Sesudah itu agen mem-backup setup ini otomatis (tiap 10 menit bila berubah).' 'DarkYellow'
     }
-    if ($r.webrequest_urls -eq $false) { Say '  Bila tab Experts meminta izin WebRequest: Tools > Options > Expert Advisors, centang Allow WebRequest, tambahkan https://goldhuntergaruda.com' 'DarkYellow' }
+    if ($r.data) { Say ('  Folder data: ' + $r.data) 'DarkGray' }
+    if ($r.flags_note) { Say ('  ' + $r.flags_note) $(if ($r.flags_warn) { 'DarkYellow' } else { 'Gray' }) }
+    if ($r.webrequest_urls -eq $false -and -not $r.kept) { Say '  Bila tab Experts meminta izin WebRequest: Tools > Options > Expert Advisors, centang Allow WebRequest, tambahkan https://goldhuntergaruda.com' 'DarkYellow' }
   } elseif ([int]$r.code -eq 2) {
     $needLogin = $true
     Say ('BELUM LOGIN: ' + $head) 'Red'
@@ -102,9 +193,13 @@ foreach ($r in $results) {
     Say ('  ' + $r.message) 'Red'
   }
 }
-if (-not $results) { Say ('(tidak ada hasil; lihat ' + (Join-Path $Dir 'agent.log') + ')') 'DarkYellow' }
+if (-not $results) { Say ('(tidak ada hasil; lihat ' + (Join-Path $runDir 'agent.log') + ')') 'DarkYellow' }
+Say ''
 if ($needLogin) {
-  Say ''
   Say 'Untuk MetaTrader yang BELUM LOGIN: buka MT5 itu, login akun trading dengan password TRADING + centang Save password, tutup MT5, lalu jalankan installer ini lagi.' 'Yellow'
+} elseif ($taskOk) {
+  Say 'SELESAI. Update otomatis aktif: EA & preset baru terpasang sendiri, setup chart Anda tidak pernah diubah.' 'Green'
+  Say ('Agen berjalan dari: ' + $Dir + '  (log: agent.log). Status tampil di web, menu Lisensi & VPS.')
 }
+if ($DryRun) { Remove-Item $runDir -Recurse -Force -ErrorAction SilentlyContinue }
 exit $rc

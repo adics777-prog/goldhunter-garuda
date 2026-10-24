@@ -416,17 +416,22 @@
     const backup = pb
       ? `<div class="tiny" style="margin-top:8px">💾 Backup setup terakhir: <b>${ago(pb.updated_at)}</b> <span class="muted">(${fmtDateTime(pb.updated_at)})</span> dari <b>${esc(pb.host)}</b> · ${pb.charts} chart, EA di ${pb.ea_charts} chart</div>`
       : '<div class="tiny muted" style="margin-top:8px">💾 Backup setup: <b>belum ada</b>. Dibuat otomatis oleh agen begitu EA terpasang di chart.</div>';
-    return `<div class="summary" style="margin-top:14px"><div class="small"><b style="color:var(--gold)">🔄 Update otomatis &amp; pindah VPS</b></div>
-      <p class="tiny muted" style="margin:4px 0 10px">EA baru (perpanjangan, versi baru) langsung terpasang di ${mt} VPS Anda, dan setup EA (chart + input) di-backup otomatis. VPS mati? Di VPS baru cukup jalankan installer ini, setup terakhir dipasang lagi.</p>
-      <a class="btn btn-gold btn-block" href="/api/licenses/${l.id}/installer">⬇ Unduh installer (1 file)</a>
-      <ol class="steps-list small"><li>Pasang <b>${mt}</b> dari broker Anda di PC / VPS.</li>
-        <li>Buka ${mt}, login akun <b>${acc}</b> dengan password <b>trading</b>, centang <b>Save password</b>.</li>
-        <li>Jalankan <b>GHG-Installer-${acc}.cmd</b>, klik <b>Yes</b>. Muncul "Windows protected your PC"? Klik <i>More info → Run anyway</i>.</li>
-        <li><b>Selesai.</b> EA terpasang dengan setup terakhir, update otomatis aktif.</li></ol>
-      <details class="tiny" style="margin-top:8px"><summary class="muted" style="cursor:pointer">Pasang manual (3 file)</summary>
-        <p class="muted" style="margin:6px 0">Unduh ke <b>satu folder</b> (mis. <span class="mono">C:\\GHG-Agent</span>), klik kanan <b>Pasang-Agen-VPS.bat</b> → <b>Run as administrator</b>. ${mt} harus login di akun ${acc}.</p>
+    return `<div class="summary" style="margin-top:14px"><div class="small"><b style="color:var(--gold)">🔄 Pasang EA &amp; update otomatis</b></div>
+      <p class="tiny muted" style="margin:4px 0 10px">Satu file untuk PC / VPS baru maupun yang sudah jalan: EA + preset terpasang di setiap ${mt} yang login di akun ${acc}, versi baru &amp; preset baru masuk sendiri. Setting chart Anda tidak pernah diubah.</p>
+      <a class="btn btn-gold btn-block" href="/api/licenses/${l.id}/installer" style="white-space:normal;text-align:center">⬇ Unduh installer GOLD HUNTER GARUDA</a>
+      <ol class="steps-list small" style="margin-top:12px">
+        <li>Pasang <b>${mt}</b> dari broker Anda, login akun <b>${acc}</b> dengan password <b>trading</b> dan centang <b>Save password</b>.</li>
+        <li>Buat folder <span class="mono" style="word-break:break-all">C:\\GOLD HUNTER GARUDA</span> lalu pindahkan file yang diunduh (<b style="word-break:break-word">GOLD HUNTER GARUDA - Installer ${acc}.cmd</b>) ke folder itu.</li>
+        <li>Klik dua kali file itu, lalu klik <b>Yes</b>. Muncul "Windows protected your PC"? Klik <i>More info → Run anyway</i>.</li>
+        <li><b>Selesai.</b> EA + preset terpasang di setiap ${mt} yang login di akun ini, update otomatis aktif, setting chart Anda tidak pernah diubah.</li></ol>
+      <details class="tiny" style="margin-top:8px"><summary class="muted" style="cursor:pointer">Diblokir Windows Defender / antivirus?</summary>
+        <p class="muted" style="margin:6px 0">File installer berisi skrip pemasang sehingga kadang ditahan. Di browser pilih <b>Keep</b> / <b>Simpan tetap</b>. Bila Windows Security menghapusnya: buka <i>Windows Security → Virus &amp; threat protection → Protection history</i>, pilih file GOLD HUNTER GARUDA → <b>Actions → Allow</b> (atau <i>Restore</i>), lalu unduh ulang. Boleh juga tambahkan folder <span class="mono" style="word-break:break-all">C:\\GOLD HUNTER GARUDA</span> di <i>Virus &amp; threat protection settings → Exclusions</i>. Unduh installer hanya dari member area ini.</p></details>
+      <details class="tiny" style="margin-top:6px"><summary class="muted" style="cursor:pointer">Sudah ada EA berjalan? Pindah VPS?</summary>
+        <p class="muted" style="margin:6px 0">${mt} yang sudah menjalankan EA GOLD HUNTER GARUDA hanya mendapat file EA + preset terbaru: chart, setting &amp; input tidak disentuh. Setup terakhir dari backup hanya dipasang ke ${mt} yang belum berisi EA (PC / VPS baru). Installer boleh dijalankan ulang dari folder lain: agen lama otomatis dipindah ke folder baru.</p></details>
+      <details class="tiny" style="margin-top:6px"><summary class="muted" style="cursor:pointer">Pasang manual (3 file)</summary>
+        <p class="muted" style="margin:6px 0">Unduh ke <b>satu folder</b> (mis. <span class="mono" style="word-break:break-all">C:\\GOLD HUNTER GARUDA</span>), klik kanan <b>Pasang-Agen-VPS.bat</b> → <b>Run as administrator</b>. ${mt} harus login di akun ${acc}.</p>
         <div class="row" style="gap:8px">${dl('agent', 'GHG-VPS-Agent.ps1')}${dl('install', 'Pasang-Agen-VPS.bat')}${dl('config', 'config.json')}</div>
-        ${multi ? `<p class="muted" style="margin:6px 0 0">Beberapa akun di satu VPS? Jalankan installer tiap akun, atau pakai <a href="/api/licenses/${l.id}/agent?f=config&amp;all=1">config.json gabungan semua akun</a>.</p>` : ''}</details>
+        ${multi ? `<p class="muted" style="margin:6px 0 0">Beberapa akun di satu VPS? Jalankan installer tiap akun (folder yang sama), atau pakai <a href="/api/licenses/${l.id}/agent?f=config&amp;all=1">config.json gabungan semua akun</a>.</p>` : ''}</details>
       <p class="tiny muted" style="margin:8px 0 0">Installer &amp; config.json berisi kunci lisensi akun ini, jangan dibagikan.</p>
       ${backup}${st}</div>`;
   };
