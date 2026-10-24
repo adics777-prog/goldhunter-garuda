@@ -1,4 +1,5 @@
-# Pengingat masa sewa (7/3/1 hari), tandai lisensi habis, batalkan order tak dibayar.
+# Laporan + tagihan sharing profit (hari Minggu), tagihan perpanjangan, pengingat H-3/H-1/hari habis,
+# tandai lisensi habis, batalkan order tak dibayar, cek pembayaran USDT.
 # Butuh secret repo: CRON_SECRET (sama dengan secret CRON_SECRET di Cloudflare Pages).
 name: Harian GoldHunter
 on:

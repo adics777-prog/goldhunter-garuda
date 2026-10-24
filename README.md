@@ -16,13 +16,21 @@ builder/           program compile EA berlisensi (Python + MetaEditor)
 
 | Paket | Alur |
 |---|---|
-| EA Gratis (IB Exness) | Member ajukan nomor akun, admin cek di portal partner lalu klik **Ya, under IB**, **Proses** (EA di-compile), **Selesai** (otomatis) |
-| VPS untuk EA Gratis (IB) | Seperti di atas, ditambah member transfer Rp 50rb/bulan. Admin isi detail VPS, lalu klik **Selesai** |
-| Sewa EA / Beli EA / VPS + EA | Member transfer dan upload bukti, admin klik **Proses** (EA di-compile, terkunci di akun + tanggal habis), lalu **Selesai** |
+| Sewa EA | Harga per durasi (1-11 bulan, 1 tahun, 1,5 tahun, 2 tahun) di Admin > Produk & Harga. Member bayar, lisensi = masa sewa, update EA otomatis gratis |
+| EA Gratis (IB) | Member ajukan nomor akun, admin cek di portal partner lalu klik **Ya, under IB**, **Proses**. Lisensi tanpa masa habis |
+| Sharing Profit | Langsung aktif. Tiap Minggu laporan profit tertutup EA per chart + tagihan komisi (default 10%), jatuh tempo Minggu + 3 hari. Belum lunas = EA berhenti buka posisi baru |
+| Trial 7 hari | Langsung aktif, sekali per nomor akun dan per member |
+| Paket + VPS | Seperti sebelumnya: bayar, admin isi detail VPS, **Selesai** |
 
-- Lisensi dikunci ke nomor akun MT. Untuk ganti akun, member mengajukan, admin menyetujui, dan EA otomatis di-compile ulang.
-- Pengingat email 7/3/1 hari sebelum masa sewa habis, dengan link **Perpanjang**.
-- EA sewa berhenti sendiri setelah tanggal habis. EA gratis (IB) dan EA beli tidak ada tanggal habis.
+- Pembayaran: transfer bank (kode unik + bukti, admin klik **Sudah Bayar**) atau **USDT TRC20 otomatis** (nominal unik per tagihan,
+  dicek di TronGrid). Metode bisa diganti selama tagihan belum dibayar. Lunas otomatis = lisensi + EA dibuat tanpa admin.
+- Payment gateway QRIS / VA: antarmuka penyedia (`server/gateway/`) disiapkan tapi **ditunda / tersembunyi**; adapter LinkQu masih stub
+  (menunggu dokumentasi API resmi).
+- Lisensi dikunci ke nomor akun MT; jenis lisensi (SEWA / FREE IB / SHARING PROFIT / TRIAL) ikut ke panel EA lewat builder.
+- Admin bisa memperpanjang lisensi (hari / bulan) di Admin > Lisensi; EA otomatis di-compile ulang.
+- Pengingat email + notifikasi H-3, H-1, hari habis, lalu email perpanjangan sehari sesudahnya.
+- Cron: `.github/workflows/daily.yml` (08:00 WIB: sharing mingguan hari Minggu, tagihan, pengingat) dan `payments.yml` (tiap 10 menit: cek USDT).
+- Tes tanda tangan gateway: `node scripts/test-gateway-signature.mjs`.
 
 ## Coba di komputer sendiri
 

@@ -1,0 +1,16 @@
+# Cek pembayaran otomatis: transfer USDT TRC20 (TronGrid) dan transaksi QRIS / VA Tripay yang belum lunas.
+# Builder di PC admin juga mengecek tiap 2 menit; workflow ini cadangan bila builder mati.
+# Butuh secret repo: CRON_SECRET (sama dengan secret CRON_SECRET di Cloudflare Pages).
+name: Cek Pembayaran GoldHunter
+on:
+  schedule:
+    - cron: '*/10 * * * *'
+  workflow_dispatch:
+jobs:
+  payments:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Cek pembayaran USDT & Tripay
+        run: |
+          curl -fsS -X POST https://goldhuntergaruda.com/api/cron/payments \
+            -H "x-cron-secret: ${{ secrets.CRON_SECRET }}" -H "content-type: application/json" -d '{}'
