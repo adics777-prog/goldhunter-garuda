@@ -460,6 +460,14 @@ def sync_vps_release(cfg, server):
             log('VPS: compile GAGAL, rilis tidak diterbitkan:\n' + out[-1500:])
             return
         log(f'VPS: compile OK ({mm.group(0) if mm else "selesai"})')
+        # presets follow the EA's inputs (new inputs added with their default, values already set are kept)
+        try:
+            import ghg_presets
+            pv, pn, prep = ghg_presets.sync(src, p.get('mql_dir') or ghg_presets.MQL)
+            added = sum(1 for _, x, _ in prep if x)
+            log(f'VPS: {len(prep)} preset disamakan dengan {pn} input EA v{pv}' + (f' ({added} preset dapat input baru)' if added else ''))
+        except Exception as e:
+            log(f'VPS: preset gagal disamakan: {e}')
         # the MT5 on this PC gets the same release; it is loaded the next time that MT5 starts
         try:
             local = os.path.join(p.get('mql_dir') or '', 'Experts', name + '.ex5')

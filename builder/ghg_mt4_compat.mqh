@@ -71,11 +71,21 @@ struct MqlTradeResult
 
 //--- kalender ekonomi: tidak tersedia di MT4 (fitur berita otomatis mati)
 #define CALENDAR_IMPORTANCE_HIGH 3
+#define CALENDAR_IMPACT_NA       0
+#define CALENDAR_IMPACT_POSITIVE 1
+#define CALENDAR_IMPACT_NEGATIVE 2
 struct MqlCalendarValue
   {
    ulong             id;
    ulong             event_id;
    datetime          time;
+   int               impact_type;
+   bool              HasActualValue() { return false; }
+   bool              HasForecastValue() { return false; }
+   bool              HasPreviousValue() { return false; }
+   double            GetActualValue() { return 0.0; }
+   double            GetForecastValue() { return 0.0; }
+   double            GetPreviousValue() { return 0.0; }
   };
 struct MqlCalendarEvent
   {
