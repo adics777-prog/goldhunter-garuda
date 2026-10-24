@@ -1,7 +1,7 @@
 // Admin area (hash router).
 (() => {
   const { $, $$, esc, rupiah, fmtDate, fmtDateTime, ago, api, toast, busy, modal, confirmBox, copy,
-    orderBadge, licenseBadge, buildBadge, billingText } = GHG;
+    orderBadge, licenseBadge, buildBadge, billingText, durLabel, kindBadge, PAY_LABEL, usd } = GHG;
   const view = $('#view');
   let me = null, timer = null;
 
@@ -50,7 +50,6 @@
     setCount('#c-ib', s.ib_open);
     setCount('#c-paid', s.awaiting_verification + s.processing);
     setCount('#c-chg', s.pending_changes);
-    setCount('#c-arch', (s.ib_open || 0) + (s.pending_changes || 0));
     return s;
   }
 
@@ -74,7 +73,9 @@
     const online = s.builder && s.now - s.builder.at < 90;
     const stat = (n, label, href, alert) => `<a class="stat ${alert && n ? 'alert' : ''}" href="${href}"><b>${n}</b><span>${label}</span></a>`;
     const autopost = so ? ['tg', 'fb', 'ig', 'tt'].filter((k) => k === 'tg' ? so.content_tg : so.ready[k] && so['content_' + k]).length : 0;
+    const scan = s.usdt_scan;
     view.innerHTML = `${title('Dashboard')}
+      ${s.prices_placeholder ? '<div class="alert warn" style="margin-bottom:16px">🏷️ Harga <b>Sewa EA</b> masih harga contoh dari sistem. Isi harga asli di <a href="#/produk">Produk &amp; Harga</a> (tombol Edit pada Sewa EA) sebelum promosi.</div>' : ''}
       <h3 style="margin:0 0 12px">💳 Penjualan</h3>
       <div class="grid c4" style="margin-bottom:22px">
         ${stat(s.awaiting_verification, 'Pembayaran perlu dicek', '#/pesanan', true)}
@@ -84,7 +85,10 @@
         ${stat(s.active_licenses, 'Lisensi aktif', '#/lisensi')}
         ${stat(s.expiring_7d, 'Habis ≤ 7 hari', '#/lisensi', true)}
         <div class="stat"><b style="font-size:1.25rem">${rupiah(s.revenue_30d)}</b><span>Omzet 30 hari</span></div>
-        ${s.ib_unchecked || s.pending_changes ? stat(s.ib_unchecked + s.pending_changes, 'Arsip EA GoldHunter perlu dicek', '#/ib', true) : ''}
+        ${stat(s.share_unpaid, `Tagihan sharing belum lunas${s.share_unpaid_amount ? ' · ' + rupiah(s.share_unpaid_amount) : ''}`, '#/pesanan', true)}
+        ${s.share_overdue ? stat(s.share_overdue, 'Sharing lewat jatuh tempo (EA dijeda)', '#/pesanan', true) : ''}
+        ${s.ib_unchecked ? stat(s.ib_unchecked, 'Order IB perlu dicek', '#/ib', true) : ''}
+        ${s.pending_changes ? stat(s.pending_changes, 'Ganti nomor akun', '#/ganti-akun', true) : ''}
         ${stat(`${autopost} / 4`, 'Media sosial autopost aktif', '#/sosmed')}
       </div>
       <div class="grid c2">
@@ -99,10 +103,16 @@
             ${online ? '' : 'Jalankan <b>Jalankan Builder.bat</b> di PC/VPS Windows agar order bisa di-generate.'}</p>
           <div class="row" style="margin-top:12px"><a class="btn btn-ghost btn-sm" href="#/build">Lihat riwayat generate</a>
             <button class="btn btn-outline btn-sm" id="rebuild-all">↻ Generate ulang semua lisensi aktif</button></div></div>
-        <div class="card"><h3>Pengingat &amp; pembersihan harian</h3>
-          <p class="small muted">Kirim email pengingat masa sewa (7/3/1 hari), tandai lisensi yang habis, dan batalkan order yang tidak dibayar. Berjalan otomatis setiap hari.</p>
-          <p class="small" style="margin-top:8px">${s.daily ? `Terakhir: ${fmtDateTime(s.daily.at)}, ${s.daily.reminders ?? 0} pengingat, ${s.daily.expired ?? 0} habis, ${s.daily.unpaid_expired ?? 0} order kedaluwarsa` : 'Belum pernah berjalan.'}</p>
+        <div class="card"><h3>Tugas harian (08:00 WIB)</h3>
+          <p class="small muted">Laporan &amp; tagihan sharing profit (hari Minggu), tagihan perpanjangan sewa, pengingat H-3 / H-1 / hari habis + email perpanjangan, tandai lisensi habis, batalkan order yang tidak dibayar.</p>
+          <p class="small" style="margin-top:8px">${s.daily ? `Terakhir: ${fmtDateTime(s.daily.at)}, ${s.daily.reminders ?? 0} pengingat, ${s.daily.expired ?? 0} habis, ${s.daily.unpaid_expired ?? 0} order kedaluwarsa${s.daily.share ? `, sharing: ${s.daily.share.periods ?? 0} laporan / ${s.daily.share.invoices ?? 0} tagihan` : ''}` : 'Belum pernah berjalan.'}</p>
           <button class="btn btn-outline btn-sm" style="margin-top:12px" id="run-daily">Jalankan sekarang</button></div>
+        <div class="card"><h3>Pembayaran otomatis</h3>
+          <p class="small">USDT TRC20: ${s.usdt_on ? (s.usdt_auto ? '<span class="badge b-green">cek otomatis aktif</span>' : '<span class="badge b-orange">aktif, cek manual</span>') : '<span class="badge b-gray">mati</span>'}
+            ${scan ? `<span class="tiny muted">· cek terakhir ${ago(scan.at)}${scan.ok ? `, ${scan.matched || 0} cocok` : ` <span style="color:#ff8b95">gagal: ${esc(scan.error || '')}</span>`}</span>` : ''}</p>
+          ${s.gateway_on ? `<p class="small" style="margin-top:6px">QRIS / VA (${esc(s.gateway_name)}): <span class="badge b-green">aktif</span></p>` : ''}
+          <p class="tiny muted" style="margin-top:6px">USDT dicek tiap 2 menit lewat builder, tiap 10 menit lewat GitHub Action, dan saat member klik "Saya sudah bayar". Transfer bank dicek admin dari bukti transfer. Atur di <a href="#/pengaturan">Pengaturan › Pembayaran</a>.</p>
+          ${s.usdt_on ? '<button class="btn btn-outline btn-sm" style="margin-top:10px" id="usdt-scan">Cek USDT sekarang</button>' : ''}</div>
       </div>`;
     $('#rebuild-all').onclick = async (e) => {
       if (!(await confirmBox('Generate ulang semua?', 'Semua lisensi EA yang aktif di-compile ulang dengan file EA terbaru di PC, dan member mendapat email "File EA baru siap diunduh".', 'Generate semua'))) return;
@@ -114,47 +124,71 @@
       toast(`Selesai: ${r.result.reminders} pengingat, ${r.result.expired} lisensi habis`);
       render();
     };
+    const us = $('#usdt-scan');
+    if (us) us.onclick = async (e) => {
+      const r = await busy(e.target, () => post('/admin/usdt/scan'));
+      toast(r.result.ok ? `${r.result.open || 0} tagihan USDT terbuka, ${r.result.matched || 0} cocok` : (r.result.error || 'USDT mati'), r.result.ok ? 'ok' : 'err');
+      render();
+    };
   }
 
   // ------------------------------------------------------------------ orders
   function ordersTable(orders, ib) {
     if (!orders.length) return '<div class="card empty">Tidak ada order.</div>';
-    return `<div class="table-wrap"><table><thead><tr><th>Kode</th><th>Member</th><th>Paket</th><th>Akun</th>${ib ? '<th>IB</th>' : ''}<th>Total</th><th>Status</th><th>Masuk</th></tr></thead><tbody>
+    const now = Date.now() / 1000;
+    return `<div class="table-wrap"><table><thead><tr><th>Kode</th><th>Member</th><th>Paket</th><th>Akun</th>${ib ? '<th>IB</th>' : ''}<th>Total</th><th>Metode</th><th>Status</th><th>Masuk</th></tr></thead><tbody>
       ${orders.map((o) => `<tr class="click" onclick="location.hash='#/${ib ? 'ib' : 'pesanan'}/${o.id}'">
         <td class="mono small">${esc(o.code)}</td>
         <td>${esc(o.user_name)}<div class="tiny muted">${esc(o.user_email)}</div></td>
-        <td>${esc(o.product_name)}${o.kind === 'renew' ? ' <span class="badge b-gray">Perpanjang</span>' : ''}<div class="tiny muted">${billingText(o, o.months)}</div></td>
+        <td>${esc(o.product_name)} ${kindBadge(o.product_kind)}${o.kind === 'renew' ? ' <span class="badge b-gray">Perpanjang</span>' : o.kind === 'share' ? ' <span class="badge b-gray">Tagihan sharing</span>' : ''}<div class="tiny muted">${billingText(o, o.months)}</div></td>
         <td><b>${esc(o.account_number)}</b><div class="tiny muted">${esc(o.broker)} · ${o.platform.toUpperCase()}</div></td>
-        ${ib ? `<td>${o.kind === 'renew' ? '<span class="tiny muted">-</span>' : ibBadge(o)}</td>` : ''}
-        <td class="nowrap">${o.total ? rupiah(o.total) : 'Gratis'}${o.proof_file_id ? '<div class="tiny" style="color:var(--green)">bukti ✔</div>' : ''}</td>
-        <td>${orderBadge(o.status)}</td><td class="small nowrap">${ago(o.created_at)}</td></tr>`).join('')}
+        ${ib ? `<td>${o.kind !== 'new' ? '<span class="tiny muted">-</span>' : ibBadge(o)}</td>` : ''}
+        <td class="nowrap">${o.total ? rupiah(o.total) : 'Gratis'}${o.kind === 'share' ? `<div class="tiny muted">${usd(o.amount_usd)}</div>` : ''}${o.proof_file_id ? '<div class="tiny" style="color:var(--green)">bukti ✔</div>' : ''}</td>
+        <td class="small">${o.paid_via ? `<span class="badge b-green">${PAY_LABEL[o.paid_via] || esc(o.paid_via)} ✔</span>` : o.pay_method ? PAY_LABEL[o.pay_method] || esc(o.pay_method) : '<span class="muted">-</span>'}</td>
+        <td>${orderBadge(o.status)}${o.status === 'awaiting_payment' && o.pay_deadline < now ? '<div class="tiny" style="color:var(--orange)">lewat jatuh tempo</div>' : ''}</td><td class="small nowrap">${ago(o.created_at)}</td></tr>`).join('')}
     </tbody></table></div>`;
   }
   async function orderList(group, arg) {
     if (arg) return orderDetail(arg, group);
     const ib = group === 'ib';
-    const state = JSON.parse(sessionStorage.getItem('ord-' + group) || '{"status":"open","q":""}');
-    const tabs = [['open', 'Perlu tindakan'], ['awaiting_payment', 'Menunggu transfer'], ['awaiting_verification', ib ? 'Menunggu cek' : 'Cek pembayaran'],
+    const state = { status: 'open', q: '', kind: '', method: '', pkind: '', ...JSON.parse(sessionStorage.getItem('ord-' + group) || '{}') };
+    const tabs = [['open', 'Perlu tindakan'], ['awaiting_payment', 'Menunggu bayar'], ['overdue', 'Lewat jatuh tempo'], ['awaiting_verification', ib ? 'Menunggu cek' : 'Cek pembayaran'],
       ['processing', 'Diproses'], ['completed', 'Selesai'], ['rejected', 'Ditolak'], ['', 'Semua']];
-    view.innerHTML = `${title(ib ? '🎁 Order EA Gratis (IB)' : '💳 Order Berbayar')}
+    const opt = (k, list) => list.map(([v, l]) => `<option value="${v}" ${state[k] === v ? 'selected' : ''}>${l}</option>`).join('');
+    view.innerHTML = `${title(ib ? '🎁 Order EA Gratis (IB)' : '💳 Order &amp; Tagihan')}
       ${ib ? `<div class="alert info small" style="margin-bottom:16px">Alur: buka Personal Area <b>Partner Exness</b> → cari nomor akun klien → jika ada, klik <b>Ya, under IB</b> → <b>Proses</b> (EA otomatis di-compile &amp; dikunci) → <b>Oke, Selesai</b>.</div>` : ''}
-      <div class="row between" style="margin-bottom:14px"><div class="choice" id="tabs">${tabs.map(([v, l]) => `<label><input type="radio" name="st" value="${v}" ${state.status === v ? 'checked' : ''}><span>${l}</span></label>`).join('')}</div>
-        <input id="q" placeholder="Cari kode / akun / email" value="${esc(state.q)}" style="max-width:260px"></div>
+      <div class="choice" id="tabs" style="margin-bottom:10px">${tabs.map(([v, l]) => `<label><input type="radio" name="st" value="${v}" ${state.status === v ? 'checked' : ''}><span>${l}</span></label>`).join('')}</div>
+      <div class="grid" style="grid-template-columns:repeat(auto-fit,minmax(min(170px,100%),1fr));gap:8px;margin-bottom:14px">
+        <select id="f-kind">${opt('kind', [['', 'Semua jenis'], ['new', 'Pesanan baru'], ['renew', 'Perpanjangan'], ['share', 'Tagihan sharing']])}</select>
+        <select id="f-pkind">${opt('pkind', [['', 'Semua paket'], ['ea_rent', 'Sewa EA'], ['ea_share', 'Sharing Profit'], ['ea_trial', 'Trial'], ['ea_ib', 'Free IB'], ['vps_ea', 'VPS + EA'], ['vps_ea_shared', 'VPS share + EA'], ['ib_vps', 'IB + VPS'], ['ib_vps_shared', 'IB + VPS share'], ['vps', 'VPS saja'], ['vps_shared', 'VPS share saja']])}</select>
+        <select id="f-method">${opt('method', [['', 'Semua metode'], ['bank', 'Transfer bank'], ['usdt', 'USDT TRC20']])}</select>
+        <input id="q" placeholder="Cari kode / akun / email" value="${esc(state.q)}"></div>
       <div id="list"><div class="loading"><span class="spinner"></span></div></div>`;
+    const save = () => sessionStorage.setItem('ord-' + group, JSON.stringify(state));
     const load = async () => {
-      const qs = new URLSearchParams({ group, status: state.status, q: state.q });
+      const qs = new URLSearchParams({ group, status: state.status, q: state.q, kind: state.kind, method: state.method, pkind: state.pkind });
       const { orders } = await api('/admin/orders?' + qs);
       $('#list').innerHTML = ordersTable(orders, ib);
     };
-    $('#tabs').onchange = (e) => { state.status = e.target.value; sessionStorage.setItem('ord-' + group, JSON.stringify(state)); load(); };
+    $('#tabs').onchange = (e) => { state.status = e.target.value; save(); load(); };
+    [['#f-kind', 'kind'], ['#f-pkind', 'pkind'], ['#f-method', 'method']].forEach(([sel, k]) => { $(sel).onchange = (e) => { state[k] = e.target.value; save(); load(); }; });
     let t; $('#q').oninput = (e) => { clearTimeout(t); t = setTimeout(() => { state.q = e.target.value; sessionStorage.setItem('ord-' + group, JSON.stringify(state)); load(); }, 300); };
     await load();
   }
   function ibOrders(arg) { return orderList('ib', arg); }
   function paidOrders(arg) { return orderList('paid', arg); }
 
+  // Weekly sharing report table (admin)
+  const shareTable = (r) => !r ? '' : `<div class="table-wrap" style="margin:8px 0"><table><thead><tr><th>Chart EA</th><th class="right">Profit</th><th class="right">USD</th><th>Sumber</th></tr></thead><tbody>
+      ${(r.rows || []).map((x) => `<tr><td>${esc(x.label)}<div class="tiny muted">${esc(x.symbol)} · magic ${x.magic} · akun ${esc(x.login || '')} · ${x.days || 0} hari data</div></td>
+        <td class="right nowrap">${Number(x.profit).toLocaleString('id-ID', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ${esc(x.currency)}</td><td class="right nowrap">${x.profit_usd == null ? '-' : usd(x.profit_usd)}</td>
+        <td class="tiny">${x.source === 'harian' ? '<span class="badge b-orange" title="Jumlah baris harian (profit hari ini EA); bisa kurang beberapa jam per hari">perkiraan</span>' : 'total EA'}</td></tr>`).join('')
+        || '<tr><td colspan="4" class="muted small">Tidak ada laporan EA pada periode ini.</td></tr>'}
+      <tr><td><b>Total</b></td><td></td><td class="right"><b>${usd(r.profit_usd)}</b></td><td></td></tr></tbody></table></div>
+      <div class="small">Periode ${fmtDate(r.period_start)} – ${fmtDate(r.period_end - 1)} · komisi ${r.commission_pct}% = <b>${usd(r.commission_usd)}</b>${r.commission_idr ? ` = ${rupiah(r.commission_idr)} (kurs ${rupiah(r.usd_idr)})` : ''}${r.note ? ` · ${esc(r.note)}` : ''}</div>`;
+
   async function orderDetail(id, group) {
-    const { order: o, proof, license: l, builds } = await api('/admin/orders/' + id);
+    const { order: o, proof, license: l, builds, report } = await api('/admin/orders/' + id);
     const back = group === 'ib' ? '#/ib' : '#/pesanan';
     const open = ['awaiting_payment', 'awaiting_verification'].includes(o.status);
     const needIb = o.requires_ib && o.kind === 'new' && o.ib_status !== 'yes';
@@ -168,20 +202,30 @@
         : `<p class="small muted">Buka Personal Area Partner ${esc(o.broker)} → menu klien, cari nomor akun <b class="copy" data-copy="${esc(o.account_number)}">${esc(o.account_number)}</b>.</p>
            <div class="row" style="margin-top:12px"><button class="btn btn-green" id="ib-yes">✔ Ya, under IB kita</button><button class="btn btn-red" id="ib-no">✖ Bukan IB</button></div>`}</div>`);
     }
-    if (o.billing !== 'free') {
+    if (report) steps.push(`<div class="card"><h3>📊 Laporan sharing profit</h3>${shareTable(report)}</div>`);
+    if (o.total > 0) {
+      const tp = o.gateway;
       steps.push(`<div class="card ${o.status === 'awaiting_verification' ? 'gold' : ''}"><h3>${steps.length + 1}. Pembayaran</h3>
-        <div class="alert info small" style="margin-bottom:12px">Cek mutasi rekening: harus ada uang masuk <b style="font-size:1.15rem">${rupiah(o.total)}</b> (kode unik <b style="color:var(--green)">${o.unique_code}</b>).</div>
-        <dl class="kv small">${o.paid_at ? `<dt>Status</dt><dd><span class="badge b-green">✔ Sudah bayar</span> ${fmtDateTime(o.paid_at)}</dd>` : ''}
+        <div class="alert info small" style="margin-bottom:12px">Transfer bank: cek mutasi rekening, harus ada uang masuk <b style="font-size:1.15rem">${rupiah(o.total)}</b> (kode unik <b style="color:var(--green)">${o.unique_code}</b>).
+          USDT &amp; QRIS / VA terverifikasi otomatis.</div>
+        <dl class="kv small"><dt>Metode dipilih</dt><dd>${o.pay_method ? PAY_LABEL[o.pay_method] || esc(o.pay_method) : '<span class="muted">belum memilih</span>'}</dd>
+          ${o.usdt_amount ? `<dt>USDT</dt><dd><b>${Number(o.usdt_amount).toFixed(2)} USDT</b> (dikunci ${fmtDateTime(o.usdt_locked_at)})${o.usdt_tx ? `<div class="tiny mono" style="overflow-wrap:anywhere">TX ${esc(o.usdt_tx)}</div>` : ''}</dd>` : ''}
+          ${tp ? `<dt>QRIS / VA</dt><dd>${esc(tp.provider_name || tp.provider || '')} · ${esc(tp.payment_name)} · ${esc(tp.reference)} · ${rupiah(tp.amount)}${tp.pay_code ? ` · VA ${esc(tp.pay_code)}` : ''}<div class="tiny muted">berlaku s/d ${fmtDateTime(tp.expired_time)}</div></dd>` : ''}
+          ${o.paid_via ? `<dt>Lunas lewat</dt><dd><span class="badge b-green">${PAY_LABEL[o.paid_via] || esc(o.paid_via)}</span> ${esc(o.paid_ref && o.paid_ref !== 'admin' ? o.paid_ref : '')}</dd>` : ''}
+          ${o.paid_at ? `<dt>Status</dt><dd><span class="badge b-green">✔ Sudah bayar</span> ${fmtDateTime(o.paid_at)}</dd>` : ''}
         ${o.confirmed_at && o.proof_file_id ? `<dt>Dari</dt><dd>${esc(o.payer_bank)} a.n. ${esc(o.payer_name)}</dd><dt>Dikonfirmasi</dt><dd>${fmtDateTime(o.confirmed_at)}</dd>
           ${o.member_note ? `<dt>Catatan</dt><dd>${esc(o.member_note)}</dd>` : ''}` : '<dt>Status</dt><dd>Belum ada konfirmasi dari member</dd>'}</dl>
         ${proof ? (proof.mime.startsWith('image/') ? `<a href="/api/files/${proof.id}" target="_blank"><img src="/api/files/${proof.id}" style="max-height:340px;border-radius:10px;margin-top:12px;border:1px solid var(--line)"></a>`
           : `<a class="btn btn-ghost btn-sm" style="margin-top:12px" href="/api/files/${proof.id}" target="_blank">Buka bukti (PDF)</a>`) : ''}
         ${open ? `<div class="row" style="margin-top:14px"><button class="btn btn-green" id="paid" ${needIb ? 'disabled title="Cek IB dulu"' : ''}>✔ Sudah Bayar</button>
           ${o.status === 'awaiting_verification' ? '<button class="btn btn-red btn-sm" id="proof-no">✖ Bukti tidak valid</button>' : ''}</div>
-          <p class="tiny muted" style="margin-top:8px">"Sudah Bayar" langsung memproses pesanan${o.includes_ea ? ' (EA otomatis di-compile)' : ''} dan member mendapat email.${!o.proof_file_id ? ' Member belum upload bukti: klik hanya jika uang sudah Anda pastikan masuk.' : ''}</p>` : ''}</div>`);
+          <p class="tiny muted" style="margin-top:8px">"Sudah Bayar" langsung ${o.kind === 'share' ? 'melunasi tagihan dan memperpanjang lisensi ke minggu berikutnya (EA di-compile ulang)' : `memproses pesanan${o.includes_ea ? ' (EA otomatis di-compile)' : ''}`} dan member mendapat email.${!o.proof_file_id ? ' Member belum upload bukti: klik hanya jika uang sudah Anda pastikan masuk.' : ''}</p>` : ''}</div>`);
     }
     let procHtml = '';
-    if (open && o.billing !== 'free') {
+    if (o.kind === 'share') {
+      procHtml = o.status === 'completed' ? `<div class="alert ok small">Lunas ${fmtDateTime(o.completed_at)}. Lisensi ${l ? `berlaku s/d <b>${fmtDate(l.expires_at)}</b>` : ''}</div>`
+        : `<p class="small muted">Tagihan mingguan tidak perlu diproses: begitu lunas, lisensi otomatis berlanjut ke minggu berikutnya.${o.pay_deadline < Date.now() / 1000 ? ' <b style="color:var(--orange)">Lewat jatuh tempo: EA member sedang dijeda.</b>' : ''}</p>`;
+    } else if (open && o.total > 0) {
       procHtml = `<p class="small muted">Klik <b>✔ Sudah Bayar</b> di atas setelah uang masuk.</p><button class="btn btn-red btn-sm" id="reject" style="margin-top:10px">Tolak pesanan</button>`;
     } else if (open) {
       procHtml = `<p class="small muted">${o.includes_ea ? 'EA otomatis di-compile dan dikunci ke nomor akun ini.' : ''}${o.kind === 'renew' ? ' Masa aktif diperpanjang ' + o.months + ' bulan.' : ''}</p>
@@ -207,7 +251,7 @@
     } else {
       procHtml = `<div class="alert small">${orderBadge(o.status)} ${esc(o.admin_note || '')}</div>`;
     }
-    steps.push(`<div class="card ${o.status === 'processing' ? 'gold' : ''}"><h3>${steps.length + 1}. Proses${o.status === 'processing' || o.status === 'completed' ? ' &amp; Selesai' : ''}</h3>${procHtml}</div>`);
+    steps.push(`<div class="card ${o.status === 'processing' ? 'gold' : ''}"><h3>${steps.length + 1}. ${o.kind === 'share' ? 'Lisensi' : 'Proses'}${o.status === 'processing' || o.status === 'completed' ? ' &amp; Selesai' : ''}</h3>${procHtml}</div>`);
 
     view.innerHTML = `<div class="crumb"><a href="${back}">← Kembali</a></div>
       ${title(`<span style="font-family:monospace">${esc(o.code)}</span>`, `${ibBadge(o)} ${orderBadge(o.status, o.status_label)}`)}
@@ -215,7 +259,7 @@
         <div class="stack">${steps.join('')}</div>
         <div class="stack">
           <div class="card"><h3>Order</h3><dl class="kv small">
-            <dt>Paket</dt><dd>${esc(o.product_name)}${o.kind === 'renew' ? ' <span class="badge b-gray">Perpanjang</span>' : ''}</dd>
+            <dt>Paket</dt><dd>${esc(o.product_name)} ${kindBadge(o.product_kind)}${o.kind === 'renew' ? ' <span class="badge b-gray">Perpanjang</span>' : o.kind === 'share' ? ' <span class="badge b-gray">Tagihan sharing</span>' : ''}</dd>
             <dt>Durasi</dt><dd>${billingText(o, o.months)}</dd>
             <dt>Platform</dt><dd>${o.platform.toUpperCase()}</dd>
             <dt>Broker / server</dt><dd>${esc(o.broker)}${o.broker_server ? ' · ' + esc(o.broker_server) : ''}</dd>
@@ -243,8 +287,8 @@
       await busy(btn, () => post(`/admin/orders/${o.id}/process`)); toast('Diproses. EA sedang di-compile…'); render(); counts();
     });
     act('#paid', async (btn) => {
-      if (!(await confirmBox('Pembayaran sudah masuk?', `Pastikan mutasi rekening menunjukkan <b>${rupiah(o.total)}</b> (kode unik ${o.unique_code}). Pesanan langsung diproses${o.includes_ea ? ' dan EA di-compile' : ''}.`, '✔ Sudah Bayar'))) return;
-      await busy(btn, () => post(`/admin/orders/${o.id}/paid`)); toast('Pembayaran dikonfirmasi. Pesanan diproses.'); render(); counts();
+      if (!(await confirmBox('Pembayaran sudah masuk?', `Pastikan mutasi rekening menunjukkan <b>${rupiah(o.total)}</b> (kode unik ${o.unique_code}). ${o.kind === 'share' ? 'Tagihan lunas dan lisensi berlanjut ke minggu berikutnya.' : `Pesanan langsung diproses${o.includes_ea ? ' dan EA di-compile' : ''}.`}`, '✔ Sudah Bayar'))) return;
+      await busy(btn, () => post(`/admin/orders/${o.id}/paid`)); toast(o.kind === 'share' ? 'Tagihan lunas. Lisensi diperpanjang.' : 'Pembayaran dikonfirmasi. Pesanan diproses.'); render(); counts();
     });
     act('#proof-no', async () => {
       const m = modal('Bukti transfer tidak valid', `<p class="small muted" style="margin-bottom:12px">Member diminta mengirim ulang bukti transfer.</p>
@@ -339,7 +383,7 @@
   async function licenseDetail(id) {
     const { license: l, builds, changes, orders } = await api('/admin/licenses/' + id);
     view.innerHTML = `<div class="crumb"><a href="#/lisensi">← Lisensi</a></div>
-      ${title(`Akun ${esc(l.account_number)}`, licenseBadge(l.status))}
+      ${title(`Akun ${esc(l.account_number)}`, `${kindBadge(l.product_kind)} ${licenseBadge(l.status)}`)}
       <div class="grid c2" style="align-items:start">
         <form class="card" id="lf"><h3>Edit lisensi</h3>
           <div class="grid c2" style="gap:0 12px">
@@ -356,6 +400,16 @@
           <p class="tiny muted" style="margin-bottom:12px">Mengubah nomor akun atau tanggal berlaku otomatis membuat file EA baru.</p>
           <button class="btn btn-gold" type="submit">Simpan</button></form>
         <div class="stack">
+          ${l.expires_at ? `<form class="card" id="xf"><h3>⏩ Perpanjang manual</h3>
+            <p class="small muted" style="margin-bottom:10px">Berlaku s/d <b>${fmtDate(l.expires_at)}</b>${l.days_left != null ? ` (${l.days_left > 0 ? l.days_left + ' hari lagi' : 'sudah habis'})` : ''}. Tambahan dihitung dari tanggal habis, atau dari hari ini bila sudah habis.${l.includes_ea ? ' File EA baru otomatis di-compile dengan tanggal baru.' : ''}</p>
+            <div class="grid c2" style="gap:0 12px"><div class="field"><label>Tambah bulan</label><input name="months" type="number" min="0" max="60" value="0"></div>
+            <div class="field"><label>Tambah hari</label><input name="days" type="number" min="0" max="3650" value="0"></div></div>
+            <div class="row" style="gap:6px;margin-bottom:12px">${[[0, 3], [0, 7], [1, 0], [3, 0], [12, 0]].map(([mo, d]) => `<button type="button" class="btn btn-ghost btn-sm" data-x="${mo},${d}">+${mo ? durLabel(mo) : d + ' hari'}</button>`).join('')}</div>
+            <button class="btn btn-gold" type="submit">Perpanjang</button></form>` : ''}
+          ${l.share ? `<div class="card"><h3>💹 Sharing profit</h3>
+            <p class="small muted" style="margin-bottom:8px">Minggu berjalan mulai ${fmtDate(l.share.next_period_start)}. Tagihan &amp; laporan tiap Minggu; lisensi berlanjut otomatis bila lunas / tanpa profit.</p>
+            ${l.share.reports.length ? l.share.reports.map((r) => `<details style="border-top:1px solid var(--line);padding:8px 0"><summary class="small" style="cursor:pointer">${fmtDate(r.period_start)} – ${fmtDate(r.period_end - 1)} · ${usd(r.profit_usd)} · ${r.order_id ? `<a href="#/pesanan/${r.order_id}">${esc(r.order_code)}</a> ${orderBadge(r.order_status)}` : `<span class="badge b-gray" style="white-space:normal">${esc(r.note || r.status)}</span>`}</summary>${shareTable(r)}</details>`).join('') : '<div class="small muted">Belum ada laporan.</div>'}
+            <button type="button" class="btn btn-ghost btn-sm" id="share-run" style="margin-top:10px">↻ Jalankan penagihan mingguan sekarang</button></div>` : ''}
           <div class="card"><dl class="kv small"><dt>Member</dt><dd>${esc(l.user_name)}<div class="tiny muted">${esc(l.user_email)} · ${esc(l.user_phone)}</div></dd>
             <dt>Paket</dt><dd>${esc(l.product_name)}</dd><dt>Broker</dt><dd>${esc(l.broker)} · ${l.platform.toUpperCase()}</dd>
             <dt>Order</dt><dd>${orders.map((o) => `<a href="#/${l.requires_ib ? 'ib' : 'pesanan'}/${o.id}" class="mono">${esc(o.code)}</a> ${orderBadge(o.status)}`).join('<br>')}</dd></dl></div>
@@ -380,6 +434,19 @@
       const r = await busy($('#lf button[type=submit]'), () => api('/admin/licenses/' + l.id, { method: 'PUT', body: d }));
       toast(r.rebuilt ? 'Disimpan. File EA baru sedang di-compile.' : 'Disimpan'); render();
     };
+    const xf = $('#xf');
+    if (xf) {
+      $$('[data-x]', xf).forEach((b) => b.onclick = () => { const [mo, d] = b.dataset.x.split(','); xf.months.value = mo; xf.days.value = d; });
+      xf.onsubmit = async (e) => {
+        e.preventDefault();
+        const body = { months: Number(xf.months.value) || 0, days: Number(xf.days.value) || 0 };
+        if (!body.months && !body.days) return toast('Isi jumlah bulan atau hari', 'err');
+        const r = await busy($('button[type=submit]', xf), () => post(`/admin/licenses/${l.id}/extend`, body));
+        toast(`Diperpanjang s/d ${fmtDate(r.expires_at)}${r.build_id ? ', EA baru masuk antrean compile' : ''}`); render();
+      };
+    }
+    const sr = $('#share-run');
+    if (sr) sr.onclick = async () => { const r = await busy(sr, () => post('/admin/share/run')); toast(`${r.result.periods} laporan, ${r.result.invoices} tagihan, ${r.result.extended} diperpanjang`); render(); };
     const upb = $('#upb');
     if (upb) upb.onclick = async () => {
       const f = $('#upf').files[0];
@@ -890,30 +957,65 @@
   }
 
   // ------------------------------------------------------------------ products
-  const KINDS = { ea_ib: 'EA gratis (IB)', ib_vps: 'VPS pribadi + EA gratis (IB)', ib_vps_shared: 'VPS share dikelola admin + EA gratis (IB)', vps_ea_shared: 'VPS share dikelola admin + EA (bulanan)', vps_shared: 'VPS share dikelola admin saja (bulanan)', ea_lifetime: 'EA beli selamanya', ea_rent: 'EA sewa bulanan', vps_ea: 'VPS pribadi + EA (bulanan)', vps: 'VPS pribadi saja (bulanan)' };
+  const KINDS = { ea_rent: 'Sewa EA (harga per durasi)', ea_ib: 'EA gratis (IB)', ea_share: 'Sharing profit (komisi mingguan)', ea_trial: 'Trial (gratis, sekali per akun & member)',
+    ib_vps: 'VPS pribadi + EA gratis (IB)', ib_vps_shared: 'VPS share dikelola admin + EA gratis (IB)', vps_ea_shared: 'VPS share dikelola admin + EA (bulanan)', vps_shared: 'VPS share dikelola admin saja (bulanan)',
+    ea_lifetime: 'EA beli selamanya', vps_ea: 'VPS pribadi + EA (bulanan)', vps: 'VPS pribadi saja (bulanan)' };
+  const RENT_MONTHS = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 18, 24];
+  const parseP = (p) => { try { return p && p.prices ? JSON.parse(p.prices) : null; } catch { return null; } };
   async function productsPage() {
-    const { products } = await api('/admin/products');
+    const [{ products }, st] = await Promise.all([api('/admin/products'), api('/admin/stats')]);
+    const priceCell = (p) => {
+      const t = parseP(p);
+      if (p.billing === 'free' || p.billing === 'trial') return 'Gratis';
+      if (p.billing === 'share') return 'Komisi % (Pengaturan)';
+      if (t) return `${Object.keys(t).length} durasi<div class="tiny muted">${rupiah(t[1] || p.price)} /1 bln … ${rupiah(t[Math.max(...Object.keys(t).map(Number))])} /${durLabel(Math.max(...Object.keys(t).map(Number)))}</div>`;
+      return rupiah(p.price) + (p.billing === 'monthly' ? '/bln' : '');
+    };
     view.innerHTML = `${title('🏷️ Produk &amp; Harga', '<button class="btn btn-gold btn-sm" id="np">+ Produk</button>')}
+      ${st.prices_placeholder ? '<div class="alert warn small" style="margin-bottom:14px">Harga <b>Sewa EA</b> masih contoh (pola diskon). Klik <b>Edit</b> pada Sewa EA dan isi harga tiap durasi.</div>' : ''}
       <div class="table-wrap"><table><thead><tr><th>Urut</th><th>Nama</th><th>Jenis</th><th>Harga</th><th>Status</th><th></th></tr></thead><tbody>
-      ${products.map((p) => `<tr><td>${p.sort}</td><td><b>${esc(p.name)}</b><div class="tiny muted">${esc(p.description).slice(0, 90)}</div></td><td class="small">${KINDS[p.kind] || p.kind}</td>
-        <td class="nowrap">${p.billing === 'free' ? 'Gratis' : rupiah(p.price) + (p.billing === 'monthly' ? '/bln' : '')}</td>
+      ${products.map((p) => `<tr><td>${p.sort}</td><td><b>${esc(p.name)}</b> ${kindBadge(p.kind)}<div class="tiny muted">${esc(p.description).slice(0, 90)}</div></td><td class="small">${KINDS[p.kind] || p.kind}</td>
+        <td class="nowrap">${priceCell(p)}</td>
         <td>${p.active ? '<span class="badge b-green">tampil</span>' : '<span class="badge b-gray">disembunyikan</span>'}</td><td><button class="btn btn-ghost btn-sm" data-p="${p.id}">Edit</button></td></tr>`).join('')}</tbody></table></div>
       <p class="small muted" style="margin-top:12px">Klik <b>Edit</b> untuk mengubah nama, harga, deskripsi atau keunggulan. Perubahan langsung tampil di landing page dan member area; pesanan yang sudah dibuat tetap memakai harga saat order.
-      Diskon per durasi (mis. 12 bulan -25%) dan spesifikasi VPS diatur di <a href="#/pengaturan">Pengaturan</a>.</p>`;
+      Sewa EA punya harga sendiri per durasi. Paket VPS bulanan memakai durasi &amp; diskon di <a href="#/pengaturan">Pengaturan › Pembayaran</a>. Komisi sharing profit, jatuh tempo dan lama trial ada di <a href="#/pengaturan">Pengaturan › Paket</a>.</p>`;
     const edit = (p) => {
+      const t = parseP(p) || {};
+      const priceTable = (kind) => kind === 'ea_rent' ? `<div class="field"><label>Harga per durasi (Rp, kosong = durasi tidak dijual)</label>
+          <div class="grid" style="grid-template-columns:repeat(auto-fit,minmax(min(140px,100%),1fr));gap:8px">${RENT_MONTHS.map((mo) =>
+            `<label style="margin:0"><span class="tiny">${durLabel(mo)}</span><input data-pm="${mo}" type="number" min="0" step="1000" value="${t[mo] ?? ''}"></label>`).join('')}</div>
+          <div class="help">Harga 1 bulan dipakai sebagai dasar "hemat x%" di halaman order.</div></div>` : '';
       const m = modal(p ? 'Edit produk' : 'Produk baru', `<form id="pf">
         <div class="field"><label>Nama</label><input name="name" value="${esc(p?.name)}"></div>
         <div class="grid c2" style="gap:0 12px"><div class="field"><label>Jenis</label><select name="kind">${Object.entries(KINDS).map(([k, v]) => `<option value="${k}" ${p?.kind === k ? 'selected' : ''}>${v}</option>`).join('')}</select></div>
-        <div class="field"><label>Harga (Rp; bulanan = per bulan)</label><input name="price" type="number" min="0" step="1000" value="${p?.price ?? ''}"></div></div>
+        <div class="field" id="pf-price"><label>Harga (Rp; bulanan = per bulan)</label><input name="price" type="number" min="0" step="1000" value="${p?.price ?? ''}"></div></div>
+        <div id="pf-table">${priceTable(p?.kind || 'ea_ib')}</div>
         <div class="field"><label>Deskripsi</label><textarea name="description">${esc(p?.description)}</textarea></div>
         <div class="field"><label>Keunggulan (satu per baris)</label><textarea name="features" style="min-height:120px">${esc(p?.features)}</textarea></div>
+        <details style="margin-bottom:14px"><summary class="small" style="cursor:pointer;color:var(--gold)">English (website in English, optional)</summary>
+          <div class="field" style="margin-top:10px"><label>Name</label><input name="name_en" value="${esc(p?.name_en)}"></div>
+          <div class="field"><label>Description</label><textarea name="description_en">${esc(p?.description_en)}</textarea></div>
+          <div class="field"><label>Features (one per line)</label><textarea name="features_en">${esc(p?.features_en)}</textarea></div></details>
         <div class="grid c2" style="gap:0 12px"><div class="field"><label>Urutan</label><input name="sort" type="number" value="${p?.sort ?? 9}"></div>
         <div class="field"><label>&nbsp;</label><label class="row" style="color:var(--text)"><input type="checkbox" name="active" ${!p || p.active ? 'checked' : ''}> Tampilkan ke member</label></div></div>
         <button class="btn btn-gold btn-block" type="submit">Simpan</button></form>`, { wide: true });
-      $('#pf', m.el).onsubmit = async (e) => {
+      const f = $('#pf', m.el);
+      const sync = () => {
+        const k = f.kind.value;
+        if (!$('#pf-table', m.el).innerHTML.trim() || k !== 'ea_rent') $('#pf-table', m.el).innerHTML = priceTable(k);
+        $('#pf-price', m.el).classList.toggle('hidden', ['ea_rent', 'ea_ib', 'ea_share', 'ea_trial'].includes(k));
+      };
+      f.kind.onchange = sync; sync();
+      f.onsubmit = async (e) => {
         e.preventDefault();
-        const d = Object.fromEntries(new FormData(e.target)); d.active = !!d.active;
-        await busy($('button[type=submit]', e.target), () => api('/admin/products' + (p ? '/' + p.id : ''), { method: p ? 'PUT' : 'POST', body: d }));
+        const d = Object.fromEntries(new FormData(f)); d.active = !!d.active;
+        const cells = $$('[data-pm]', f);
+        if (cells.length) {
+          d.prices = {};
+          cells.forEach((c) => { const v = Number(c.value); if (v > 0) d.prices[c.dataset.pm] = Math.round(v); });
+          if (!Object.keys(d.prices).length) return toast('Isi minimal satu harga durasi', 'err');
+        }
+        await busy($('button[type=submit]', f), () => api('/admin/products' + (p ? '/' + p.id : ''), { method: p ? 'PUT' : 'POST', body: d }));
         m.close(); toast('Produk disimpan'); render();
       };
     };
@@ -1017,7 +1119,7 @@
       <label class="row nowrap" style="margin:0;color:var(--text)"><input type="checkbox" class="ib-act" ${b.active ? 'checked' : ''}> aktif</label></div>`;
     view.innerHTML = `${title('🛠️ Pengaturan')}
       <p class="small muted" style="margin:-6px 0 14px">Telegram, Facebook, Instagram &amp; TikTok ada di menu <a href="#/sosmed">📣 Media Sosial</a>.</p>
-      ${tabBar('settings', [['live', '📡 EA Live'], ['bayar', '💳 Pembayaran'], ['order', '⚙️ Order &amp; Member'], ['email', '✉️ Email'], ['promo', '📈 Promo'], ['arsip', '🗄️ EA GoldHunter']])}
+      ${tabBar('settings', [['live', '📡 EA Live'], ['bayar', '💳 Pembayaran'], ['paket', '💹 Paket'], ['order', '⚙️ Order &amp; Member'], ['email', '✉️ Email'], ['promo', '📈 Promo'], ['arsip', '🔗 Link IB']])}
       <form id="sf" class="grid" style="align-items:start;grid-template-columns:repeat(auto-fit,minmax(min(380px,100%),1fr))">
         <div class="card" style="grid-column:1/-1" data-tab="bayar"><h3>Pembayaran</h3>
           <label>Rekening / e-wallet tujuan transfer (tampil ke member saat bayar)</label>
@@ -1031,13 +1133,31 @@
                 <div class="field"><label>Barcode / QR alamat (PNG / JPG)</label><input type="file" id="usdt-qr-file" accept="image/png,image/jpeg,image/webp">
                   <div class="help">Ambil dari aplikasi wallet / exchange (menu Receive / Deposit USDT TRC20). Langsung tersimpan saat dipilih.</div></div></div>
               <div id="usdt-qr-box">${s.usdt_qr_set ? `<img src="/api/usdt-qr?t=${Date.now()}" alt="QR USDT" class="usdt-qr" onerror="this.replaceWith(Object.assign(document.createElement('div'),{className:'tiny muted',textContent:'QR tersimpan; aktifkan USDT untuk menampilkannya.'}))"><button type="button" class="btn btn-ghost btn-sm" id="usdt-qr-del" style="display:block;margin-top:8px">Hapus QR</button>` : '<div class="tiny muted">Belum ada QR.</div>'}</div>
-            </div></div>
+            </div>
+            <label class="row small" style="color:var(--text);margin:4px 0 10px;align-items:flex-start"><input type="checkbox" name="usdt_auto" ${s.usdt_auto !== '0' ? 'checked' : ''} style="margin-top:4px">
+              <span><b>Cek otomatis di blockchain</b> (TronGrid): tiap tagihan USDT mendapat nominal unik (+0,01); transfer masuk dengan nominal tepat langsung melunasi tagihan &amp; memproses lisensi tanpa admin.</span></label>
+            <div class="field"><label>API key TronGrid (opsional, untuk batas cek lebih besar) ${s.trongrid_api_key_set ? '<span class="badge b-green">tersimpan</span>' : ''}</label>
+              <input name="trongrid_api_key" type="password" autocomplete="new-password" data-lpignore="true" data-1p-ignore placeholder="${s.trongrid_api_key_set ? 'kosongkan = tidak diubah' : 'dari trongrid.io (gratis)'}">
+              ${s.trongrid_api_key_set ? '<label class="row tiny" style="margin-top:6px;color:var(--muted)"><input type="checkbox" name="trongrid_api_key_clear"> hapus API key</label>' : ''}</div>
+            ${s.usdt_scan_last ? `<div class="tiny muted">Cek terakhir: ${fmtDateTime(s.usdt_scan_last.at)} · ${s.usdt_scan_last.ok ? `${s.usdt_scan_last.open || 0} tagihan terbuka, ${s.usdt_scan_last.seen || 0} transfer terbaca, ${s.usdt_scan_last.matched || 0} cocok` : `<span style="color:#ff8b95">gagal: ${esc(s.usdt_scan_last.error || '')}</span>`}</div>` : ''}
+          </div>
           <div class="grid c2" style="gap:0 12px"><div class="field"><label>Batas waktu bayar (jam)</label><input name="pay_deadline_hours" type="number" min="1" value="${esc(s.pay_deadline_hours)}"></div>
           <div class="field"><label>Kode unik</label><input value="Selalu aktif: 3 digit, berbeda tiap order (30 hari)" disabled></div></div>
           <h3 style="margin-top:8px">Durasi sewa &amp; diskon</h3>
+          <p class="help" style="margin-top:-6px">Untuk paket VPS bulanan. <b>Sewa EA</b> punya harga sendiri per durasi (Produk &amp; Harga).</p>
           <div class="field"><label>Pilihan durasi (bulan, pisahkan koma)</label><input name="durations" value="${s.durations.join(', ')}"></div>
           <div class="field"><label>Diskon per durasi (format bulan=persen, pisahkan koma)</label><input name="discounts" value="${Object.entries(s.discounts).map(([m, d]) => `${m}=${d}`).join(', ')}">
             <div class="help">Contoh: <span class="mono">12=25</span> berarti sewa 12 bulan diskon 25%.</div></div></div>
+        <div class="card" style="grid-column:1/-1" data-tab="paket"><h3>💹 Sharing profit</h3>
+          <div class="grid" style="grid-template-columns:repeat(auto-fit,minmax(min(200px,100%),1fr));gap:0 14px">
+            <div class="field"><label>Komisi dari profit mingguan (%)</label><input name="share_commission_pct" type="number" min="0" max="90" step="0.5" value="${esc(s.share_commission_pct || 10)}"></div>
+            <div class="field"><label>Jatuh tempo tagihan (hari setelah Minggu)</label><input name="share_due_days" type="number" min="1" max="14" value="${esc(s.share_due_days || 3)}"></div>
+            <div class="field"><label>Tagihan minimum (Rp, 0 = semua profit ditagih)</label><input name="share_min_idr" type="number" min="0" step="1000" value="${esc(s.share_min_idr || 0)}"></div>
+          </div>
+          <p class="help">Tiap hari Minggu (tugas harian 08:00 WIB) sistem menghitung profit tertutup EA per chart dari laporan EA (7 hari Minggu–Sabtu sebelumnya), membuat laporan + tagihan komisi, lalu email + notifikasi member. Minggu tanpa profit: laporan saja, tanpa tagihan. Lisensi (tanggal habis di EA) = jatuh tempo tagihan; lunas → otomatis lanjut ke minggu berikutnya dan EA di-compile ulang. Belum lunas → EA berhenti membuka posisi baru sampai lunas.</p>
+          <h3 style="margin-top:14px">🧪 Trial</h3>
+          <div class="field" style="max-width:260px"><label>Lama trial (hari)</label><input name="trial_days" type="number" min="1" max="60" value="${esc(s.trial_days || 7)}"></div>
+          <p class="help">Trial langsung aktif tanpa admin; sekali per nomor akun dan per member.</p></div>
         <div class="card" data-tab="order"><h3>Otomatisasi</h3>
           <label class="row small" style="color:var(--text);margin-bottom:10px;align-items:flex-start"><input type="checkbox" name="auto_complete_ea" ${s.auto_complete_ea === '1' ? 'checked' : ''} style="margin-top:4px">
             <span><b>Selesai otomatis</b> untuk order EA tanpa VPS begitu file EA selesai di-compile (member &amp; admin dapat email).</span></label>
@@ -1052,7 +1172,8 @@
             <div class="help">Ditampilkan ke member &amp; landing page beserta konversi Rupiah otomatis (×100 = USC).</div></div>
           <div class="field"><label>Spesifikasi VPS (ditampilkan ke member)</label><input name="vps_spec" value="${esc(s.vps_spec)}" placeholder="RAM 2 GB, 2 core, disk 40 GB, Windows"></div>
           <div class="field"><label>WhatsApp admin (ditampilkan ke member)</label><input name="whatsapp" value="${esc(s.whatsapp)}" placeholder="08xxxxxxxxxx"></div>
-          <div class="field"><label>Pengingat sebelum masa sewa habis (hari, pisahkan koma)</label><input name="reminder_days" value="${s.reminder_days.join(', ')}"></div>
+          <div class="field"><label>Pengingat sebelum masa sewa habis (hari, pisahkan koma)</label><input name="reminder_days" value="${s.reminder_days.join(', ')}">
+            <div class="help">Email + notifikasi member (sewa, VPS, trial). Ditambah pemberitahuan di hari habis dan email perpanjangan sehari sesudahnya. EA sendiri menampilkan hitung mundur dan peringatan tiap jam di 24 jam terakhir.</div></div>
           <label class="row small" style="color:var(--text);margin-bottom:8px"><input type="checkbox" name="auto_rebuild_on_version" ${s.auto_rebuild_on_version !== '0' ? 'checked' : ''}> Compile ulang semua lisensi aktif otomatis saat versi EA (#property version) naik</label>
           <label class="row small" style="color:var(--text)"><input type="checkbox" name="mt4_enabled" ${s.mt4_enabled === '1' ? 'checked' : ''}> MT4 bisa dipesan (aktifkan setelah EA versi MQL4 ada)</label></div>
         <div class="card" style="grid-column:1/-1" id="email-card" data-tab="email"><div class="row between"><h3 style="margin:0">✉️ Email (notifikasi ke member)</h3>
@@ -1160,7 +1281,9 @@
       e.preventDefault();
       const d = Object.fromEntries(new FormData(e.target));
       const body = {
-        usdt_enabled: d.usdt_enabled ? '1' : '0', usdt_address: (d.usdt_address || '').trim(),
+        usdt_enabled: d.usdt_enabled ? '1' : '0', usdt_address: (d.usdt_address || '').trim(), usdt_auto: d.usdt_auto ? '1' : '0',
+        trongrid_api_key: secretVal('trongrid_api_key'), trongrid_api_key_clear: !!d.trongrid_api_key_clear,
+        share_commission_pct: d.share_commission_pct, share_due_days: d.share_due_days, share_min_idr: d.share_min_idr, trial_days: d.trial_days,
         bank_list: $$('.bkr').map((r) => ({ bank: $('.bk-bank', r).value.trim(), number: $('.bk-num', r).value.trim(), name: $('.bk-name', r).value.trim(), active: $('.bk-act', r).checked }))
           .filter((x) => x.bank || x.number),
         pay_deadline_hours: d.pay_deadline_hours,
