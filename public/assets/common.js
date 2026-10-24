@@ -118,7 +118,16 @@ const GHG = (() => {
   const licenseBadge = (s) => `<span class="badge ${(LIC[s] || ['b-gray'])[0]}">${esc((LIC[s] || [0, s])[1])}</span>`;
   const BUILD = { queued: ['b-orange', 'Antre compile'], building: ['b-blue', 'Sedang compile…'], done: ['b-green', 'Siap'], failed: ['b-red', 'Gagal'], replaced: ['b-gray', 'Diganti'] };
   const buildBadge = (s) => `<span class="badge ${(BUILD[s] || ['b-gray'])[0]}">${esc((BUILD[s] || [0, s])[1])}</span>`;
-  const billingText = (p, months) => p.billing === 'free' ? 'Gratis' : p.billing === 'lifetime' ? 'Sekali bayar, selamanya' : `${months} bulan`;
+  // 1-11 months, 1 year, 1.5 years, 2 years
+  const durLabel = (m) => { m = Number(m); return m === 18 ? (EN() ? '1.5 years' : '1,5 tahun') : m >= 12 && m % 12 === 0 ? `${m / 12} ${EN() ? (m === 12 ? 'year' : 'years') : 'tahun'}` : `${m} ${EN() ? (m === 1 ? 'month' : 'months') : 'bulan'}`; };
+  const billingText = (p, months) => p.kind === 'share' ? 'Tagihan mingguan sharing profit' : p.billing === 'free' ? 'Gratis' : p.billing === 'trial' ? 'Trial gratis'
+    : p.billing === 'share' ? 'Sharing profit (mingguan)' : p.billing === 'lifetime' ? 'Sekali bayar, selamanya' : months ? durLabel(months) : '-';
+  // licence type as the EA panel shows it
+  const KIND_LABEL = { ea_rent: 'SEWA', ea_ib: 'FREE IB', ea_share: 'SHARING PROFIT', ea_trial: 'TRIAL', ea_lifetime: 'LIFETIME', vps_ea: 'SEWA + VPS', vps_ea_shared: 'SEWA + VPS',
+    ib_vps: 'FREE IB + VPS', ib_vps_shared: 'FREE IB + VPS', vps: 'VPS', vps_shared: 'VPS' };
+  const kindBadge = (k) => KIND_LABEL[k] ? `<span class="badge ${k === 'ea_share' ? 'b-green' : k === 'ea_trial' ? 'b-blue' : k && k.indexOf('ib') >= 0 ? 'b-gold' : 'b-gray'}">${KIND_LABEL[k]}</span>` : '';
+  const PAY_LABEL = { bank: 'Transfer bank', usdt: 'USDT TRC20', gateway: 'QRIS / VA' };
+  const usd = (v) => `${v < 0 ? '-' : ''}$${Math.abs(Number(v) || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
   const platformText = (p) => (p || '').toUpperCase();
 
   function qrSvg(text, size = 200) {
@@ -150,6 +159,6 @@ const GHG = (() => {
 
   return {
     $, $$, esc, rupiah, fmtDate, fmtDateTime, ago, api, toast, busy, modal, confirmBox, copy, readProof,
-    orderBadge, licenseBadge, buildBadge, billingText, platformText, qrSvg, logout, fillCapital, capitalLine,
+    orderBadge, licenseBadge, buildBadge, billingText, platformText, qrSvg, logout, fillCapital, capitalLine, durLabel, kindBadge, KIND_LABEL, PAY_LABEL, usd,
   };
 })();
