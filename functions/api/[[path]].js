@@ -534,7 +534,7 @@ route('POST', '/ea/live', 'public', async ({ request, env, waitUntil, base }) =>
   const label = eaLabel({ ...row, setup_name: setupName || row.setup_name });
   const msgs = [];
   const evs = Array.isArray(b.events) ? b.events.slice(0, 50) : [];
-  const TITLE = { kantong: '🟡 KANTONG PROFIT', pengaman: '🛑 PENGAMAN EQUITY', dd: '⚠️ FLOATING RUGI BESAR', layer: '⚠️ BASKET PANJANG', reduction: '🔁 REDUCTION', pause: '⏸ PAUSE' };
+  const TITLE = { kantong: '🟡 KANTONG PROFIT', pengaman: '🛑 PENGAMAN EQUITY', dd: '⚠️ FLOATING RUGI BESAR', layer: '⚠️ BASKET PANJANG', reduction: '🔁 REDUCTION', pause: '⏸ PAUSE', trailing: '🪂 TRAILING PROFIT' };
   for (const e of evs) {
     const kind = str(e.kind, 12);
     if (!TITLE[kind] && kind !== 'seri') continue;
