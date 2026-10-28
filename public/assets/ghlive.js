@@ -72,6 +72,7 @@ const GHL = (() => {
         ${tile(TT('DD terdalam', 'Max DD'), dd, v.max_dd_pct ? 'neg' : '')}
       </div>
       <div class="ghl-meta"><span>${TT('Basket terpanjang', 'Longest basket')} <b>${num(v.max_layers || 0)} layer</b></span><span>${TT('Seri selesai', 'Closed series')} <b>${num(v.series || 0)}</b></span></div>
+      ${v.verified ? `<div class="ghl-ver">✓ ${TT('Akun riil MT5 · terverifikasi', 'Real MT5 account · verified')} · ${num(v.deals)} ${TT('transaksi', 'deals')}${v.server ? ' · ' + esc(v.server) : ''}</div>` : ''}
       ${opts.cta === false ? '' : `<span class="ghl-cta">${TT('Lihat laporan live', 'Open live report')} <span aria-hidden="true">→</span></span>`}
     </a>`;
   }
@@ -119,6 +120,7 @@ const GHL = (() => {
   .ghl-tile b small{font-size:.72rem;font-weight:700;opacity:.85}
   .ghl-meta{display:flex;justify-content:space-between;gap:8px;flex-wrap:wrap;font-size:.76rem;color:var(--muted)}
   .ghl-meta b{color:var(--text)}
+  .ghl-ver{margin-top:8px;font-size:.74rem;font-weight:600;color:#6ee7a2;border:1px solid rgba(46,204,113,.35);background:rgba(46,204,113,.07);border-radius:9px;padding:5px 9px;overflow-wrap:anywhere}
   .ghl-cta{display:flex;align-items:center;justify-content:center;gap:6px;margin-top:2px;padding:9px 12px;border-radius:12px;font-weight:800;font-size:.84rem;color:#1a1306;background:linear-gradient(90deg,#d4a017,#f5c542);transition:filter .2s}
   .ghl-card:hover .ghl-cta{filter:brightness(1.08)}
   .ghl-tabs{display:flex;gap:8px;flex-wrap:wrap;justify-content:center;margin-bottom:16px}

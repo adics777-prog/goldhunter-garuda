@@ -381,7 +381,7 @@ function eaSetupView(r, t, cfg) {
   const dayV = sd === td ? (total == null ? 0 : total) : eaNum(d.day);
   const monV = sd && sd.slice(0, 7) === td.slice(0, 7) && total != null ? total : eaNum(d.month);
   return {
-    id: r.id, symbol: r.symbol, broker_symbol: r.broker_symbol, label: eaLabel(r), setup_name: r.setup_name || '', budget: r.budget || 0,
+    id: r.id, symbol: r.symbol, broker_symbol: r.broker_symbol, server: r.server || '', connected_at: r.created_at || 0, label: eaLabel(r), setup_name: r.setup_name || '', budget: r.budget || 0,
     modal_kind: r.modal_override > 0 ? 'set' : r.budget > 0 ? 'budget' : 'account', lot_modal: lotCap, lot_modal_usd: eaUsd(lotCap, r.currency),
     budget_usd: r.budget > 0 ? eaUsd(r.budget, r.currency) : null, magic: r.magic, account: maskAccount(r.login), currency: r.currency,
     since: r.since, days: r.since ? Math.max(0, Math.floor((t - r.since) / DAY)) : 0, running: r.since ? t - r.since : 0,
@@ -665,11 +665,13 @@ route('GET', '/live', 'public', async ({ env, url, waitUntil, base }) => {
   const { results: rows } = await env.DB.prepare(`SELECT * FROM ea_setups WHERE ${pw.sql}`).bind(...pw.binds).all();
   rows.sort(EA_SETUP_ORDER);
   const d30 = wibDay(t - 29 * DAY);
-  const [{ results: days }, { results: ser }] = rows.length ? await Promise.all([
+  const [{ results: days }, { results: ser }, { results: dls }] = rows.length ? await Promise.all([
     env.DB.prepare(`SELECT d.setup_id, d.day, d.profit, d.total_end, d.tot_ok, d.since_at FROM ea_setup_days d JOIN ea_setups s ON s.id=d.setup_id WHERE ${spw.sql} AND d.day >= ? ORDER BY d.day`).bind(...spw.binds, d30).all(),
     env.DB.prepare(`SELECT e.setup_id, COUNT(*) AS n, COALESCE(SUM(CASE WHEN e.profit>0 THEN 1 ELSE 0 END),0) AS wins FROM ea_series e JOIN ea_setups s ON s.id=e.setup_id
         WHERE ${spw.sql} AND e.closed_at >= s.since GROUP BY e.setup_id`).bind(...spw.binds).all(),
-  ]) : [{ results: [] }, { results: [] }];
+    env.DB.prepare(`SELECT d.setup_id, COUNT(*) AS n, COALESCE(SUM(d.profit + d.swap + d.commission + d.fee),0) AS net FROM ea_setup_deals d JOIN ea_setups s ON s.id=d.setup_id
+        WHERE ${spw.sql} AND d.time >= s.since GROUP BY d.setup_id`).bind(...spw.binds).all(),
+  ]) : [{ results: [] }, { results: [] }, { results: [] }];
   const setups = rows.map((r) => {
     const v = eaSetupView(r, t, cfg);
     const sr = ser.find((x) => x.setup_id === r.id) || { n: 0, wins: 0 };
@@ -677,7 +679,9 @@ route('GET', '/live', 'public', async ({ env, url, waitUntil, base }) => {
     // the record's first day counts only what closed since `since`
     const dp = (x) => (x.day !== sinceDay ? x.profit : x.tot_ok && x.since_at === r.since ? x.total_end : (x.day === wibDay(t) ? v.day : x.profit));
     const p0 = days.find((x) => x.setup_id === r.id && x.day === yd);
+    const dl = dls.find((x) => x.setup_id === r.id) || { n: 0, net: 0 };
     return { ...v, ...ydOf(v, p0 && p0.day >= sinceDay ? dp(p0) : null), preset: hasPreset(r), series: sr.n, wins: sr.wins,
+      deals: dl.n, verified: dl.n > 0 && v.total != null && Math.abs(Math.round(dl.net * 100) / 100 - v.total) < 0.02,
       spark: days.filter((x) => x.setup_id === r.id && x.day >= sinceDay).map((x) => [x.day, dp(x)]) };
   });
   return json({ ok: true, configured: !!cfg.key, prepared, server_time: t, offline_min: cfg.offlineMin, setups });

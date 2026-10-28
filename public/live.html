@@ -67,6 +67,13 @@
   .ghead{font-size:1.05rem;margin:22px 0 10px}
   .dhead h1{font-size:clamp(1.3rem,4vw,1.8rem);margin:14px 0 4px;display:flex;align-items:center;gap:10px;flex-wrap:wrap}
   .dhead p{margin:0 0 14px}
+  .proof{border:1px solid rgba(46,204,113,.35);border-radius:var(--radius);background:linear-gradient(180deg,rgba(46,204,113,.07),transparent),var(--card);padding:16px 18px;margin:0 0 18px}
+  .proof h2{font-size:1.02rem;margin:0 0 10px}
+  .proof-grid{display:grid;grid-template-columns:1fr;gap:10px}
+  @media(min-width:760px){.proof-grid{grid-template-columns:repeat(4,minmax(0,1fr))}}
+  .proof-grid>div{border:1px solid var(--line);border-radius:12px;background:var(--bg-2);padding:10px 12px;font-size:.84rem;line-height:1.5;min-width:0;overflow-wrap:anywhere}
+  .proof-grid b{display:block;margin-bottom:2px}
+  .proof .kv{font-size:.86rem}
   @media (max-width:600px){ .hide-sm{display:none} th,td{padding:10px 8px} }
 </style>
 </head>
@@ -79,6 +86,15 @@
       <p data-en="Showcase accounts chosen by HQ, each running GOLD HUNTER GARUDA on a real trading account and reporting every minute: profit since the start, % of capital, deepest drawdown and the baskets running right now. The numbers come from the EA itself and are not edited.">Akun contoh pilihan pusat, masing-masing menjalankan GOLD HUNTER GARUDA di akun trading nyata dan melapor tiap menit: profit sejak mulai, persen dari modal, drawdown terdalam dan basket yang sedang berjalan. Angkanya dikirim EA sendiri dan tidak diedit.</p>
       <p class="small" style="margin-top:10px"><a href="/#aman" data-en="🛡️ See the EA&#x27;s layers of protection →">🛡️ Lihat lapisan pengaman EA →</a></p>
     </div>
+    <div class="proof">
+      <h2 data-en="✓ Real accounts, connected straight from MT5 to the GOLD HUNTER GARUDA web">✓ Akun riil, terhubung langsung dari MT5 ke web GOLD HUNTER GARUDA</h2>
+      <div class="proof-grid">
+        <div><b data-en="📡 Sent by the EA itself">📡 Dikirim EA sendiri</b><span data-en="The EA running in MT5 on a real broker account reports every minute over an encrypted connection with its own key. Nobody types these numbers in.">EA yang berjalan di MT5 pada akun broker nyata melapor tiap menit lewat koneksi terenkripsi dengan kuncinya sendiri. Tidak ada angka yang diketik manual.</span></div>
+        <div><b data-en="🏦 Real broker server">🏦 Server broker asli</b><span data-en="Each setup shows the broker's live server it trades on. The account number is masked for privacy.">Setiap setup menampilkan server live broker tempat ia trading. Nomor akun disamarkan untuk privasi.</span></div>
+        <div><b data-en="🧾 Checked deal by deal">🧾 Dicocokkan per transaksi</b><span data-en="Every closed MT5 deal (ticket, lot, price, profit, swap, commission) is stored. The profit shown must equal their sum to the cent before it gets the ✓ verified mark.">Setiap deal MT5 yang tertutup (tiket, lot, harga, profit, swap, komisi) disimpan. Profit yang tampil harus sama dengan jumlahnya sampai ke sen sebelum mendapat tanda ✓ terverifikasi.</span></div>
+        <div><b data-en="🔍 Check it yourself">🔍 Cek sendiri</b><span data-en="Open a setup to see its full trading history, download it as CSV, and see when its last data arrived. Members can download its preset for free.">Buka satu setup untuk melihat riwayat trading lengkap, unduh sebagai CSV, dan lihat kapan data terakhirnya masuk. Member bisa mengunduh presetnya gratis.</span></div>
+      </div>
+    </div>
     <div class="status" id="status"><span><span class="live-dot"></span><span data-en="Loading…">Memuat…</span></span></div>
     <div class="ghl-tabs" id="pairtabs"></div>
     <div id="groups"></div>
@@ -88,6 +104,7 @@
     <a href="/live" class="btn btn-ghost btn-sm" id="back" data-en="← All EAs">← Semua EA</a>
     <div class="dhead" id="dhead"></div>
     <div class="status" id="dstatus"></div>
+    <div class="proof" id="dproof"></div>
     <div class="tiles" id="tiles"></div>
     <div class="cards" id="cards"></div>
     <div class="box" id="params"></div>
@@ -107,7 +124,7 @@
 <script src="/assets/i18n.js?v=489e4256"></script>
 <script src="/assets/site.js?v=52bb80aa"></script>
 <script src="/assets/common.js?v=ed3ae07d"></script>
-<script src="/assets/ghlive.js?v=82fb014c"></script>
+<script src="/assets/ghlive.js?v=40b06740"></script>
 <script>
 (() => {
   const { $, fmtDateTime, fmtDate, ago } = GHG;
@@ -193,6 +210,15 @@
       } catch (e) { alert(e.message); }
     };
     $('#dstatus').innerHTML = `<span><span class="live-dot ${v.online ? 'on' : ''}"></span><b>${v.online ? 'ONLINE' : T('TIDAK MENGIRIM DATA', 'NOT REPORTING')}</b> · ${esc(v.status || '')}</span><span class="small muted">${T('data terakhir', 'last data')} ${esc(ago(v.at))}</span>`;
+    const ck0 = d.check || {};
+    $('#dproof').innerHTML = `<h2>✓ ${T('Bukti akun riil', 'Real account proof')}</h2><dl class="kv">
+      <dt>${T('Terhubung', 'Connected')}</dt><dd style="font-family:inherit">MT5 → ${T('web GOLD HUNTER GARUDA, laporan otomatis tiap menit', 'GOLD HUNTER GARUDA web, automatic report every minute')}</dd>
+      ${v.server ? `<dt>${T('Server broker', 'Broker server')}</dt><dd>${esc(v.server)}</dd>` : ''}
+      <dt>${T('Akun', 'Account')}</dt><dd>${esc(v.account)} <span class="small muted" style="font-family:inherit">(${T('disamarkan', 'masked')})</span> · ${esc(v.broker_symbol || v.symbol)} · magic ${esc(String(v.magic))}</dd>
+      <dt>${T('Data terakhir', 'Last data')}</dt><dd style="font-family:inherit">${esc(fmtDateTime(v.at))} · ${esc(ago(v.at))} · EA v${esc(v.version)}</dd>
+      ${v.connected_at ? `<dt>${T('Melapor sejak', 'Reporting since')}</dt><dd style="font-family:inherit">${esc(fmtDateTime(v.connected_at))}</dd>` : ''}
+      <dt>${T('Riwayat', 'History')}</dt><dd style="font-family:inherit">${ck0.deals ? (ck0.ok ? `<span class="pos">✓ ${T('cocok sampai ke sen', 'matches to the cent')}</span> · ${num(ck0.deals)} ${T('transaksi MT5', 'MT5 deals')} = ${usd(toUsd(ck0.net, cur))}` : `${num(ck0.deals)} ${T('transaksi, sedang disinkronkan', 'deals, syncing')}`) : T('sedang dikirim EA', 'being sent by the EA')} · <a href="#hist">${T('lihat riwayat', 'see history')}</a></dd>
+    </dl>`;
     const st = v.stats || { n: 0, wins: 0, dur: 0, maxpos: 0 };
     $('#tiles').innerHTML = `
       <div class="tile"><div class="k">${T('Profit sejak mulai', 'Profit since start')}</div><div class="v ${cls(v.total_usd)}">${v.total_usd == null ? T('menghitung…', 'counting…') : usd(v.total_usd)}</div><div class="s ${cls(v.total_pct)}">${v.total_pct == null ? '' : pct(v.total_pct) + ' ' + (v.modal_kind === 'budget' ? T('dari anggaran', 'of the budget') : T('dari modal', 'of capital'))}</div></div>
