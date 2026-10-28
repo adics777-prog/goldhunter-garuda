@@ -506,10 +506,11 @@ route('POST', '/ea/live', 'public', async ({ request, env, waitUntil, base }) =>
   const ownStart = ownStart0 > 1e9 && lic && lic.product_kind === 'ea_share' ? Math.max(ownStart0, lic.created_at || 0) : ownStart0;
   if (!row.since_manual && ownStart > 1e9 && ownStart < t && ownStart < row.since - 60) {
     await env.DB.batch([
-      env.DB.prepare('UPDATE ea_setups SET since=?, total=0, acct_total=0, total_ok=0 WHERE id=?').bind(ownStart, row.id),
+      env.DB.prepare('UPDATE ea_setups SET since=?, total=0, acct_total=0, total_ok=0, deal_cur=-1 WHERE id=?').bind(ownStart, row.id),
       env.DB.prepare('DELETE FROM ea_setup_deals WHERE setup_id=?').bind(row.id),
     ]);
     row.since = ownStart;
+    row.deal_cur = -1;
   }
   const totalOk = row.since > 0 && int(b.since_used) === row.since ? 1 : 0;
   const day = wibDay(t);
@@ -556,8 +557,19 @@ route('POST', '/ea/live', 'public', async ({ request, env, waitUntil, base }) =>
     if (lines.length) await env.DB.prepare(`INSERT INTO ea_setup_inputs (setup_id, set_text, version, updated_at) VALUES (?,?,?,?)
         ON CONFLICT(setup_id) DO UPDATE SET set_text=excluded.set_text, version=excluded.version, updated_at=excluded.updated_at`).bind(row.id, lines.join('\n'), snap.version, t).run();
   }
-  const dlast = await env.DB.prepare('SELECT MAX(time) AS m FROM ea_setup_deals WHERE setup_id=? AND time >= ?').bind(row.id, row.since || 0).first();
-  const dealLast = dlast && dlast.m ? dlast.m : Math.max(0, (row.since || 0) - 1);
+  // where the EA sends its deals from: EA v3.29+ says where its list starts (deal_from); the cursor only moves on when
+  // that is not after the cursor, so a gap (record restarted, EA restarted) is always filled from the cursor first
+  const s0 = Math.max(0, (row.since || 0) - 1);
+  let dealLast;
+  if (b.deal_from != null) {
+    let cur = row.deal_cur == null || row.deal_cur < s0 ? s0 : row.deal_cur;
+    if (deals.length && int(b.deal_from) <= cur) cur = Math.max(cur, ...deals.map((x) => int(x.tm)));
+    if (cur !== row.deal_cur) await env.DB.prepare('UPDATE ea_setups SET deal_cur=? WHERE id=?').bind(cur, row.id).run();
+    dealLast = cur;
+  } else {
+    const dlast = await env.DB.prepare('SELECT MAX(time) AS m FROM ea_setup_deals WHERE setup_id=? AND time >= ?').bind(row.id, row.since || 0).first();
+    dealLast = dlast && dlast.m ? dlast.m : s0;
+  }
   const label = eaLabel({ ...row, setup_name: setupName || row.setup_name });
   const msgs = [];
   const evs = Array.isArray(b.events) ? b.events.slice(0, 50) : [];
@@ -566,6 +578,9 @@ route('POST', '/ea/live', 'public', async ({ request, env, waitUntil, base }) =>
     const kind = str(e.kind, 12);
     if (!TITLE[kind] && kind !== 'seri') continue;
     const at = int(e.at) || t, sd = str(e.side, 4).toUpperCase(), profit = eaNum(e.profit), positions = int(e.positions) || 0, lots = eaNum(e.lots), dur = int(e.duration) || 0, text = str(e.text, 300);
+    // "large floating loss" only from 10% of the setup's capital (older EAs warned from 1%)
+    const cap = budget > 0 ? budget : snap.balance;
+    if (kind === 'dd' && cap > 0 && -profit < cap * 0.1) continue;
     if (kind === 'seri') {
       await env.DB.batch([
         env.DB.prepare('INSERT INTO ea_series (closed_at, side, positions, lots, profit, duration, currency, symbol, setup_id) VALUES (?,?,?,?,?,?,?,?,?)').bind(at, sd, positions, lots, profit, dur, snap.currency, sym, row.id),
@@ -780,7 +795,7 @@ route('PUT', '/admin/ea/setups/:id', 'admin', async ({ request, env, params }) =
   await env.DB.prepare(`UPDATE ea_setups SET label=?, visible=?, sort=?, since=?, showcase=?, modal_override=?${restart ? ', since_manual=1, total=0, acct_total=0, total_ok=0, max_dd_pct=0, min_float=0, max_layers=0' : ''} WHERE id=?`)
     .bind(str(b.label, 60), b.visible ? 1 : 0, int(b.sort) || 0, since, sc, mo, r.id).run();
   if (restart) {
-    await env.DB.prepare('DELETE FROM ea_setup_deals WHERE setup_id=?').bind(r.id).run();
+    await env.DB.batch([env.DB.prepare('DELETE FROM ea_setup_deals WHERE setup_id=?').bind(r.id), env.DB.prepare('UPDATE ea_setups SET deal_cur=-1 WHERE id=?').bind(r.id)]);
     // deepest DD / floating / longest basket rebuilt from the daily rows inside the new period
     const agg = await env.DB.prepare('SELECT COALESCE(MAX(max_dd_pct),0) AS dd, COALESCE(MIN(min_float),0) AS mf, COALESCE(MAX(max_layers),0) AS ml FROM ea_setup_days WHERE setup_id=? AND day >= ?')
       .bind(r.id, wibDay(since)).first();
