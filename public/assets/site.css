@@ -461,3 +461,15 @@ body.site{overflow-x:hidden;font-size:15.5px;line-height:1.65}
 .page-hero .ghsim{margin:26px auto 0}
 @media (max-width:520px){.ghsim-cap{padding:9px 11px}.ghsim-cap-txt{font-size:.84rem}}
 @media (prefers-reduced-motion:reduce){.ghsim-cap-txt.in{animation:none}}
+/* landing #mode: TREN MURNI wide card + EMA TREN vs TREN MURNI comparison */
+.mode-card.mc-wide{grid-column:1/-1}
+.mc-body{display:flex;flex-direction:column;gap:10px;min-width:0}
+@media (min-width:900px){.mode-card.mc-wide{display:grid;grid-template-columns:minmax(0,300px) minmax(0,1fr);gap:18px;align-items:start}.mc-wide .mc-art svg{height:120px}}
+.mcmp{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:1px;background:var(--line);border:1px solid var(--line);border-radius:12px;overflow:hidden;font-size:.8rem}
+.mcmp>div{background:var(--bg-2);padding:8px 10px;min-width:0;overflow-wrap:anywhere}
+.mcmp-k{grid-column:1/-1;color:var(--gold);font-weight:700;font-size:.68rem;letter-spacing:.4px;text-transform:uppercase;padding:6px 10px 4px!important;background:var(--card)!important}
+.mcmp-k.head{display:none}
+.mcmp-v{color:var(--text);line-height:1.45}
+.mcmp-v.head{font-weight:800;font-size:.82rem;background:var(--card)!important}
+.mcmp-v.tm{background:linear-gradient(180deg,rgba(77,163,255,.08),rgba(77,163,255,.03)),var(--bg-2)}
+@media (min-width:640px){.mcmp{grid-template-columns:minmax(0,170px) minmax(0,1fr) minmax(0,1fr)}.mcmp-k{grid-column:auto;display:flex;align-items:center;padding:8px 10px!important;text-transform:none;font-size:.76rem;letter-spacing:0}.mcmp-k.head{display:block}}
