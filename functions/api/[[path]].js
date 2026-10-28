@@ -718,7 +718,7 @@ route('GET', '/live/:id/preset', 'member', async ({ env, user, params }) => {
   const s = await getSettings(env);
   const r = await env.DB.prepare('SELECT * FROM ea_setups WHERE id=?').bind(int(params.id)).first();
   if (!r || (!eaIsPublic(s, r) && user.role !== 'admin')) fail(404, 'Setup tidak ditemukan');
-  if (user.role !== 'admin' && !(await hasActiveEaLicence(env, user))) fail(403, 'Preset bisa diunduh selama Anda punya lisensi EA aktif (Sewa, Trial, Free IB atau Sharing Profit)');
+  // free for every logged-in member (no licence needed); visitors are sent to the login page by the page itself
   const inp = await liveSetupInputs(env, r);
   if (!inp) fail(404, 'Preset setup ini belum tersedia (cadangan chart VPS belum masuk). Coba lagi nanti.');
   const v = eaSetupView(r, now(), eaCfg(s));
