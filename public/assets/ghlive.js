@@ -1,6 +1,11 @@
 // GOLD HUNTER GARUDA live: shared rendering of the EA instances, one per chart (landing, /live, member area). i18n.js (T) optional.
 const GHL = (() => {
   const TT = (id, en) => (typeof window.T === 'function' ? window.T(id, en) : id);
+  // name of the current month (WIB): "Bulan Oktober" / "October" instead of "this month"
+  const MID = ['Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni', 'Juli', 'Agustus', 'September', 'Oktober', 'November', 'Desember'];
+  const MEN = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+  const monthIdx = () => { try { return Number(new Intl.DateTimeFormat('en-US', { month: 'numeric', timeZone: 'Asia/Jakarta' }).format(new Date())) - 1; } catch { return new Date().getMonth(); } };
+  const monthLabel = (lower) => { const m = monthIdx(); return TT((lower ? 'bulan ' : 'Bulan ') + MID[m], MEN[m]); };
   const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
   const loc = () => TT('id-ID', 'en-US');
   const isCent = (cur) => ['USC', 'USX', 'UST', 'CNT'].includes(String(cur || '').toUpperCase());
@@ -63,7 +68,7 @@ const GHL = (() => {
       <div class="ghl-tiles">
         ${tile(TT('Hari ini', 'Today'), usd(toUsd(v.day, cur)) + (v.day_pct == null ? '' : ` <small>${pct(v.day_pct)}</small>`), cls(v.day))}
         ${tile(TT('Kemarin', 'Yesterday'), v.yday == null ? '-' : usd(v.yday_usd != null ? v.yday_usd : toUsd(v.yday, cur)) + (v.yday_pct == null ? '' : ` <small>${pct(v.yday_pct)}</small>`), cls(v.yday || 0))}
-        ${tile(TT('Bulan ini', 'This month'), usd(v.month_usd != null ? v.month_usd : toUsd(v.month, cur)) + (v.month_pct == null ? '' : ` <small>${pct(v.month_pct)}</small>`), cls(v.month))}
+        ${tile(monthLabel(), usd(v.month_usd != null ? v.month_usd : toUsd(v.month, cur)) + (v.month_pct == null ? '' : ` <small>${pct(v.month_pct)}</small>`), cls(v.month))}
         ${tile(TT('DD terdalam', 'Max DD'), dd, v.max_dd_pct ? 'neg' : '')}
       </div>
       <div class="ghl-meta"><span>${TT('Basket terpanjang', 'Longest basket')} <b>${num(v.max_layers || 0)} layer</b></span><span>${TT('Seri selesai', 'Closed series')} <b>${num(v.series || 0)}</b></span></div>
@@ -126,5 +131,5 @@ const GHL = (() => {
     st.textContent = CSS;
     document.head.appendChild(st);
   }
-  return { TT, run, esc, toUsd, usd, num, pct, cls, days, NAME, ICON, PAIRS, spark, card, load };
+  return { TT, monthLabel, run, esc, toUsd, usd, num, pct, cls, days, NAME, ICON, PAIRS, spark, card, load };
 })();

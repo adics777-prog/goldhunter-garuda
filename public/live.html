@@ -107,11 +107,11 @@
 <script src="/assets/i18n.js?v=489e4256"></script>
 <script src="/assets/site.js?v=52bb80aa"></script>
 <script src="/assets/common.js?v=ed3ae07d"></script>
-<script src="/assets/ghlive.js?v=47fd7912"></script>
+<script src="/assets/ghlive.js?v=82fb014c"></script>
 <script>
 (() => {
   const { $, fmtDateTime, fmtDate, ago } = GHG;
-  const { esc, toUsd, usd, num, pct, cls, days, NAME, ICON, PAIRS, card } = GHL;
+  const { esc, toUsd, usd, num, pct, cls, days, NAME, ICON, PAIRS, card, monthLabel } = GHL;
   const KIND = () => ({ pause: ['⏸', 'Pause'], kantong: ['🟡', T('Kantong profit', 'Profit pocket')], pengaman: ['🛑', T('Pengaman equity', 'Equity guard')], dd: ['⚠️', T('Floating rugi besar', 'Large floating loss')], layer: ['⚠️', T('Basket panjang', 'Long basket')], reduction: ['🔁', 'Reduction'] });
   const q = new URLSearchParams(location.search);
   let setupId = Number(q.get('setup')) || 0;
@@ -201,7 +201,7 @@
       <div class="tile"><div class="k">${T('DD terdalam', 'Deepest drawdown')}</div><div class="v ${v.max_dd_pct ? 'neg' : ''}">${v.max_dd_pct ? '-' + num(v.max_dd_pct, 2) + '%' : '0%'}</div><div class="s">${T('floating terdalam', 'deepest floating')} <span class="${cls(v.min_float)}">${usd(toUsd(v.min_float, cur))}</span></div></div>
       <div class="tile"><div class="k">${T('Hari ini', 'Today')}</div><div class="v ${cls(v.day)}">${usd(toUsd(v.day, cur))}</div><div class="s">${pct(v.day_pct)}</div></div>
       <div class="tile"><div class="k">${T('Kemarin', 'Yesterday')}</div><div class="v ${cls(v.yday || 0)}">${v.yday == null ? '-' : usd(toUsd(v.yday, cur))}</div><div class="s">${v.yday_pct == null ? '' : pct(v.yday_pct)}</div></div>
-      <div class="tile"><div class="k">${T('Bulan ini', 'This month')}</div><div class="v ${cls(v.month)}">${usd(toUsd(v.month, cur))}</div><div class="s">${pct(v.month_pct)}</div></div>
+      <div class="tile"><div class="k">${monthLabel()}</div><div class="v ${cls(v.month)}">${usd(toUsd(v.month, cur))}</div><div class="s">${pct(v.month_pct)}</div></div>
       <div class="tile"><div class="k">${T('Floating sekarang', 'Floating now')}</div><div class="v ${cls(v.floating)}">${usd(toUsd(v.floating, cur))}</div><div class="s">${pct(v.floating_pct)}</div></div>
       <div class="tile"><div class="k">${T('Seri selesai', 'Closed series')}</div><div class="v">${num(st.n)}</div><div class="s">${num(st.wins)} ${T('profit', 'in profit')}${st.n ? ' · ' + T('rata-rata', 'avg') + ' ' + dur(st.dur) : ''} · ${T('basket terpanjang', 'longest')} ${num(Math.max(st.maxpos, v.max_layers))}</div></div>`;
     const nw = sn.news && sn.news.name ? `📰 ${esc(sn.news.name)} · ${esc(fmtDateTime(sn.news.time))} · ${sn.news.active ? T('sedang jendela berita', 'in the news window') : T('berikutnya', 'next')} · ${esc(sn.news.mode)}` : `📰 ${T('tidak ada berita penting 6 jam ke depan', 'no high-impact news in the next 6 hours')}`;
@@ -238,7 +238,7 @@
     const badge = !ck.deals
       ? `<div class="alert small" style="margin:0 0 12px">⏳ ${T('Riwayat trading sedang dikirim EA (EA v3.28 ke atas). Begitu masuk, total profit dicocokkan dengan setiap transaksi.', 'The EA is sending its trading history (EA v3.28 and up). Once in, the total profit is checked against every deal.')}</div>`
       : ck.ok
-        ? `<div class="alert ok small" style="margin:0 0 12px">✓ <b>${T('Angka terverifikasi', 'Figures verified')}</b> · ${T('profit sejak mulai', 'profit since start')} <b>${usd(toUsd(ck.total, cur))}</b> = ${T('jumlah', 'the sum of')} ${num(ck.deals)} ${T('transaksi di riwayat trading', 'deals in the trading history')} (${num(ck.closes)} ${T('penutupan', 'closes')}) · ${T('hari ini', 'today')} ${usd(toUsd(ck.today, cur))} · ${T('kemarin', 'yesterday')} ${usd(toUsd(ck.yday, cur))} · ${T('bulan ini', 'this month')} ${usd(toUsd(ck.month, cur))}</div>`
+        ? `<div class="alert ok small" style="margin:0 0 12px">✓ <b>${T('Angka terverifikasi', 'Figures verified')}</b> · ${T('profit sejak mulai', 'profit since start')} <b>${usd(toUsd(ck.total, cur))}</b> = ${T('jumlah', 'the sum of')} ${num(ck.deals)} ${T('transaksi di riwayat trading', 'deals in the trading history')} (${num(ck.closes)} ${T('penutupan', 'closes')}) · ${T('hari ini', 'today')} ${usd(toUsd(ck.today, cur))} · ${T('kemarin', 'yesterday')} ${usd(toUsd(ck.yday, cur))} · ${monthLabel(true)} ${usd(toUsd(ck.month, cur))}</div>`
         : `<div class="alert small" style="margin:0 0 12px">⏳ ${T('Riwayat sedang disinkronkan', 'History is syncing')}: ${num(ck.deals)} ${T('transaksi tercatat, total riwayat', 'deals recorded, history total')} ${usd(toUsd(ck.net, cur))}${ck.total != null ? ` · ${T('laporan EA', 'EA report')} ${usd(toUsd(ck.total, cur))}` : ''}</div>`;
     $('#hist').innerHTML = `<div class="row between" style="align-items:center;gap:10px;flex-wrap:wrap"><h2 style="margin:0">${T('Riwayat trading', 'Trading history')}</h2>${ck.deals ? `<a class="btn btn-ghost btn-sm" href="/api/live/${v.id}/history.csv" download>⬇ ${T('Unduh riwayat lengkap (CSV)', 'Download the full history (CSV)')}</a>` : ''}</div>
       <p class="small muted" style="margin:6px 0 12px">${T('Setiap posisi yang ditutup EA ini sejak mulai dihitung, langsung dari riwayat MT5. Hasil = profit + swap + komisi penutupan; komisi saat posisi dibuka ikut dihitung di total.', 'Every position this EA closed since the start, straight from the MT5 history. Result = profit + swap + commission of the close; the opening commission is included in the total.')}</p>${badge}` +
