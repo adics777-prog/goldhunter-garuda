@@ -19,7 +19,7 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@700;900&family=Poppins:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="/assets/app.css?v=4c97ef78">
-<link rel="stylesheet" href="/assets/site.css?v=c9deb3a4">
+<link rel="stylesheet" href="/assets/site.css?v=767452b4">
 <style>
   .pub-wrap{max-width:1180px;margin:0 auto;padding:30px clamp(16px,4vw,32px) 60px}
   .pub-hero{text-align:center;margin-bottom:22px;position:relative}
@@ -106,7 +106,7 @@
 <script src="/assets/i18n.js?v=489e4256"></script>
 <script src="/assets/site.js?v=52bb80aa"></script>
 <script src="/assets/common.js?v=ed3ae07d"></script>
-<script src="/assets/ghlive.js?v=288b5d0d"></script>
+<script src="/assets/ghlive.js?v=47fd7912"></script>
 <script>
 (() => {
   const { $, fmtDateTime, fmtDate, ago } = GHG;
@@ -175,15 +175,31 @@
     const d = DT, v = d.setup, sn = v.snapshot || {}, c = v.cfg || {}, cur = v.currency;
     const dg = c.digits || (v.symbol === 'EURUSD' ? 5 : v.symbol === 'BTCUSD' ? 2 : 3);
     document.title = `${v.label || v.symbol} · GOLD HUNTER GARUDA Live`;
-    $('#dhead').innerHTML = `<h1>${ICON[v.symbol] || '📈'} ${esc(v.label && v.label !== v.symbol ? v.label : 'GOLD HUNTER GARUDA ' + v.symbol)}</h1><p class="muted small">${T('Akun', 'Account')} ${esc(v.account)} · ${esc(v.broker_symbol || v.symbol)} · ${T('mulai dihitung', 'counted from')} ${esc(fmtDate(v.since))} · EA v${esc(v.version)}</p>`;
+    $('#dhead').innerHTML = `<h1>${ICON[v.symbol] || '📈'} ${esc(v.label && v.label !== v.symbol ? v.label : 'GOLD HUNTER GARUDA ' + v.symbol)}</h1><p class="muted small">${T('Akun', 'Account')} ${esc(v.account)} · ${esc(v.broker_symbol || v.symbol)} · ${T('mulai dihitung', 'counted from')} ${esc(fmtDate(v.since))} · EA v${esc(v.version)}</p>${v.preset ? `<p><button type="button" class="btn btn-gold btn-sm" id="dl-preset">⬇ ${T('Download preset setup ini', 'Download this setup\'s preset')}</button> <span class="small muted">${T('setelan persis seperti chart ini · untuk member berlisensi aktif', 'the exact settings of this chart · for members with an active licence')}</span></p>` : ''}`;
+    const dl = $('#dl-preset');
+    if (dl) dl.onclick = async () => {
+      try {
+        const r = await fetch(`/api/live/${v.id}/preset`, { credentials: 'same-origin' });
+        if (r.status === 401) { location.href = '/masuk?next=' + encodeURIComponent(location.pathname + location.search); return; }
+        if (!r.ok) { const j = await r.json().catch(() => ({})); alert(j.error || T('Preset belum bisa diunduh', 'The preset could not be downloaded')); return; }
+        const cd = r.headers.get('content-disposition') || '';
+        const m = cd.match(/filename\*=UTF-8''([^;]+)/);
+        const a = document.createElement('a');
+        a.href = URL.createObjectURL(await r.blob());
+        a.download = m ? decodeURIComponent(m[1]) : 'GOLD HUNTER GARUDA.set';
+        document.body.appendChild(a); a.click(); a.remove();
+        setTimeout(() => URL.revokeObjectURL(a.href), 4000);
+      } catch (e) { alert(e.message); }
+    };
     $('#dstatus').innerHTML = `<span><span class="live-dot ${v.online ? 'on' : ''}"></span><b>${v.online ? 'ONLINE' : T('TIDAK MENGIRIM DATA', 'NOT REPORTING')}</b> · ${esc(v.status || '')}</span><span class="small muted">${T('data terakhir', 'last data')} ${esc(ago(v.at))}</span>`;
     const st = v.stats || { n: 0, wins: 0, dur: 0, maxpos: 0 };
     $('#tiles').innerHTML = `
-      <div class="tile"><div class="k">${T('Profit sejak mulai', 'Profit since start')}</div><div class="v ${cls(v.total_usd)}">${v.total_usd == null ? T('menghitung…', 'counting…') : usd(v.total_usd)}</div><div class="s ${cls(v.total_pct)}">${v.total_pct == null ? '' : pct(v.total_pct) + ' ' + (v.budget > 0 ? T('dari anggaran', 'of the budget') : T('dari modal', 'of capital'))}</div></div>
-      <div class="tile"><div class="k">${v.budget > 0 ? T('Anggaran dana', 'Budget') : T('Modal', 'Capital')}</div><div class="v">${v.modal_usd == null ? '-' : usd(v.modal_usd, false)}</div><div class="s">${v.modal == null ? '' : num(v.modal, 0) + ' ' + esc(cur)}${v.budget > 0 ? ' · ' + T('dari akun bersama', 'on a shared account') : ' · ' + T('balance', 'balance') + ' ' + usd(v.balance_usd, false)}</div></div>
+      <div class="tile"><div class="k">${T('Profit sejak mulai', 'Profit since start')}</div><div class="v ${cls(v.total_usd)}">${v.total_usd == null ? T('menghitung…', 'counting…') : usd(v.total_usd)}</div><div class="s ${cls(v.total_pct)}">${v.total_pct == null ? '' : pct(v.total_pct) + ' ' + (v.modal_kind === 'budget' ? T('dari anggaran', 'of the budget') : T('dari modal', 'of capital'))}</div></div>
+      <div class="tile"><div class="k">${v.modal_kind === 'budget' ? T('Anggaran dana', 'Budget') : T('Modal', 'Capital')}</div><div class="v">${v.modal_usd == null ? '-' : usd(v.modal_usd, false)}</div><div class="s">${v.modal == null ? '' : num(v.modal, 0) + ' ' + esc(cur)}${v.modal_kind === 'account' ? ' · ' + T('balance', 'balance') + ' ' + usd(v.balance_usd, false) : ' · ' + T('dari akun bersama', 'on a shared account')}${v.lot_modal ? ' · ' + T('lot 0,01 per', 'lot 0.01 per') + ' ' + num(Math.round(v.lot_modal / (v.first_lot / 0.01 || 1)), 0) : ''}</div></div>
       <div class="tile"><div class="k">${T('Lama berjalan', 'Running for')}</div><div class="v">${days(v.running)}</div><div class="s">${T('sejak', 'since')} ${esc(fmtDate(v.since))}</div></div>
       <div class="tile"><div class="k">${T('DD terdalam', 'Deepest drawdown')}</div><div class="v ${v.max_dd_pct ? 'neg' : ''}">${v.max_dd_pct ? '-' + num(v.max_dd_pct, 2) + '%' : '0%'}</div><div class="s">${T('floating terdalam', 'deepest floating')} <span class="${cls(v.min_float)}">${usd(toUsd(v.min_float, cur))}</span></div></div>
       <div class="tile"><div class="k">${T('Hari ini', 'Today')}</div><div class="v ${cls(v.day)}">${usd(toUsd(v.day, cur))}</div><div class="s">${pct(v.day_pct)}</div></div>
+      <div class="tile"><div class="k">${T('Kemarin', 'Yesterday')}</div><div class="v ${cls(v.yday || 0)}">${v.yday == null ? '-' : usd(toUsd(v.yday, cur))}</div><div class="s">${v.yday_pct == null ? '' : pct(v.yday_pct)}</div></div>
       <div class="tile"><div class="k">${T('Bulan ini', 'This month')}</div><div class="v ${cls(v.month)}">${usd(toUsd(v.month, cur))}</div><div class="s">${pct(v.month_pct)}</div></div>
       <div class="tile"><div class="k">${T('Floating sekarang', 'Floating now')}</div><div class="v ${cls(v.floating)}">${usd(toUsd(v.floating, cur))}</div><div class="s">${pct(v.floating_pct)}</div></div>
       <div class="tile"><div class="k">${T('Seri selesai', 'Closed series')}</div><div class="v">${num(st.n)}</div><div class="s">${num(st.wins)} ${T('profit', 'in profit')}${st.n ? ' · ' + T('rata-rata', 'avg') + ' ' + dur(st.dur) : ''} · ${T('basket terpanjang', 'longest')} ${num(Math.max(st.maxpos, v.max_layers))}</div></div>`;

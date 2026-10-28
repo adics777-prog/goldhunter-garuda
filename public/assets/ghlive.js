@@ -57,16 +57,16 @@ const GHL = (() => {
         <div class="ghl-k">${TT('Profit tertutup sejak mulai', 'Closed profit since start')}</div>
         <div class="ghl-big"><span class="${fresh ? 'ghl-wait' : cls(v.total_usd)}">${fresh ? TT('menunggu data…', 'waiting for data…') : usd(v.total_usd)}</span>
           ${v.total_pct == null ? '' : `<span class="ghl-pill ${cls(v.total_pct)}">${pct(v.total_pct)}</span>`}</div>
-        <div class="ghl-sub">${v.budget > 0 ? TT('Anggaran', 'Budget') : TT('Modal', 'Capital')} <b>${v.modal_usd == null ? '-' : usd(v.modal_usd, false)}</b> · ${run(v.running)}</div>
+        <div class="ghl-sub">${v.modal_kind === 'budget' ? TT('Anggaran', 'Budget') : TT('Modal', 'Capital')} <b>${v.modal_usd == null ? '-' : usd(v.modal_usd, false)}</b> · ${run(v.running)}</div>
       </div>
       ${spark(v.spark, cur)}
       <div class="ghl-tiles">
-        ${tile(TT('Hari ini', 'Today'), usd(toUsd(v.day, cur)), cls(v.day))}
-        ${tile(TT('Bulan ini', 'This month'), usd(v.month_usd != null ? v.month_usd : toUsd(v.month, cur)), cls(v.month))}
+        ${tile(TT('Hari ini', 'Today'), usd(toUsd(v.day, cur)) + (v.day_pct == null ? '' : ` <small>${pct(v.day_pct)}</small>`), cls(v.day))}
+        ${tile(TT('Kemarin', 'Yesterday'), v.yday == null ? '-' : usd(v.yday_usd != null ? v.yday_usd : toUsd(v.yday, cur)) + (v.yday_pct == null ? '' : ` <small>${pct(v.yday_pct)}</small>`), cls(v.yday || 0))}
+        ${tile(TT('Bulan ini', 'This month'), usd(v.month_usd != null ? v.month_usd : toUsd(v.month, cur)) + (v.month_pct == null ? '' : ` <small>${pct(v.month_pct)}</small>`), cls(v.month))}
         ${tile(TT('DD terdalam', 'Max DD'), dd, v.max_dd_pct ? 'neg' : '')}
-        ${tile(TT('Seri selesai', 'Closed series'), num(v.series || 0), '')}
       </div>
-      <div class="ghl-meta"><span>${TT('Basket terpanjang', 'Longest basket')} <b>${num(v.max_layers || 0)} layer</b></span><span>${TT('Laporan tiap menit', 'Reported every minute')}</span></div>
+      <div class="ghl-meta"><span>${TT('Basket terpanjang', 'Longest basket')} <b>${num(v.max_layers || 0)} layer</b></span><span>${TT('Seri selesai', 'Closed series')} <b>${num(v.series || 0)}</b></span></div>
       ${opts.cta === false ? '' : `<span class="ghl-cta">${TT('Lihat laporan live', 'Open live report')} <span aria-hidden="true">→</span></span>`}
     </a>`;
   }
@@ -111,6 +111,7 @@ const GHL = (() => {
   .ghl-tile{border:1px solid var(--line);border-radius:12px;padding:8px 9px;background:rgba(255,255,255,.025);min-width:0}
   .ghl-tile span{display:block;color:var(--muted);font-size:.64rem;text-transform:uppercase;letter-spacing:.4px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
   .ghl-tile b{display:block;font-size:.95rem;font-weight:800;margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .ghl-tile b small{font-size:.72rem;font-weight:700;opacity:.85}
   .ghl-meta{display:flex;justify-content:space-between;gap:8px;flex-wrap:wrap;font-size:.76rem;color:var(--muted)}
   .ghl-meta b{color:var(--text)}
   .ghl-cta{display:flex;align-items:center;justify-content:center;gap:6px;margin-top:2px;padding:9px 12px;border-radius:12px;font-weight:800;font-size:.84rem;color:#1a1306;background:linear-gradient(90deg,#d4a017,#f5c542);transition:filter .2s}

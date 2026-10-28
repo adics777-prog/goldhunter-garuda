@@ -354,10 +354,12 @@ const showcaseLogins = (s) => [...new Set(String(s.showcase_logins || '').split(
 // SQL condition (+ binds) for the public rows of ea_setups; alias = table alias in joins ('' = no alias)
 function eaPublicWhere(s, alias = '') {
   const L = showcaseLogins(s), p = alias ? alias + '.' : '';
-  if (!L.length) return { sql: '0', binds: [] };
-  return { sql: `${p}visible=1 AND ${p}login IN (${L.map(() => '?').join(',')})`, binds: L };
+  const any = [`${p}showcase=1`];
+  if (L.length) any.push(`${p}login IN (${L.map(() => '?').join(',')})`);
+  return { sql: `${p}visible=1 AND (${any.join(' OR ')})`, binds: L };
 }
-const eaIsPublic = (s, r) => !!r && !!r.visible && showcaseLogins(s).includes(String(r.login));
+// public = visible AND (its account is a showcase account OR this one setup is marked "tayang")
+const eaIsPublic = (s, r) => !!r && !!r.visible && (!!r.showcase || showcaseLogins(s).includes(String(r.login)));
 async function eaTg(env, cfg, text, base, setupId) {
   if (!cfg.tg) return;
   const link = base ? `\n📈 <a href="${base}/live${setupId ? '?setup=' + setupId : ''}">goldhuntergaruda.com/live</a>` : '';
@@ -368,12 +370,15 @@ function eaSetupView(r, t, cfg) {
   const d = eaParse(r.data);
   const total = r.total_ok ? r.total : null;
   // budget mode (EA input 4.0): the EA's own capital is its budget; otherwise the account capital since the start
-  const modal = r.budget > 0 ? r.budget : (r.total_ok ? Math.round((r.balance - r.acct_total) * 100) / 100 : null);
+  const modal = r.modal_override > 0 ? r.modal_override : r.budget > 0 ? r.budget : (r.total_ok ? Math.round((r.balance - r.acct_total) * 100) / 100 : null);
+  // capital that the EA's lot sizing stands for: first lot / 0.01 x input 4.3 (e.g. 0.01 per 10,000 -> 10,000)
+  const lotCap = d.cfg && Number(d.cfg.lot_capital) > 0 && Number(d.first_lot) > 0 ? Math.round(Number(d.first_lot) / 0.01 * Number(d.cfg.lot_capital)) : null;
   const pctOf = (v) => (v != null && modal > 0 ? Math.round(v / modal * 10000) / 100 : null);
   const side = (x) => (x && x.count ? { count: x.count, lots: x.lots, profit: x.profit } : { count: 0 });
   const floating = ((d.buy && d.buy.profit) || 0) + ((d.sell && d.sell.profit) || 0);
   return {
     id: r.id, symbol: r.symbol, broker_symbol: r.broker_symbol, label: eaLabel(r), setup_name: r.setup_name || '', budget: r.budget || 0,
+    modal_kind: r.modal_override > 0 ? 'set' : r.budget > 0 ? 'budget' : 'account', lot_modal: lotCap, lot_modal_usd: eaUsd(lotCap, r.currency),
     budget_usd: r.budget > 0 ? eaUsd(r.budget, r.currency) : null, magic: r.magic, account: maskAccount(r.login), currency: r.currency,
     since: r.since, days: r.since ? Math.max(0, Math.floor((t - r.since) / DAY)) : 0, running: r.since ? t - r.since : 0,
     online: !!r.updated_at && t - r.updated_at <= cfg.offlineMin * 60, at: r.updated_at,
@@ -566,7 +571,12 @@ route('GET', '/live', 'public', async ({ env, url, waitUntil, base }) => {
   waitUntil(eaOfflineCheck(env, s, base).catch((e) => console.error('ea offline', e)));
   const id = int(url.searchParams.get('setup')) || 0;
   const pw = eaPublicWhere(s), spw = eaPublicWhere(s, 's');
-  const prepared = !showcaseLogins(s).length;   // no showcase account chosen yet: pages say the live accounts are being prepared
+  // nothing chosen yet (no showcase account and no single showcase setup): pages say the live accounts are being prepared
+  const prepared = !showcaseLogins(s).length && !(await env.DB.prepare('SELECT 1 AS x FROM ea_setups WHERE showcase=1 AND visible=1 LIMIT 1').first());
+  const profLogins = new Set((await env.DB.prepare('SELECT DISTINCT login FROM ea_vps_master_profile').all()).results.map((x) => String(x.login)));
+  const yd = wibDay(t - DAY);
+  const ydOf = (v, p) => ({ yday: p == null ? null : eaNum(p), yday_usd: p == null ? null : eaUsd(eaNum(p), v.currency),
+    yday_pct: p == null || !(v.modal > 0) ? null : Math.round(p / v.modal * 10000) / 100 });
   if (id) {
     const r = await env.DB.prepare(`SELECT * FROM ea_setups WHERE id=? AND ${pw.sql}`).bind(id, ...pw.binds).first();
     if (!r) fail(404, 'EA tidak ditemukan');
@@ -580,7 +590,10 @@ route('GET', '/live', 'public', async ({ env, url, waitUntil, base }) => {
     ]);
     const d = eaParse(r.data);
     const snap = { buy: d.buy || { count: 0 }, sell: d.sell || { count: 0 }, pocket: d.pocket || {}, news: d.news || {}, pause: d.pause || {}, spread: d.spread || 0, trend: d.trend || 0, trend_why: d.trend_why || '', trend_tf: d.trend_tf || '', margin_level: d.margin_level || 0 };
-    return json({ ok: true, configured: !!cfg.key, server_time: t, offline_min: cfg.offlineMin, setup: { ...eaSetupView(r, t, cfg), stats: stat, snapshot: snap },
+    const v1 = eaSetupView(r, t, cfg);
+    const p1 = days.results.find((x) => x.day === yd);
+    return json({ ok: true, configured: !!cfg.key, server_time: t, offline_min: cfg.offlineMin,
+      setup: { ...v1, ...ydOf(v1, p1 ? p1.profit : null), preset: profLogins.has(String(r.login)), stats: stat, snapshot: snap },
       series: series.results, days: days.results, events: events.results });
   }
   const { results: rows } = await env.DB.prepare(`SELECT * FROM ea_setups WHERE ${pw.sql}`).bind(...pw.binds).all();
@@ -595,9 +608,58 @@ route('GET', '/live', 'public', async ({ env, url, waitUntil, base }) => {
     const v = eaSetupView(r, t, cfg);
     const sr = ser.find((x) => x.setup_id === r.id) || { n: 0, wins: 0 };
     const sinceDay = wibDay(r.since || 0);
-    return { ...v, series: sr.n, wins: sr.wins, spark: days.filter((x) => x.setup_id === r.id && x.day >= sinceDay).map((x) => [x.day, x.profit]) };
+    const p0 = days.find((x) => x.setup_id === r.id && x.day === yd);
+    return { ...v, ...ydOf(v, p0 && p0.day >= sinceDay ? p0.profit : null), preset: profLogins.has(String(r.login)), series: sr.n, wins: sr.wins,
+      spark: days.filter((x) => x.setup_id === r.id && x.day >= sinceDay).map((x) => [x.day, x.profit]) };
   });
   return json({ ok: true, configured: !!cfg.key, prepared, server_time: t, offline_min: cfg.offlineMin, setups });
+});
+
+// ---- Preset of one public EA instance: every input exactly as that chart runs, read from the owner's VPS chart-profile
+// backup (master agent, ea_vps_master_profile): the chart*.chr with the same symbol + magic. The web key (13.2) is blanked.
+const chrText = (u8) => (u8[0] === 0xFF && u8[1] === 0xFE ? new TextDecoder('utf-16le').decode(u8.subarray(2)) : new TextDecoder().decode(u8));
+const utf16Set = (txt) => { const b = new Uint8Array(2 + txt.length * 2); b[0] = 0xFF; b[1] = 0xFE; for (let i = 0; i < txt.length; i++) { const c = txt.charCodeAt(i); b[2 + i * 2] = c & 255; b[3 + i * 2] = c >> 8; } return b; };
+async function liveSetupInputs(env, r) {
+  const want = String(r.broker_symbol || r.symbol).toUpperCase();
+  const { results } = await env.DB.prepare('SELECT files, updated_at FROM ea_vps_master_profile WHERE login=? ORDER BY updated_at DESC').bind(String(r.login)).all();
+  for (const p of results) {
+    let files = [];
+    try { files = JSON.parse(p.files || '[]'); } catch { files = []; }
+    for (const f of Array.isArray(files) ? files : []) {
+      if (!/^chart\d+\.chr$/i.test(String(f && f.name || ''))) continue;
+      let txt = '';
+      try { txt = chrText(unb64(String(f.b64 || ''))); } catch { continue; }
+      const sym = (txt.match(/^symbol=(.*)$/m) || [])[1];
+      if (!sym || sym.trim().toUpperCase() !== want) continue;
+      for (const ex of txt.match(/<expert>[\s\S]*?<\/expert>/g) || []) {
+        if (!/GOLD HUNTER GARUDA/i.test(ex)) continue;
+        const m = ex.match(/<inputs>\r?\n([\s\S]*?)<\/inputs>/);
+        if (!m) continue;
+        const lines = m[1].split(/\r?\n/).map((l) => l.trim()).filter((l) => /^\w+=/.test(l));
+        const mg = lines.find((l) => l.startsWith('InpMagicNumber='));
+        if (!mg || int(mg.slice(15)) !== int(r.magic)) continue;
+        return { lines: lines.map((l) => (l.startsWith('InpWebKey=') ? 'InpWebKey=' : l)), at: p.updated_at };
+      }
+    }
+  }
+  return null;
+}
+route('GET', '/live/:id/preset', 'member', async ({ env, user, params }) => {
+  const s = await getSettings(env);
+  const r = await env.DB.prepare('SELECT * FROM ea_setups WHERE id=?').bind(int(params.id)).first();
+  if (!r || (!eaIsPublic(s, r) && user.role !== 'admin')) fail(404, 'Setup tidak ditemukan');
+  if (user.role !== 'admin' && !(await hasActiveEaLicence(env, user))) fail(403, 'Preset bisa diunduh selama Anda punya lisensi EA aktif (Sewa, Trial, Free IB atau Sharing Profit)');
+  const inp = await liveSetupInputs(env, r);
+  if (!inp) fail(404, 'Preset setup ini belum tersedia (cadangan chart VPS belum masuk). Coba lagi nanti.');
+  const v = eaSetupView(r, now(), eaCfg(s));
+  const label = eaLabel(r);
+  const head = `; GOLD HUNTER GARUDA v${v.version || ''} - preset setup live "${label}" ${r.symbol}` +
+    (v.modal > 0 ? ` - modal ${Math.round(v.modal)} ${r.currency}` : '') + ` - setelan chart yang tampil di goldhuntergaruda.com/live`;
+  const name = `GOLD HUNTER GARUDA ${r.symbol} ${label}`.replace(/[\\/:*?"<>|\r\n]/g, '').replace(/\s+/g, ' ').trim().slice(0, 80) + '.set';
+  return new Response(utf16Set([head, ...inp.lines].join('\r\n') + '\r\n'), { headers: {
+    'content-type': 'application/octet-stream',
+    'content-disposition': `attachment; filename="${name.replace(/[^\w. ()-]/g, '_')}"; filename*=UTF-8''${encodeURIComponent(name)}`,
+    'cache-control': 'private, no-store' } });
 });
 
 // Admin: preview the Telegram picture / send it now.
@@ -625,6 +687,7 @@ route('GET', '/admin/ea/setups', 'admin', async ({ env }) => {
   const L = showcaseLogins(s);
   return json({ showcase_logins: L, setups: results.map((r) => ({ ...eaSetupView(r, t, cfg), login: r.login, server: r.server, magic: r.magic,
     label_admin: r.label, visible: r.visible, sort: r.sort, created_at: r.created_at, listed: L.includes(String(r.login)), public: eaIsPublic(s, r),
+    showcase: r.showcase ? 1 : 0, modal_override: r.modal_override || 0,
     license_id: r.license_id || null, owner_name: r.license_id ? r.owner_name || '' : '', owner_email: r.license_id ? r.owner_email || '' : '' })) });
 });
 route('PUT', '/admin/ea/setups/:id', 'admin', async ({ request, env, params }) => {
@@ -634,8 +697,10 @@ route('PUT', '/admin/ea/setups/:id', 'admin', async ({ request, env, params }) =
   let since = b.reset ? now() : (b.since != null && b.since !== '' ? int(b.since) : r.since);
   if (!(since > 0) || since > now() + 60) fail(400, 'Tanggal mulai tidak valid');
   const restart = since !== r.since;
-  await env.DB.prepare(`UPDATE ea_setups SET label=?, visible=?, sort=?, since=?${restart ? ', since_manual=1, total=0, acct_total=0, total_ok=0, max_dd_pct=0, min_float=0, max_layers=0' : ''} WHERE id=?`)
-    .bind(str(b.label, 60), b.visible ? 1 : 0, int(b.sort) || 0, since, r.id).run();
+  const mo = b.modal_override == null || b.modal_override === '' ? (r.modal_override || 0) : Math.max(0, Math.min(1e9, Number(b.modal_override) || 0));
+  const sc = b.showcase == null ? (r.showcase ? 1 : 0) : (b.showcase ? 1 : 0);
+  await env.DB.prepare(`UPDATE ea_setups SET label=?, visible=?, sort=?, since=?, showcase=?, modal_override=?${restart ? ', since_manual=1, total=0, acct_total=0, total_ok=0, max_dd_pct=0, min_float=0, max_layers=0' : ''} WHERE id=?`)
+    .bind(str(b.label, 60), b.visible ? 1 : 0, int(b.sort) || 0, since, sc, mo, r.id).run();
   if (restart) {
     // deepest DD / floating / longest basket rebuilt from the daily rows inside the new period
     const agg = await env.DB.prepare('SELECT COALESCE(MAX(max_dd_pct),0) AS dd, COALESCE(MIN(min_float),0) AS mf, COALESCE(MAX(max_layers),0) AS ml FROM ea_setup_days WHERE setup_id=? AND day >= ?')

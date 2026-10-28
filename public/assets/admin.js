@@ -1140,17 +1140,20 @@
     try { list = (await api('/admin/ea/setups')).setups; } catch (err) { box.innerHTML = `<div class="small" style="color:#ff8b95">${esc(err.message)}</div>`; return; }
     if (!list.length) { box.innerHTML = '<div class="small muted">Belum ada EA yang melapor. Pasang EA v2.51+ dengan input 13.2 = kunci di atas, lalu tunggu ±1 menit.</div>'; return; }
     const pubBadge = (x) => x.public ? '<span class="badge b-green">tampil di web</span>'
-      : `<span class="badge b-orange" title="${x.listed ? 'Centang Tampil supaya muncul di web' : 'Nomor akun ini belum ada di Akun contoh live'}">tidak tampil</span><div class="tiny muted">${x.listed ? 'Tampil belum dicentang' : 'akun belum di daftar contoh live'}</div>`;
+      : `<span class="badge b-orange" title="${x.listed ? 'Centang Tampil supaya muncul di web' : 'Centang Tayang, atau masukkan nomor akunnya ke Akun contoh live'}">tidak tampil</span><div class="tiny muted">${x.listed ? 'Tampil belum dicentang' : 'centang Tayang untuk setup ini saja'}</div>`;
+    const modalHint = (x) => x.lot_modal ? `<div class="tiny muted">setelan EA: ${x.lot_modal.toLocaleString('id-ID')} ${esc(x.currency)} <a href="#" data-lotcap="${x.lot_modal}">pakai</a></div>` : '';
     const pad = (n) => String(n).padStart(2, '0');
     const local = (t) => { const d = new Date(t * 1000); return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`; };
     const usd = (v) => v == null ? '-' : (v < 0 ? '-$' : '+$') + Math.abs(v).toLocaleString('id-ID', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-    box.innerHTML = `<div class="table-wrap"><table><thead><tr><th>EA</th><th>Label tampil</th><th>Tampil</th><th>Urut</th><th>Mulai hitung</th><th class="right">Hasil</th><th></th></tr></thead><tbody>
+    box.innerHTML = `<div class="table-wrap"><table><thead><tr><th>EA</th><th>Label tampil</th><th>Tampil</th><th title="Tampilkan setup ini saja di web, walau akunnya tidak di daftar contoh live">Tayang</th><th>Modal tayang</th><th>Urut</th><th>Mulai hitung</th><th class="right">Hasil</th><th></th></tr></thead><tbody>
       ${list.map((x) => `<tr data-id="${x.id}" style="${x.visible ? '' : 'opacity:.55'}">
         <td class="nowrap"><b>${esc(x.symbol)}</b> <span class="tiny muted">${esc(x.broker_symbol)}</span><div class="tiny muted">akun ${esc(x.login)} · magic ${x.magic}${x.setup_name ? ' · ' + esc(x.setup_name) : ''} · v${esc(x.version)}</div>
           ${x.license_id ? `<div class="tiny">👤 <a href="#/lisensi/${x.license_id}">${esc(x.owner_name || 'member')}</a> <span class="muted">${esc(x.owner_email)}</span></div>` : ''}
           <div class="tiny">${x.online ? '<span style="color:#6ee7a2">● online</span>' : '<span style="color:#ff8b95">● offline</span>'} ${ago(x.at)}</div><div style="margin-top:4px">${pubBadge(x)}</div></td>
         <td><input data-k="label" value="${esc(x.label_admin)}" placeholder="${esc(x.label)}" style="min-width:130px"></td>
         <td><input type="checkbox" data-k="visible" ${x.visible ? 'checked' : ''}></td>
+        <td><input type="checkbox" data-k="showcase" ${x.showcase ? 'checked' : ''}></td>
+        <td><input data-k="modal" type="number" min="0" step="1" value="${x.modal_override || ''}" placeholder="otomatis" style="width:110px">${modalHint(x)}</td>
         <td><input data-k="sort" type="number" value="${x.sort}" style="width:64px"></td>
         <td><input data-k="since" type="datetime-local" value="${local(x.since)}"><div class="tiny muted">${x.days} hari</div></td>
         <td class="right nowrap small">${usd(x.total_usd)}<div class="tiny muted">${x.total_pct == null ? 'menghitung…' : (x.total_pct > 0 ? '+' : '') + x.total_pct + '%'} · modal ${x.modal_usd == null ? '-' : '$' + x.modal_usd}</div><div class="tiny muted">DD -${x.max_dd_pct || 0}%</div></td>
@@ -1159,7 +1162,10 @@
     $$('#ea-setups tr[data-id]').forEach((tr) => {
       const id = tr.dataset.id;
       const val = (k) => $(`[data-k="${k}"]`, tr);
+      const lc = $('[data-lotcap]', tr);
+      if (lc) lc.onclick = (e) => { e.preventDefault(); val('modal').value = lc.dataset.lotcap; };
       const body = (extra) => ({ label: val('label').value.trim(), visible: val('visible').checked, sort: Number(val('sort').value) || 0,
+        showcase: val('showcase').checked, modal_override: val('modal').value === '' ? 0 : Number(val('modal').value),
         since: val('since').value ? Math.floor(new Date(val('since').value).getTime() / 1000) : '', ...extra });
       $$('[data-act]', tr).forEach((b) => b.onclick = async () => {
         try {
