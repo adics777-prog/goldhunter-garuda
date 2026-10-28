@@ -27,7 +27,7 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@700;900&family=Poppins:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="/assets/app.css?v=4c97ef78">
-<link rel="stylesheet" href="/assets/site.css?v=c9deb3a4">
+<link rel="stylesheet" href="/assets/site.css?v=65f41bf3">
 <script type="application/ld+json">[{"@context":"https://schema.org","@type":"Organization","name":"GoldHunter Garuda","url":"https://goldhuntergaruda.com/","logo":"https://goldhuntergaruda.com/assets/brand/goldhunter-garuda-logo-512.png"},
 {"@context":"https://schema.org","@type":"WebSite","name":"GoldHunter Garuda","url":"https://goldhuntergaruda.com/","inLanguage":"id-ID"},
 {"@context":"https://schema.org","@type":"SoftwareApplication","name":"GOLD HUNTER GARUDA","applicationCategory":"FinanceApplication","operatingSystem":"MetaTrader 5 (Windows)","description":"Expert Advisor MetaTrader 5 untuk emas XAUUSD dan semua pair: marty basket averaging dengan DD reduction, kantong profit, 4 mode arah (BARBAR, EMA tren, SMA, keduanya), Market Liar dan mode berita. Setup rekomendasi per pair, installer 1 file, update otomatis.","url":"https://goldhuntergaruda.com/","offers":{"@type":"Offer","price":"0","priceCurrency":"IDR","description":"Trial gratis 7 hari; sewa, sharing profit dan EA gratis untuk akun IB"},"publisher":{"@type":"Organization","name":"GoldHunter Garuda"}},
@@ -105,6 +105,20 @@
       <h2 class="sec-title" data-en="Simple Rules, &lt;span class=&quot;gold-text&quot;&gt;Every Basket&lt;/span&gt;">Aturan Sederhana, <span class="gold-text">Tiap Basket</span></h2>
       <p class="sec-sub" data-en="No predictions. The EA follows the same four steps on every chart, all day.">Tanpa ramalan. EA menjalankan empat langkah yang sama di setiap chart, sepanjang hari.</p>
     </div>
+    <figure class="ghsim reveal" data-ghsim aria-label="Animasi chart EA GOLD HUNTER GARUDA bekerja: candle berjalan, basket BUY dan SELL, marty layer, TP bersama, DD reduction, kantong profit, tren EMA dan trailing" data-en-aria-label="Animated chart of the GOLD HUNTER GARUDA EA at work: live candles, BUY and SELL baskets, marty layers, shared TP, DD reduction, profit pocket, EMA trend and trailing">
+      <div class="ghsim-stage"><canvas class="ghsim-cv" aria-hidden="true"></canvas></div>
+      <div class="ghsim-cap" aria-live="off"><span class="ghsim-cap-ico" aria-hidden="true">🧠</span><span class="ghsim-cap-txt" data-en="The AI engine reads the &lt;b&gt;EMA trend&lt;/b&gt;, spread &amp;amp; layer step…">Mesin AI membaca <b>tren EMA</b>, spread &amp; jarak layer…</span></div>
+      <ul class="ghsim-chips" aria-hidden="true">
+        <li data-k="trend" data-en="📈 EMA trend">📈 Tren EMA</li>
+        <li data-k="marty" data-en="🪜 Marty layers">🪜 Marty layer</li>
+        <li data-k="tp" data-en="🎯 Shared TP">🎯 TP bersama</li>
+        <li data-k="reduce">♻️ DD reduction</li>
+        <li data-k="pocket" data-en="👛 Profit pocket">👛 Kantong profit</li>
+        <li data-k="trail" data-en="🪂 Trailing">🪂 Trailing</li>
+        <li data-k="sl" data-en="🛡️ Equity SL on standby">🛡️ SL equity siaga</li>
+      </ul>
+      <figcaption class="ghsim-note" data-en="Animated illustration of how the EA works · not real trading results · &lt;a href=&quot;/live&quot;&gt;see the real live results →&lt;/a&gt;">Ilustrasi animasi cara kerja EA · bukan hasil trading nyata · <a href="/live">lihat hasil live nyata →</a></figcaption>
+    </figure>
     <ol class="flow">
       <li class="reveal"><h3 data-en="Opens a series by mode">Buka seri sesuai mode</h3><p data-en="BARBAR opens BUY and SELL together; EMA TREND, SMA or BOTH only open a series in the market direction.">Mode BARBAR membuka BUY dan SELL bersamaan; mode EMA TREN, SMA atau KEDUANYA hanya membuka seri searah arah pasar.</p>
         <svg viewBox="0 0 200 64" aria-hidden="true"><path d="M10 44 C50 40 70 20 100 26 S150 50 190 18" fill="none" stroke="#f5c542" stroke-width="2"/><g font-size="9" font-weight="700"><rect x="30" y="8" width="34" height="14" rx="4" fill="rgba(72,152,255,.25)" stroke="#4da3ff"/><text x="37" y="18" fill="#8cc4ff">BUY</text><rect x="120" y="44" width="38" height="14" rx="4" fill="rgba(255,150,72,.25)" stroke="#ff9f43"/><text x="126" y="54" fill="#ffc58a">SELL</text></g></svg></li>
@@ -305,6 +319,7 @@
 <script src="/assets/site.js?v=52bb80aa"></script>
 <script src="/assets/ghlive.js?v=288b5d0d"></script>
 <script src="/assets/ghhud.js?v=09fca75b"></script>
+<script src="/assets/ghsim.js?v=906cbec5"></script>
 <script>
 (() => {
   const T2 = SITE.TT;
