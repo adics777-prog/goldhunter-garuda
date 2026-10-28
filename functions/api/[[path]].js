@@ -376,6 +376,10 @@ function eaSetupView(r, t, cfg) {
   const pctOf = (v) => (v != null && modal > 0 ? Math.round(v / modal * 10000) / 100 : null);
   const side = (x) => (x && x.count ? { count: x.count, lots: x.lots, profit: x.profit } : { count: 0 });
   const floating = ((d.buy && d.buy.profit) || 0) + ((d.sell && d.sell.profit) || 0);
+  // record (re)started today / this month: the EA's day / month figures still hold trades from before the start
+  const sd = r.since ? wibDay(r.since) : '', td = wibDay(t);
+  const dayV = sd === td ? (total == null ? 0 : total) : eaNum(d.day);
+  const monV = sd && sd.slice(0, 7) === td.slice(0, 7) && total != null ? total : eaNum(d.month);
   return {
     id: r.id, symbol: r.symbol, broker_symbol: r.broker_symbol, label: eaLabel(r), setup_name: r.setup_name || '', budget: r.budget || 0,
     modal_kind: r.modal_override > 0 ? 'set' : r.budget > 0 ? 'budget' : 'account', lot_modal: lotCap, lot_modal_usd: eaUsd(lotCap, r.currency),
@@ -384,8 +388,8 @@ function eaSetupView(r, t, cfg) {
     online: !!r.updated_at && t - r.updated_at <= cfg.offlineMin * 60, at: r.updated_at,
     balance: r.balance, equity: r.equity, modal, total, total_pct: pctOf(total),
     modal_usd: eaUsd(modal, r.currency), total_usd: eaUsd(total, r.currency), balance_usd: eaUsd(r.balance, r.currency),
-    day: eaNum(d.day), week: eaNum(d.week), month: eaNum(d.month), day_pct: pctOf(eaNum(d.day)), month_pct: pctOf(eaNum(d.month)),
-    day_usd: eaUsd(eaNum(d.day), r.currency), month_usd: eaUsd(eaNum(d.month), r.currency),
+    day: dayV, week: eaNum(d.week), month: monV, day_pct: pctOf(dayV), month_pct: pctOf(monV),
+    day_usd: eaUsd(dayV, r.currency), month_usd: eaUsd(monV, r.currency),
     floating: eaNum(floating), floating_pct: pctOf(floating), max_dd_pct: r.max_dd_pct, min_float: r.min_float, min_float_pct: pctOf(r.min_float), max_layers: r.max_layers,
     version: d.version || '', mode: d.mode || '', status: d.status || '', buy: side(d.buy), sell: side(d.sell),
     tp_pts: d.tp_pts || 0, dist_pts: d.dist_pts || 0, first_lot: d.first_lot || 0, lot_mult: d.lot_mult || 0, reduction_from: d.reduction_from || 0,
@@ -583,7 +587,7 @@ route('GET', '/live', 'public', async ({ env, url, waitUntil, base }) => {
     const from = wibDay(r.since || 0);
     const [series, days, events, stat] = await Promise.all([
       env.DB.prepare('SELECT closed_at, side, positions, lots, profit, duration, currency FROM ea_series WHERE setup_id=? AND closed_at >= ? ORDER BY id DESC LIMIT 60').bind(r.id, r.since).all(),
-      env.DB.prepare('SELECT day, profit, series, wins, balance, equity, max_dd_pct, max_layers, min_float, currency FROM ea_setup_days WHERE setup_id=? AND day >= ? ORDER BY day DESC LIMIT 90').bind(r.id, from).all(),
+      env.DB.prepare('SELECT day, profit, series, wins, balance, equity, max_dd_pct, max_layers, min_float, currency, total_end, tot_ok, since_at FROM ea_setup_days WHERE setup_id=? AND day >= ? ORDER BY day DESC LIMIT 90').bind(r.id, from).all(),
       env.DB.prepare('SELECT at, kind, side, text, profit FROM ea_events WHERE setup_id=? AND at >= ? ORDER BY id DESC LIMIT 40').bind(r.id, r.since).all(),
       env.DB.prepare(`SELECT COUNT(*) AS n, COALESCE(SUM(CASE WHEN profit>0 THEN 1 ELSE 0 END),0) AS wins, COALESCE(AVG(duration),0) AS dur, COALESCE(MAX(positions),0) AS maxpos
           FROM ea_series WHERE setup_id=? AND closed_at >= ?`).bind(r.id, r.since).first(),
@@ -591,6 +595,8 @@ route('GET', '/live', 'public', async ({ env, url, waitUntil, base }) => {
     const d = eaParse(r.data);
     const snap = { buy: d.buy || { count: 0 }, sell: d.sell || { count: 0 }, pocket: d.pocket || {}, news: d.news || {}, pause: d.pause || {}, spread: d.spread || 0, trend: d.trend || 0, trend_why: d.trend_why || '', trend_tf: d.trend_tf || '', margin_level: d.margin_level || 0 };
     const v1 = eaSetupView(r, t, cfg);
+    const fd = (x) => (x.day === from ? { ...x, profit: x.tot_ok && x.since_at === r.since ? x.total_end : (x.day === wibDay(t) ? v1.day : x.profit) } : x);
+    days.results = days.results.map(fd).map(({ total_end, tot_ok, since_at, ...x }) => x);
     const p1 = days.results.find((x) => x.day === yd);
     return json({ ok: true, configured: !!cfg.key, server_time: t, offline_min: cfg.offlineMin,
       setup: { ...v1, ...ydOf(v1, p1 ? p1.profit : null), preset: profLogins.has(String(r.login)), stats: stat, snapshot: snap },
@@ -600,7 +606,7 @@ route('GET', '/live', 'public', async ({ env, url, waitUntil, base }) => {
   rows.sort(EA_SETUP_ORDER);
   const d30 = wibDay(t - 29 * DAY);
   const [{ results: days }, { results: ser }] = rows.length ? await Promise.all([
-    env.DB.prepare(`SELECT d.setup_id, d.day, d.profit FROM ea_setup_days d JOIN ea_setups s ON s.id=d.setup_id WHERE ${spw.sql} AND d.day >= ? ORDER BY d.day`).bind(...spw.binds, d30).all(),
+    env.DB.prepare(`SELECT d.setup_id, d.day, d.profit, d.total_end, d.tot_ok, d.since_at FROM ea_setup_days d JOIN ea_setups s ON s.id=d.setup_id WHERE ${spw.sql} AND d.day >= ? ORDER BY d.day`).bind(...spw.binds, d30).all(),
     env.DB.prepare(`SELECT e.setup_id, COUNT(*) AS n, COALESCE(SUM(CASE WHEN e.profit>0 THEN 1 ELSE 0 END),0) AS wins FROM ea_series e JOIN ea_setups s ON s.id=e.setup_id
         WHERE ${spw.sql} AND e.closed_at >= s.since GROUP BY e.setup_id`).bind(...spw.binds).all(),
   ]) : [{ results: [] }, { results: [] }];
@@ -608,9 +614,11 @@ route('GET', '/live', 'public', async ({ env, url, waitUntil, base }) => {
     const v = eaSetupView(r, t, cfg);
     const sr = ser.find((x) => x.setup_id === r.id) || { n: 0, wins: 0 };
     const sinceDay = wibDay(r.since || 0);
+    // the record's first day counts only what closed since `since`
+    const dp = (x) => (x.day !== sinceDay ? x.profit : x.tot_ok && x.since_at === r.since ? x.total_end : (x.day === wibDay(t) ? v.day : x.profit));
     const p0 = days.find((x) => x.setup_id === r.id && x.day === yd);
-    return { ...v, ...ydOf(v, p0 && p0.day >= sinceDay ? p0.profit : null), preset: profLogins.has(String(r.login)), series: sr.n, wins: sr.wins,
-      spark: days.filter((x) => x.setup_id === r.id && x.day >= sinceDay).map((x) => [x.day, x.profit]) };
+    return { ...v, ...ydOf(v, p0 && p0.day >= sinceDay ? dp(p0) : null), preset: profLogins.has(String(r.login)), series: sr.n, wins: sr.wins,
+      spark: days.filter((x) => x.setup_id === r.id && x.day >= sinceDay).map((x) => [x.day, dp(x)]) };
   });
   return json({ ok: true, configured: !!cfg.key, prepared, server_time: t, offline_min: cfg.offlineMin, setups });
 });
