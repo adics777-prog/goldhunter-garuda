@@ -505,7 +505,10 @@ route('POST', '/ea/live', 'public', async ({ request, env, waitUntil, base }) =>
   const ownStart0 = int(b.own_start_utc);
   const ownStart = ownStart0 > 1e9 && lic && lic.product_kind === 'ea_share' ? Math.max(ownStart0, lic.created_at || 0) : ownStart0;
   if (!row.since_manual && ownStart > 1e9 && ownStart < t && ownStart < row.since - 60) {
-    await env.DB.prepare('UPDATE ea_setups SET since=?, total=0, acct_total=0, total_ok=0 WHERE id=?').bind(ownStart, row.id).run();
+    await env.DB.batch([
+      env.DB.prepare('UPDATE ea_setups SET since=?, total=0, acct_total=0, total_ok=0 WHERE id=?').bind(ownStart, row.id),
+      env.DB.prepare('DELETE FROM ea_setup_deals WHERE setup_id=?').bind(row.id),
+    ]);
     row.since = ownStart;
   }
   const totalOk = row.since > 0 && int(b.since_used) === row.since ? 1 : 0;
@@ -540,6 +543,21 @@ route('POST', '/ea/live', 'public', async ({ request, env, waitUntil, base }) =>
     waitUntil((async () => { if (await eaClaim(env, 'share_ext_' + lic.id, Math.floor(t / 3600))) await shareMaybeExtend(env, base, lic.id, 'Sharing profit: EA melapor, minggu berikutnya'); })()
       .catch((e) => console.error('share extend', e)));
   }
+  // trading history (EA v3.28+): new deals of this EA, duplicates ignored by ticket
+  const deals = Array.isArray(b.deals) ? b.deals.slice(0, 200).filter((x) => x && int(x.t) > 0 && int(x.tm) > 1e9) : [];
+  for (let i = 0; i < deals.length; i += 50) {
+    await env.DB.batch(deals.slice(i, i + 50).map((x) => env.DB.prepare(`INSERT OR IGNORE INTO ea_setup_deals (setup_id, ticket, pos, time, type, entry, volume, price, profit, swap, commission, fee)
+        VALUES (?,?,?,?,?,?,?,?,?,?,?,?)`).bind(row.id, int(x.t), int(x.p) || 0, int(x.tm), int(x.ty) === 1 ? 1 : 0, Math.max(0, Math.min(3, int(x.e) || 0)),
+      eaNum(x.v), eaPx(x.px), eaNum(x.pf), eaNum(x.sw), eaNum(x.c), eaNum(x.f))));
+  }
+  // every input as the chart runs it (sent when it changes): the downloadable preset; the web key never stored
+  if (Array.isArray(b.inputs) && b.inputs.length) {
+    const lines = b.inputs.slice(0, 400).map((l) => str(l, 300)).filter((l) => /^\w+=/.test(l)).map((l) => (l.startsWith('InpWebKey=') ? 'InpWebKey=' : l));
+    if (lines.length) await env.DB.prepare(`INSERT INTO ea_setup_inputs (setup_id, set_text, version, updated_at) VALUES (?,?,?,?)
+        ON CONFLICT(setup_id) DO UPDATE SET set_text=excluded.set_text, version=excluded.version, updated_at=excluded.updated_at`).bind(row.id, lines.join('\n'), snap.version, t).run();
+  }
+  const dlast = await env.DB.prepare('SELECT MAX(time) AS m FROM ea_setup_deals WHERE setup_id=? AND time >= ?').bind(row.id, row.since || 0).first();
+  const dealLast = dlast && dlast.m ? dlast.m : Math.max(0, (row.since || 0) - 1);
   const label = eaLabel({ ...row, setup_name: setupName || row.setup_name });
   const msgs = [];
   const evs = Array.isArray(b.events) ? b.events.slice(0, 50) : [];
@@ -564,8 +582,30 @@ route('POST', '/ea/live', 'public', async ({ request, env, waitUntil, base }) =>
   // only showcase accounts (listed by the admin + visible) ever post to the public Telegram channel
   if (cfg.events && !tgHeld(s) && eaIsPublic(s, row)) for (const m of msgs) waitUntil(eaTg(env, cfg, m, base, row.id));
   waitUntil(eaDailyReport(env, s, cfg, t, base).catch((e) => console.error('ea daily', e)));
-  return json({ ok: true, next: 60, since: row.since });
+  return json({ ok: true, next: 60, since: row.since, deal_last: dealLast });
 });
+
+// Trading history check: the sum of every deal since `since` (profit + swap + commission + fee) against the EA's total;
+// today / yesterday / this month (WIB) from the deals. ok = the history explains the reported total to the cent.
+const DEAL_NET = '(profit + swap + commission + fee)';
+async function dealCheck(env, r, t) {
+  const since = r.since || 0;
+  const [agg, byDay, inp] = await Promise.all([
+    env.DB.prepare(`SELECT COUNT(*) AS n, COALESCE(SUM(${DEAL_NET}),0) AS net, COALESCE(SUM(CASE WHEN entry>0 THEN 1 ELSE 0 END),0) AS closes,
+        MIN(time) AS first, MAX(time) AS last FROM ea_setup_deals WHERE setup_id=? AND time >= ?`).bind(r.id, since).first(),
+    env.DB.prepare(`SELECT date(time + 25200, 'unixepoch') AS day, SUM(${DEAL_NET}) AS net FROM ea_setup_deals WHERE setup_id=? AND time >= ? GROUP BY day`).bind(r.id, since).all(),
+    env.DB.prepare('SELECT updated_at, version FROM ea_setup_inputs WHERE setup_id=?').bind(r.id).first(),
+  ]);
+  const net = Math.round((agg.net || 0) * 100) / 100;
+  const day = (d) => Math.round(((byDay.results.find((x) => x.day === d) || {}).net || 0) * 100) / 100;
+  const td = wibDay(t), m0 = td.slice(0, 7);
+  const month = Math.round(byDay.results.filter((x) => String(x.day).slice(0, 7) === m0).reduce((a, x) => a + (x.net || 0), 0) * 100) / 100;
+  const total = r.total_ok ? r.total : null;
+  return { deals: agg.n || 0, closes: agg.closes || 0, net, first: agg.first || 0, last: agg.last || 0,
+    today: day(td), yday: day(wibDay(t - DAY)), month, total,
+    ok: total != null && (agg.n || 0) > 0 && Math.abs(net - total) < 0.02, diff: total == null ? null : Math.round((total - net) * 100) / 100,
+    inputs_at: inp ? inp.updated_at : 0 };
+}
 
 // Public: all visible EA instances (overview), or ?setup=id with series, days and events since its start.
 route('GET', '/live', 'public', async ({ env, url, waitUntil, base }) => {
@@ -578,6 +618,8 @@ route('GET', '/live', 'public', async ({ env, url, waitUntil, base }) => {
   // nothing chosen yet (no showcase account and no single showcase setup): pages say the live accounts are being prepared
   const prepared = !showcaseLogins(s).length && !(await env.DB.prepare('SELECT 1 AS x FROM ea_setups WHERE showcase=1 AND visible=1 LIMIT 1').first());
   const profLogins = new Set((await env.DB.prepare('SELECT DISTINCT login FROM ea_vps_master_profile').all()).results.map((x) => String(x.login)));
+  const inSetups = new Set((await env.DB.prepare('SELECT setup_id FROM ea_setup_inputs').all()).results.map((x) => x.setup_id));
+  const hasPreset = (r) => inSetups.has(r.id) || profLogins.has(String(r.login));
   const yd = wibDay(t - DAY);
   const ydOf = (v, p) => ({ yday: p == null ? null : eaNum(p), yday_usd: p == null ? null : eaUsd(eaNum(p), v.currency),
     yday_pct: p == null || !(v.modal > 0) ? null : Math.round(p / v.modal * 10000) / 100 });
@@ -585,12 +627,15 @@ route('GET', '/live', 'public', async ({ env, url, waitUntil, base }) => {
     const r = await env.DB.prepare(`SELECT * FROM ea_setups WHERE id=? AND ${pw.sql}`).bind(id, ...pw.binds).first();
     if (!r) fail(404, 'EA tidak ditemukan');
     const from = wibDay(r.since || 0);
-    const [series, days, events, stat] = await Promise.all([
+    const [series, days, events, stat, hist, check] = await Promise.all([
       env.DB.prepare('SELECT closed_at, side, positions, lots, profit, duration, currency FROM ea_series WHERE setup_id=? AND closed_at >= ? ORDER BY id DESC LIMIT 60').bind(r.id, r.since).all(),
       env.DB.prepare('SELECT day, profit, series, wins, balance, equity, max_dd_pct, max_layers, min_float, currency, total_end, tot_ok, since_at FROM ea_setup_days WHERE setup_id=? AND day >= ? ORDER BY day DESC LIMIT 90').bind(r.id, from).all(),
       env.DB.prepare('SELECT at, kind, side, text, profit FROM ea_events WHERE setup_id=? AND at >= ? ORDER BY id DESC LIMIT 40').bind(r.id, r.since).all(),
       env.DB.prepare(`SELECT COUNT(*) AS n, COALESCE(SUM(CASE WHEN profit>0 THEN 1 ELSE 0 END),0) AS wins, COALESCE(AVG(duration),0) AS dur, COALESCE(MAX(positions),0) AS maxpos
           FROM ea_series WHERE setup_id=? AND closed_at >= ?`).bind(r.id, r.since).first(),
+      env.DB.prepare(`SELECT ticket, pos, time, type, entry, volume, price, ${DEAL_NET} AS net FROM ea_setup_deals WHERE setup_id=? AND time >= ? AND entry > 0
+          ORDER BY time DESC, ticket DESC LIMIT 200`).bind(r.id, r.since || 0).all(),
+      dealCheck(env, r, t),
     ]);
     const d = eaParse(r.data);
     const snap = { buy: d.buy || { count: 0 }, sell: d.sell || { count: 0 }, pocket: d.pocket || {}, news: d.news || {}, pause: d.pause || {}, spread: d.spread || 0, trend: d.trend || 0, trend_why: d.trend_why || '', trend_tf: d.trend_tf || '', margin_level: d.margin_level || 0 };
@@ -599,8 +644,8 @@ route('GET', '/live', 'public', async ({ env, url, waitUntil, base }) => {
     days.results = days.results.map(fd).map(({ total_end, tot_ok, since_at, ...x }) => x);
     const p1 = days.results.find((x) => x.day === yd);
     return json({ ok: true, configured: !!cfg.key, server_time: t, offline_min: cfg.offlineMin,
-      setup: { ...v1, ...ydOf(v1, p1 ? p1.profit : null), preset: profLogins.has(String(r.login)), stats: stat, snapshot: snap },
-      series: series.results, days: days.results, events: events.results });
+      setup: { ...v1, ...ydOf(v1, p1 ? p1.profit : null), preset: hasPreset(r), preset_live: !!check.inputs_at, preset_at: check.inputs_at, stats: stat, snapshot: snap },
+      series: series.results, days: days.results, events: events.results, history: hist.results, check });
   }
   const { results: rows } = await env.DB.prepare(`SELECT * FROM ea_setups WHERE ${pw.sql}`).bind(...pw.binds).all();
   rows.sort(EA_SETUP_ORDER);
@@ -617,7 +662,7 @@ route('GET', '/live', 'public', async ({ env, url, waitUntil, base }) => {
     // the record's first day counts only what closed since `since`
     const dp = (x) => (x.day !== sinceDay ? x.profit : x.tot_ok && x.since_at === r.since ? x.total_end : (x.day === wibDay(t) ? v.day : x.profit));
     const p0 = days.find((x) => x.setup_id === r.id && x.day === yd);
-    return { ...v, ...ydOf(v, p0 && p0.day >= sinceDay ? dp(p0) : null), preset: profLogins.has(String(r.login)), series: sr.n, wins: sr.wins,
+    return { ...v, ...ydOf(v, p0 && p0.day >= sinceDay ? dp(p0) : null), preset: hasPreset(r), series: sr.n, wins: sr.wins,
       spark: days.filter((x) => x.setup_id === r.id && x.day >= sinceDay).map((x) => [x.day, dp(x)]) };
   });
   return json({ ok: true, configured: !!cfg.key, prepared, server_time: t, offline_min: cfg.offlineMin, setups });
@@ -628,6 +673,8 @@ route('GET', '/live', 'public', async ({ env, url, waitUntil, base }) => {
 const chrText = (u8) => (u8[0] === 0xFF && u8[1] === 0xFE ? new TextDecoder('utf-16le').decode(u8.subarray(2)) : new TextDecoder().decode(u8));
 const utf16Set = (txt) => { const b = new Uint8Array(2 + txt.length * 2); b[0] = 0xFF; b[1] = 0xFE; for (let i = 0; i < txt.length; i++) { const c = txt.charCodeAt(i); b[2 + i * 2] = c & 255; b[3 + i * 2] = c >> 8; } return b; };
 async function liveSetupInputs(env, r) {
+  const own = await env.DB.prepare('SELECT set_text, updated_at FROM ea_setup_inputs WHERE setup_id=?').bind(r.id).first();
+  if (own && own.set_text) return { lines: own.set_text.split('\n').filter((l) => /^\w+=/.test(l)).map((l) => (l.startsWith('InpWebKey=') ? 'InpWebKey=' : l)), at: own.updated_at };
   const want = String(r.broker_symbol || r.symbol).toUpperCase();
   const { results } = await env.DB.prepare('SELECT files, updated_at FROM ea_vps_master_profile WHERE login=? ORDER BY updated_at DESC').bind(String(r.login)).all();
   for (const p of results) {
@@ -670,6 +717,29 @@ route('GET', '/live/:id/preset', 'member', async ({ env, user, params }) => {
     'cache-control': 'private, no-store' } });
 });
 
+// Full trading history of a public setup since its start, as a CSV file (opens in Excel / Google Sheets).
+route('GET', '/live/:id/history.csv', 'public', async ({ env, params }) => {
+  const s = await getSettings(env);
+  const r = await env.DB.prepare('SELECT * FROM ea_setups WHERE id=?').bind(int(params.id)).first();
+  if (!r || !eaIsPublic(s, r)) fail(404, 'Setup tidak ditemukan');
+  const { results } = await env.DB.prepare('SELECT * FROM ea_setup_deals WHERE setup_id=? AND time >= ? ORDER BY time, ticket').bind(r.id, r.since || 0).all();
+  const ENTRY = ['MASUK', 'KELUAR', 'BALIK', 'KELUAR (BY)'];
+  const wib = (x) => new Date((x + 7 * 3600) * 1000).toISOString().replace('T', ' ').slice(0, 19);
+  const n2 = (x) => Number(x || 0).toFixed(2);
+  const rows = [['Waktu (WIB)', 'Tiket', 'Posisi', 'Arah', 'Jenis', 'Lot', 'Harga', 'Profit', 'Swap', 'Komisi', 'Fee', 'Bersih', 'Mata uang']];
+  let sum = 0;
+  for (const x of results) {
+    const net = (x.profit || 0) + (x.swap || 0) + (x.commission || 0) + (x.fee || 0);
+    sum += net;
+    rows.push([wib(x.time), x.ticket, x.pos, x.type === 1 ? 'SELL' : 'BUY', ENTRY[x.entry] || x.entry, n2(x.volume), x.price, n2(x.profit), n2(x.swap), n2(x.commission), n2(x.fee), n2(net), r.currency || '']);
+  }
+  rows.push(['TOTAL', '', '', '', '', '', '', '', '', '', '', n2(sum), r.currency || '']);
+  const csv = '\ufeff' + rows.map((a) => a.map((c) => { const v = String(c); return /[",;\n]/.test(v) ? '"' + v.replace(/"/g, '""') + '"' : v; }).join(',')).join('\r\n') + '\r\n';
+  const name = `GOLD HUNTER GARUDA ${r.symbol} ${eaLabel(r)} riwayat.csv`.replace(/[\\/:*?"<>|\r\n]/g, '').replace(/\s+/g, ' ').trim();
+  return new Response(csv, { headers: { 'content-type': 'text/csv; charset=utf-8',
+    'content-disposition': `attachment; filename="${name.replace(/[^\w. ()-]/g, '_')}"; filename*=UTF-8''${encodeURIComponent(name)}`, 'cache-control': 'no-store' } });
+});
+
 // Admin: preview the Telegram picture / send it now.
 route('GET', '/admin/ea/report.png', 'admin', async ({ env }) => {
   const s = await getSettings(env);
@@ -710,6 +780,7 @@ route('PUT', '/admin/ea/setups/:id', 'admin', async ({ request, env, params }) =
   await env.DB.prepare(`UPDATE ea_setups SET label=?, visible=?, sort=?, since=?, showcase=?, modal_override=?${restart ? ', since_manual=1, total=0, acct_total=0, total_ok=0, max_dd_pct=0, min_float=0, max_layers=0' : ''} WHERE id=?`)
     .bind(str(b.label, 60), b.visible ? 1 : 0, int(b.sort) || 0, since, sc, mo, r.id).run();
   if (restart) {
+    await env.DB.prepare('DELETE FROM ea_setup_deals WHERE setup_id=?').bind(r.id).run();
     // deepest DD / floating / longest basket rebuilt from the daily rows inside the new period
     const agg = await env.DB.prepare('SELECT COALESCE(MAX(max_dd_pct),0) AS dd, COALESCE(MIN(min_float),0) AS mf, COALESCE(MAX(max_layers),0) AS ml FROM ea_setup_days WHERE setup_id=? AND day >= ?')
       .bind(r.id, wibDay(since)).first();
@@ -723,6 +794,8 @@ route('DELETE', '/admin/ea/setups/:id', 'admin', async ({ env, params }) => {
     env.DB.prepare('DELETE FROM ea_setup_days WHERE setup_id=?').bind(id),
     env.DB.prepare('DELETE FROM ea_series WHERE setup_id=?').bind(id),
     env.DB.prepare('DELETE FROM ea_events WHERE setup_id=?').bind(id),
+    env.DB.prepare('DELETE FROM ea_setup_deals WHERE setup_id=?').bind(id),
+    env.DB.prepare('DELETE FROM ea_setup_inputs WHERE setup_id=?').bind(id),
     env.DB.prepare('DELETE FROM ea_setups WHERE id=?').bind(id),
   ]);
   return json({ ok: true });

@@ -14,6 +14,7 @@ Jalankan:  python ghg_builder.py          (terus berjalan, cek tiap beberapa det
 Hanya pakai library bawaan Python 3.
 """
 import base64, datetime, glob, hashlib, json, os, re, shutil, socket, subprocess, sys, time, traceback, urllib.request, urllib.error
+import ghg_setdump                          # GhgInputsJson() region of the EA, regenerated on every compile
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 WORK = os.path.join(HERE, 'work')
@@ -336,6 +337,8 @@ def build(cfg, job):
         shutil.copy2(ICON, jobdir)
 
     src = read_text(source)
+    if platform == 'mt5':
+        src = ghg_setdump.apply(src)                 # GhgInputsJson() always lists every current input
     version = (re.search(r'#property\s+version\s+"([^"]+)"', src) or [None, ''])[1]
     licensed = inject_license(src, job['id'], job['account_number'], job.get('expires_at') or 0, job.get('lic_kind') or job.get('product_kind') or '')
     licensed = inject_report(licensed, job, version, cfg.get('report_base') or cfg['api_base'])
@@ -458,7 +461,7 @@ def sync_vps_release(cfg, server):
             os.makedirs(kdir)
             ksrc = os.path.join(kdir, name + '.mq5')
             with open(ksrc, 'w', encoding='utf-8-sig', newline='\r\n') as f:
-                f.write(with_web_key(read_text(src), key).replace('\r\n', '\n'))
+                f.write(with_web_key(ghg_setdump.apply(read_text(src)), key).replace('\r\n', '\n'))
             metaedit(p, ksrc, logfile)
             kex5 = os.path.join(kdir, name + '.ex5')
             if os.path.exists(kex5):

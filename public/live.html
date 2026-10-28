@@ -93,6 +93,7 @@
     <div class="box" id="params"></div>
     <div class="box" id="days"></div>
     <div class="box" id="series"></div>
+    <div class="box" id="hist"></div>
     <div class="box" id="events"></div>
   </div>
 
@@ -115,7 +116,7 @@
   const q = new URLSearchParams(location.search);
   let setupId = Number(q.get('setup')) || 0;
   let pair = (q.get('pasar') || '').toUpperCase();
-  let OV = null, DT = null;
+  let OV = null, DT = null, histAll = false;
   const dur = (sec) => { const m = Math.max(0, Math.round(sec / 60)); return m >= 1440 ? `${Math.floor(m / 1440)}${T('h', 'd')} ${Math.floor((m % 1440) / 60)}${T('j', 'h')}` : m >= 60 ? `${Math.floor(m / 60)}${T('j', 'h')} ${m % 60}m` : `${m} ${T('mnt', 'min')}`; };
 
   // ---------------------------------------------------------------- setup comparison (best profit % first)
@@ -175,7 +176,7 @@
     const d = DT, v = d.setup, sn = v.snapshot || {}, c = v.cfg || {}, cur = v.currency;
     const dg = c.digits || (v.symbol === 'EURUSD' ? 5 : v.symbol === 'BTCUSD' ? 2 : 3);
     document.title = `${v.label || v.symbol} · GOLD HUNTER GARUDA Live`;
-    $('#dhead').innerHTML = `<h1>${ICON[v.symbol] || '📈'} ${esc(v.label && v.label !== v.symbol ? v.label : 'GOLD HUNTER GARUDA ' + v.symbol)}</h1><p class="muted small">${T('Akun', 'Account')} ${esc(v.account)} · ${esc(v.broker_symbol || v.symbol)} · ${T('mulai dihitung', 'counted from')} ${esc(fmtDate(v.since))} · EA v${esc(v.version)}</p>${v.preset ? `<p><button type="button" class="btn btn-gold btn-sm" id="dl-preset">⬇ ${T('Download preset setup ini', 'Download this setup\'s preset')}</button> <span class="small muted">${T('setelan persis seperti chart ini · untuk member berlisensi aktif', 'the exact settings of this chart · for members with an active licence')}</span></p>` : ''}`;
+    $('#dhead').innerHTML = `<h1>${ICON[v.symbol] || '📈'} ${esc(v.label && v.label !== v.symbol ? v.label : 'GOLD HUNTER GARUDA ' + v.symbol)}</h1><p class="muted small">${T('Akun', 'Account')} ${esc(v.account)} · ${esc(v.broker_symbol || v.symbol)} · ${T('mulai dihitung', 'counted from')} ${esc(fmtDate(v.since))} · EA v${esc(v.version)}</p>${v.preset ? `<p><button type="button" class="btn btn-gold btn-sm" id="dl-preset">⬇ ${T('Download preset setup ini', 'Download this setup\'s preset')}</button> <span class="small muted">${T('setelan persis seperti chart ini · untuk member berlisensi aktif', 'the exact settings of this chart · for members with an active licence')}${v.preset_live ? ' · ' + T('diperbarui otomatis dari EA', 'updated automatically by the EA') + ' ' + esc(ago(v.preset_at)) : ''}</span></p>` : ''}`;
     const dl = $('#dl-preset');
     if (dl) dl.onclick = async () => {
       try {
@@ -231,6 +232,22 @@
     $('#series').innerHTML = `<h2>${T('Seri selesai terakhir', 'Latest closed series')}</h2>` + (ser.length ? `<div class="table-wrap"><table><thead><tr><th>${T('Waktu', 'Time')}</th><th>${T('Sisi', 'Side')}</th><th class="right">${T('Posisi', 'Positions')}</th><th class="right hide-sm">Lot</th><th class="right hide-sm">${T('Durasi', 'Duration')}</th><th class="right">${T('Hasil', 'Result')}</th></tr></thead><tbody>
       ${ser.map((r) => `<tr><td class="small nowrap">${esc(fmtDateTime(r.closed_at))}</td><td><span class="tag ${r.side === 'BUY' ? 'buy' : 'sell'}">${esc(r.side)}</span></td><td class="right">${r.positions}</td><td class="right hide-sm">${Number(r.lots).toFixed(2)}</td><td class="right hide-sm nowrap">${dur(r.duration)}</td><td class="right nowrap ${cls(r.profit)}">${usd(toUsd(r.profit, r.currency || cur))}</td></tr>`).join('')}</tbody></table></div>`
       : `<div class="small muted">${T('Belum ada seri yang selesai sejak EA ini mulai dihitung.', 'No series closed since this EA started counting.')}</div>`);
+    // trading history: every closing deal since the start + the check of the totals against it
+    const ck = d.check || {}, hs = d.history || [];
+    const hShow = histAll ? hs : hs.slice(0, 30);
+    const badge = !ck.deals
+      ? `<div class="alert small" style="margin:0 0 12px">⏳ ${T('Riwayat trading sedang dikirim EA (EA v3.28 ke atas). Begitu masuk, total profit dicocokkan dengan setiap transaksi.', 'The EA is sending its trading history (EA v3.28 and up). Once in, the total profit is checked against every deal.')}</div>`
+      : ck.ok
+        ? `<div class="alert ok small" style="margin:0 0 12px">✓ <b>${T('Angka terverifikasi', 'Figures verified')}</b> · ${T('profit sejak mulai', 'profit since start')} <b>${usd(toUsd(ck.total, cur))}</b> = ${T('jumlah', 'the sum of')} ${num(ck.deals)} ${T('transaksi di riwayat trading', 'deals in the trading history')} (${num(ck.closes)} ${T('penutupan', 'closes')}) · ${T('hari ini', 'today')} ${usd(toUsd(ck.today, cur))} · ${T('kemarin', 'yesterday')} ${usd(toUsd(ck.yday, cur))} · ${T('bulan ini', 'this month')} ${usd(toUsd(ck.month, cur))}</div>`
+        : `<div class="alert small" style="margin:0 0 12px">⏳ ${T('Riwayat sedang disinkronkan', 'History is syncing')}: ${num(ck.deals)} ${T('transaksi tercatat, total riwayat', 'deals recorded, history total')} ${usd(toUsd(ck.net, cur))}${ck.total != null ? ` · ${T('laporan EA', 'EA report')} ${usd(toUsd(ck.total, cur))}` : ''}</div>`;
+    $('#hist').innerHTML = `<div class="row between" style="align-items:center;gap:10px;flex-wrap:wrap"><h2 style="margin:0">${T('Riwayat trading', 'Trading history')}</h2>${ck.deals ? `<a class="btn btn-ghost btn-sm" href="/api/live/${v.id}/history.csv" download>⬇ ${T('Unduh riwayat lengkap (CSV)', 'Download the full history (CSV)')}</a>` : ''}</div>
+      <p class="small muted" style="margin:6px 0 12px">${T('Setiap posisi yang ditutup EA ini sejak mulai dihitung, langsung dari riwayat MT5. Hasil = profit + swap + komisi penutupan; komisi saat posisi dibuka ikut dihitung di total.', 'Every position this EA closed since the start, straight from the MT5 history. Result = profit + swap + commission of the close; the opening commission is included in the total.')}</p>${badge}` +
+      (hs.length ? `<div class="table-wrap"><table><thead><tr><th>${T('Waktu tutup', 'Closed')}</th><th>${T('Posisi', 'Position')}</th><th class="right">Lot</th><th class="right hide-sm">${T('Harga tutup', 'Close price')}</th><th class="right">${T('Hasil', 'Result')}</th></tr></thead><tbody>
+      ${hShow.map((x) => { const sd = x.type === 1 ? 'BUY' : 'SELL'; return `<tr><td class="small nowrap">${esc(fmtDateTime(x.time))}</td><td class="nowrap"><span class="tag ${sd === 'BUY' ? 'buy' : 'sell'}">${sd}</span> <span class="tiny muted">#${esc(String(x.pos || x.ticket))}</span></td><td class="right">${Number(x.volume).toFixed(2)}</td><td class="right hide-sm">${Number(x.price).toFixed(dg)}</td><td class="right nowrap ${cls(x.net)}">${usd(toUsd(x.net, cur))}</td></tr>`; }).join('')}</tbody></table></div>` +
+      (hs.length > hShow.length ? `<p class="center" style="margin-top:10px"><button type="button" class="btn btn-ghost btn-sm" id="hist-more">${T('Tampilkan', 'Show')} ${hs.length} ${T('penutupan terakhir', 'latest closes')}</button></p>` : '')
+      : (ck.deals ? `<div class="small muted">${T('Belum ada posisi yang ditutup sejak mulai dihitung.', 'No position closed since the start yet.')}</div>` : ''));
+    const hm = $('#hist-more');
+    if (hm) hm.onclick = () => { histAll = true; renderDetail(); };
     const ev = d.events || [], K = KIND();
     $('#events').innerHTML = `<h2>${T('Kejadian & peringatan', 'Events & warnings')}</h2>` + (ev.length ? ev.map((e) => `<div class="ev"><span class="t">${esc(fmtDateTime(e.at))}</span><span>${(K[e.kind] || ['•', e.kind])[0]} <b>${esc((K[e.kind] || ['', e.kind])[1])}</b>${e.side ? ' · ' + esc(e.side) : ''}${e.profit ? ` · <span class="${cls(e.profit)}">${usd(toUsd(e.profit, cur))}</span>` : ''}<div class="small muted">${esc(e.text)}</div></span></div>`).join('')
       : `<div class="small muted">${T('Belum ada kejadian. Di sini tercatat reduction, kantong yang dipakai, peringatan floating besar / basket panjang, dan pengaman equity.', 'No events yet. Reductions, pocket closes, large floating / long basket warnings and the equity guard are listed here.')}</div>`);
