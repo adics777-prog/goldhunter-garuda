@@ -66,10 +66,15 @@ const SITE = (() => {
   const reveal = (root = document) => {
     const els = root.querySelectorAll('.reveal:not(.show)');
     if (!('IntersectionObserver' in window)) { els.forEach((el) => el.classList.add('show')); return; }
+    // already on screen: stays as it is (no blink); only what is further down glides in
+    const vh = window.innerHeight || 800;
+    els.forEach((el) => { const r = el.getBoundingClientRect(); if (r.top < vh && r.bottom > 0) el.classList.add('show'); });
+    document.documentElement.classList.add('rv');
     const io = new IntersectionObserver((es) => es.forEach((e) => { if (e.isIntersecting) { e.target.classList.add('show'); io.unobserve(e.target); } }), { threshold: 0.08 });
     els.forEach((el) => io.observe(el));
   };
-  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', () => reveal()); else reveal();
+  reveal();                                          // site.js sits at the end of the page: the content above is parsed
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', () => reveal());
 
   // ---- shared data
   const catalog = fetch('/api/catalog', { credentials: 'same-origin' }).then((r) => r.json()).catch(() => null);

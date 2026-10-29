@@ -16,7 +16,9 @@
     var q = new URLSearchParams(location.search).get('lang');
     if (q === 'en' || q === 'id') localStorage.setItem(KEY, q);
   } catch (e) { /* ignore */ }
-  var lang = stored() || browserLang() || 'en';
+  // the server puts the visitor's country on <html data-geo> (functions/_middleware.js): Indonesia -> Indonesian at once
+  var geo = String(document.documentElement.getAttribute('data-geo') || '').toUpperCase();
+  var lang = stored() || browserLang() || (geo === 'ID' ? 'id' : '') || (geo ? 'en' : '') || 'en';
   window.GHG_LANG = lang;
   window.T = function (id, en) { return lang === 'en' ? en : id; };
   function apply(l) {
@@ -54,7 +56,7 @@
   function start() {
     apply(lang);
     // no saved choice and no Indonesian browser: Indonesian visitors (by country) still get Indonesian
-    if (!stored() && !browserLang()) {
+    if (!stored() && !browserLang() && !geo) {
       fetch('/api/geo').then(function (r) { return r.json(); }).then(function (g) {
         if (g && g.country === 'ID' && !stored() && lang !== 'id') apply('id');
       }).catch(function () { /* stay English */ });

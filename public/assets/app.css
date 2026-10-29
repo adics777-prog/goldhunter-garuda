@@ -320,3 +320,13 @@ label.row{flex-wrap:nowrap}
 @media (prefers-reduced-motion:reduce){.pg-cursor,.pg-drop,.pg-btn.hl{animation:none}}
 @media (min-width:1100px){.main .pg{grid-template-columns:repeat(2,minmax(0,1fr))}}
 @media (min-width:1560px){.main .pg{grid-template-columns:repeat(4,minmax(0,1fr))}}
+/* soft loading: content fades in once; placeholders shimmer while data loads (no empty boxes) */
+@keyframes ghIn{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
+@keyframes ghShim{0%{background-position:-460px 0}100%{background-position:460px 0}}
+main{animation:ghIn .45s ease both}
+.fade{animation:ghIn .45s ease both}
+.skel{border:1px solid var(--line);border-radius:18px;background:var(--card);padding:16px;display:flex;flex-direction:column;gap:10px;min-width:0}
+.sk{display:block;height:12px;border-radius:7px;background:linear-gradient(90deg,rgba(255,255,255,.04) 0,rgba(255,255,255,.10) 40px,rgba(255,255,255,.04) 80px) 0 0/460px 100%,rgba(255,255,255,.04);animation:ghShim 1.4s linear infinite}
+.sk.h{height:26px;width:55%}.sk.w80{width:80%}.sk.w60{width:60%}.sk.w40{width:40%}.sk.box{height:54px;border-radius:12px}
+.netnote{position:fixed;left:50%;bottom:16px;transform:translateX(-50%);z-index:50;font-size:.8rem;padding:8px 14px;border-radius:30px;background:var(--card-2);border:1px solid var(--line);color:var(--muted);box-shadow:0 8px 24px rgba(0,0,0,.35);max-width:calc(100vw - 32px)}
+@media (prefers-reduced-motion:reduce){main,.fade{animation:none}.sk{animation:none}}

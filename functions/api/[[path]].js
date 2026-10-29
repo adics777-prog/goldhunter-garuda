@@ -624,6 +624,11 @@ async function dealCheck(env, r, t) {
 
 // Public: all visible EA instances (overview), or ?setup=id with series, days and events since its start.
 route('GET', '/live', 'public', async ({ env, url, waitUntil, base }) => {
+  // the same for every visitor: kept 10 s at the edge (the EAs report once a minute), so pages get it fast
+  const ckey = new Request(url.origin + url.pathname + url.search);
+  const hit = await caches.default.match(ckey).catch(() => null);
+  if (hit) return new Response(hit.body, hit);
+  const keep = (res) => { res.headers.set('cache-control', 'public, max-age=10'); waitUntil(caches.default.put(ckey, res.clone()).catch(() => {})); return res; };
   const s = await getSettings(env);
   const cfg = eaCfg(s);
   const t = now();
@@ -658,9 +663,9 @@ route('GET', '/live', 'public', async ({ env, url, waitUntil, base }) => {
     const fd = (x) => (x.day === from ? { ...x, profit: x.tot_ok && x.since_at === r.since ? x.total_end : (x.day === wibDay(t) ? v1.day : x.profit) } : x);
     days.results = days.results.map(fd).map(({ total_end, tot_ok, since_at, ...x }) => x);
     const p1 = days.results.find((x) => x.day === yd);
-    return json({ ok: true, configured: !!cfg.key, server_time: t, offline_min: cfg.offlineMin,
+    return keep(json({ ok: true, configured: !!cfg.key, server_time: t, offline_min: cfg.offlineMin,
       setup: { ...v1, ...ydOf(v1, p1 ? p1.profit : null), preset: hasPreset(r), preset_live: !!check.inputs_at, preset_at: check.inputs_at, stats: stat, snapshot: snap },
-      series: series.results, days: days.results, events: events.results, history: hist.results, check });
+      series: series.results, days: days.results, events: events.results, history: hist.results, check }));
   }
   const { results: rows } = await env.DB.prepare(`SELECT * FROM ea_setups WHERE ${pw.sql}`).bind(...pw.binds).all();
   rows.sort(EA_SETUP_ORDER);
@@ -684,7 +689,7 @@ route('GET', '/live', 'public', async ({ env, url, waitUntil, base }) => {
       deals: dl.n, verified: dl.n > 0 && v.total != null && Math.abs(Math.round(dl.net * 100) / 100 - v.total) < 0.02,
       spark: days.filter((x) => x.setup_id === r.id && x.day >= sinceDay).map((x) => [x.day, dp(x)]) };
   });
-  return json({ ok: true, configured: !!cfg.key, prepared, server_time: t, offline_min: cfg.offlineMin, setups });
+  return keep(json({ ok: true, configured: !!cfg.key, prepared, server_time: t, offline_min: cfg.offlineMin, setups }));
 });
 
 // ---- Preset of one public EA instance: every input exactly as that chart runs, read from the owner's VPS chart-profile

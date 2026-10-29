@@ -77,12 +77,44 @@ const GHL = (() => {
     </a>`;
   }
 
+  // JSON with a time limit and quiet retries (slow phone networks); error.status = the HTTP status
+  async function fetchJson(url, tries = 3) {
+    let last;
+    for (let i = 0; i < tries; i++) {
+      const ac = typeof AbortController === 'function' ? new AbortController() : null;
+      const to = ac ? setTimeout(() => ac.abort(), 12000) : 0;
+      try {
+        const r = await fetch(url, { credentials: 'same-origin', signal: ac ? ac.signal : undefined });
+        const d = await r.json().catch(() => null);
+        clearTimeout(to);
+        if (r.ok && d) return d;
+        last = Object.assign(new Error((d && d.error) || 'HTTP ' + r.status), { status: r.status });
+        if (r.status >= 400 && r.status < 500) throw last;          // not found / not allowed: no retry
+      } catch (e) {
+        clearTimeout(to);
+        last = e;
+        if (e && e.status >= 400 && e.status < 500) throw e;
+      }
+      if (i + 1 < tries) await new Promise((r) => setTimeout(r, 1200 * (i + 1)));
+    }
+    throw last || new Error('network');
+  }
+  // last data seen on this device (shown at once on the next visit, then replaced by the fresh one)
+  const stash = (k, d) => { try { localStorage.setItem(k, JSON.stringify({ t: Date.now(), d })); } catch (e) { /* private mode */ } };
+  const unstash = (k, maxMs = 3 * 864e5) => { try { const v = JSON.parse(localStorage.getItem(k) || 'null'); return v && Date.now() - v.t < maxMs ? v.d : null; } catch (e) { return null; } };
+  // shimmering placeholder cards while the data loads
+  const skeleton = (n = 3) => Array.from({ length: n }, () => '<div class="skel" aria-hidden="true"><span class="sk h"></span><span class="sk w60"></span><span class="sk box"></span><span class="sk w80"></span><span class="sk w40"></span></div>').join('');
   let cache = null, cacheAt = 0;
   async function load(force) {
     if (!force && cache && Date.now() - cacheAt < 20000) return cache;
-    const r = await fetch('/api/live', { credentials: 'same-origin' });
-    cache = await r.json();
-    cacheAt = Date.now();
+    try {
+      cache = await fetchJson('/api/live');
+      cacheAt = Date.now();
+      stash('ghg_live_ov', cache);
+    } catch (e) {
+      if (!cache) cache = unstash('ghg_live_ov');
+      if (!cache) throw e;                                 // nothing to show yet: the caller keeps its placeholders
+    }
     return cache;
   }
 
@@ -133,5 +165,5 @@ const GHL = (() => {
     st.textContent = CSS;
     document.head.appendChild(st);
   }
-  return { TT, monthLabel, run, esc, toUsd, usd, num, pct, cls, days, NAME, ICON, PAIRS, spark, card, load };
+  return { TT, monthLabel, fetchJson, stash, unstash, skeleton, run, esc, toUsd, usd, num, pct, cls, days, NAME, ICON, PAIRS, spark, card, load };
 })();

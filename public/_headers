@@ -1,18 +1,32 @@
 /assets/brand/*
   Cache-Control: public, max-age=2592000, stale-while-revalidate=604800
 /assets/app.css
-  Cache-Control: no-cache
+  Cache-Control: public, max-age=31536000, immutable
 /assets/site.css
-  Cache-Control: no-cache
+  Cache-Control: public, max-age=31536000, immutable
 /assets/site.js
-  Cache-Control: no-cache
+  Cache-Control: public, max-age=31536000, immutable
 /assets/common.js
-  Cache-Control: no-cache
+  Cache-Control: public, max-age=31536000, immutable
 /assets/auth.js
-  Cache-Control: no-cache
+  Cache-Control: public, max-age=31536000, immutable
 /assets/member.js
-  Cache-Control: no-cache
+  Cache-Control: public, max-age=31536000, immutable
 /assets/admin.js
+  Cache-Control: public, max-age=31536000, immutable
+/assets/i18n.js
+  Cache-Control: public, max-age=31536000, immutable
+/assets/ghlive.js
+  Cache-Control: public, max-age=31536000, immutable
+/assets/ghhud.js
+  Cache-Control: public, max-age=31536000, immutable
+/assets/ghsim.js
+  Cache-Control: public, max-age=31536000, immutable
+/assets/fitur.js
+  Cache-Control: public, max-age=31536000, immutable
+/assets/presetguide.js
+  Cache-Control: public, max-age=31536000, immutable
+/assets/features.json
   Cache-Control: no-cache
 /*
   X-Content-Type-Options: nosniff
