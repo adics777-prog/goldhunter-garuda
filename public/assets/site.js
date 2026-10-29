@@ -153,7 +153,7 @@ const SITE = (() => {
       return `<div class="plan ${best ? 'best' : ''}">${rib ? `<div class="rib">${rib}</div>` : ''}
         <h3>${esc(tx(p, 'name'))}</h3><p class="desc">${esc(tx(p, 'description'))}</p>
         <div class="price">${price}</div>${extra}<ul>${feats}</ul>
-        <a class="btn ${best || p.kind === 'ea_trial' ? 'btn-gold' : 'btn-outline'}" href="/member#/order/${p.id}">${cta}</a></div>`;
+        <a class="btn ${best ? 'btn-gold' : 'btn-outline'}" href="/member#/order/${p.id}">${cta}</a></div>`;
     }).join('');
     box.querySelectorAll('[data-rent]').forEach((sel) => {
       const p = c.products.find((x) => String(x.id) === sel.dataset.rent);
@@ -172,7 +172,7 @@ const SITE = (() => {
   }
 
   // ---- recommended setup card
-  const ICON = { XAUUSD: '🥇', BTCUSD: '₿', EURUSD: '💶', USDJPY: '💴', GBPUSD: '💷', US500: '📊', XAGUSD: '🥈', AUDCAD: '🌏', GBPJPY: '💷', EURJPY: '💶' };
+  const ICON = { XAUUSD: '🪙', BTCUSD: '₿', EURUSD: '💶', USDJPY: '💴', GBPUSD: '💷', US500: '📊', XAGUSD: '⚪', AUDCAD: '🌏', GBPJPY: '💷', EURJPY: '💶' };
   const PAIR_NAME = () => ({ XAUUSD: TT('Emas', 'Gold'), BTCUSD: 'Bitcoin', EURUSD: 'Euro / Dolar', USDJPY: TT('Dolar / Yen', 'Dollar / Yen'), GBPUSD: 'Pound / Dolar', XAGUSD: TT('Perak', 'Silver'), US500: TT('Indeks S&P 500', 'S&P 500 index'), AUDCAD: 'Aussie / Loonie' });
   const setups = () => fetch('/api/setups', { credentials: 'same-origin' }).then((r) => r.json());
   // ---- pairs (public): which pairs the EA runs on; "preset ready" for the pairs HQ already has a preset for

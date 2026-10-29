@@ -70,7 +70,7 @@
     return { big: d >= 1 ? `${d} hari${d < 7 && h ? ` ${h} jam` : ''}` : `${h} jam`, small: `lagi · s/d ${fmtDate(l.expires_at)}`, cls: d < 3 ? 'b-red' : d < 8 ? 'b-orange' : 'b-green' };
   };
   const RISK_M = { low: ['b-green', 'Risiko rendah'], medium: ['b-orange', 'Risiko sedang'], high: ['b-red', 'Risiko tinggi'] };
-  const ICON_M = { XAUUSD: '🥇', BTCUSD: '₿', EURUSD: '💶', USDJPY: '💴', GBPUSD: '💷', XAGUSD: '🥈' };
+  const ICON_M = { XAUUSD: '🪙', BTCUSD: '₿', EURUSD: '💶', USDJPY: '💴', GBPUSD: '💷', XAGUSD: '⚪' };
   const capText = (v, s) => !(v > 0) ? '-' : s.account_type === 'cent' ? `${Number(v).toLocaleString('id-ID')} USC (≈ $${Number(v / 100).toLocaleString('id-ID')})` : `$${Number(v).toLocaleString('id-ID')}`;
   const setupRow = (s, can) => `<div class="row between" style="padding:10px 0;border-bottom:1px solid var(--line);flex-wrap:nowrap;align-items:flex-start">
       <div style="min-width:0"><b>${ICON_M[s.symbol] || '📈'} ${esc(s.symbol)}</b> <span class="small muted">${esc(s.title)}</span> <span class="badge ${(RISK_M[s.risk] || ['b-gray'])[0]}">${(RISK_M[s.risk] || [0, s.risk])[1]}</span>

@@ -19,8 +19,8 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="preload" as="style" href="https://fonts.googleapis.com/css2?family=Cinzel:wght@700;900&family=Poppins:wght@300;400;500;600;700;800&display=swap" onload="this.onload=null;this.rel='stylesheet'"><noscript><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Cinzel:wght@700;900&family=Poppins:wght@300;400;500;600;700;800&display=swap"></noscript>
-<link rel="stylesheet" href="/assets/app.css?v=245e2737">
-<link rel="stylesheet" href="/assets/site.css?v=21640775">
+<link rel="stylesheet" href="/assets/app.css?v=d6c5ea49">
+<link rel="stylesheet" href="/assets/site.css?v=b64cc27f">
 <style>
   .pub-wrap{max-width:1000px;margin:0 auto;padding:34px clamp(16px,4vw,32px) 60px}
   .pub-hero{text-align:center;margin-bottom:26px}
@@ -41,7 +41,7 @@
     <p data-en="Real accounts of members running GOLD HUNTER GARUDA. The EA reports closed profit by itself: how long it has been trading, the capital, profit in US dollars and as a % of capital. Names are censored.">Akun nyata member yang menjalankan GOLD HUNTER GARUDA. EA sendiri yang melaporkan profit tertutup: sudah berapa lama trading, modalnya, profit dalam dolar dan persen dari modal. Nama member disensor.</p>
   </div>
   <div class="row" style="justify-content:center;margin-bottom:18px">
-    <div class="choice" id="tabs">
+    <div class="choice" id="tabs" style="justify-content:center">
       <label><input type="radio" name="p" value="all" checked><span data-en="Since start">Sejak mulai</span></label>
       <label><input type="radio" name="p" value="month"><span id="tab-month">Bulan ini</span></label>
       <label><input type="radio" name="p" value="week"><span data-en="This week">Minggu ini</span></label>
@@ -60,9 +60,9 @@
   </div>
 </main>
 <script src="/assets/i18n.js?v=13f0d67d"></script>
-<script src="/assets/site.js?v=7de924c0"></script>
+<script src="/assets/site.js?v=66f4beb4"></script>
 <script src="/assets/common.js?v=ed3ae07d"></script>
-<script src="/assets/ghlive.js?v=e8dc7fcf"></script>
+<script src="/assets/ghlive.js?v=b4d210fb"></script>
 <script>
 (() => {
   const { $, esc, ago } = GHG;
@@ -78,7 +78,7 @@
     const plus = d.rows.filter((r) => (r[k] || 0) > 0).length;
     $('#tiles').innerHTML = `
       <div class="stat"><b>${d.total_accounts}</b><span>${T('Akun member melapor', 'Member accounts reporting')}</span></div>
-      <div class="stat"><b style="font-size:1.25rem" class="${d.total_usd < 0 ? 'neg' : ''}">${usd(d.total_usd)}</b><span>${T('Total profit', 'Total profit')} ${L}</span></div>
+      <div class="stat"><b class="${d.total_usd < 0 ? 'neg' : ''}">${usd(d.total_usd)}</b><span>${T('Total profit', 'Total profit')} ${L}</span></div>
       <div class="stat"><b>${plus}/${d.rows.length}</b><span>${T('Akun profit', 'Accounts in profit')} ${L}</span></div>`;
     $('#list').innerHTML = d.rows.length ? `<div class="table-wrap"><table class="board"><thead><tr><th>#</th><th>Member</th><th class="right">${T('Lama trading', 'Trading for')}</th><th class="right hide-sm">${T('Modal', 'Capital')}</th><th class="right">Profit ${L}</th><th class="right">% ${T('modal', 'capital')}</th><th class="hide-sm">Update</th></tr></thead><tbody>
       ${d.rows.map((r, i) => `<tr><td class="rank">${i + 1}</td><td><b>${esc(r.name)}</b><div class="tiny muted">${esc(r.broker)} · ${esc(r.account)}</div></td>

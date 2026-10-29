@@ -20,8 +20,8 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="preload" as="style" href="https://fonts.googleapis.com/css2?family=Cinzel:wght@700;900&family=Poppins:wght@300;400;500;600;700;800&display=swap" onload="this.onload=null;this.rel='stylesheet'"><noscript><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Cinzel:wght@700;900&family=Poppins:wght@300;400;500;600;700;800&display=swap"></noscript>
-<link rel="stylesheet" href="/assets/app.css?v=245e2737">
-<link rel="stylesheet" href="/assets/site.css?v=21640775">
+<link rel="stylesheet" href="/assets/app.css?v=d6c5ea49">
+<link rel="stylesheet" href="/assets/site.css?v=b64cc27f">
 </head>
 <body>
 <main>
@@ -40,7 +40,7 @@
 
   <!-- detail per package -->
   <section class="sec">
-    <div class="wrap g2">
+    <div class="wrap g2 pk-detail">
       <div class="card" id="trial">
         <h3 data-en="🧪 Trial — free for 7 days">🧪 Trial — gratis 7 hari</h3>
         <ul class="checks" id="trial-list">
@@ -92,7 +92,7 @@
         <p class="sec-sub" data-en="You can switch the method as long as the invoice is unpaid.">Metode bisa diganti selama tagihan belum dibayar.</p>
       </div>
       <div class="g3">
-        <div class="feat"><div class="ico">₮</div><h3 data-en="USDT TRC20 — automatic">USDT TRC20 — otomatis</h3><p data-en="Each invoice gets a unique USDT amount. Send exactly that amount; the blockchain is checked automatically and your licence + EA are made without waiting for the admin.">Setiap tagihan mendapat nominal USDT unik. Kirim tepat sejumlah itu; blockchain dicek otomatis dan lisensi + EA langsung dibuat tanpa menunggu admin.</p></div>
+        <div class="feat" id="pay-usdt" hidden><div class="ico">₮</div><h3 data-en="USDT TRC20 — automatic">USDT TRC20 — otomatis</h3><p data-en="Each invoice gets a unique USDT amount. Send exactly that amount; the blockchain is checked automatically and your licence + EA are made without waiting for the admin.">Setiap tagihan mendapat nominal USDT unik. Kirim tepat sejumlah itu; blockchain dicek otomatis dan lisensi + EA langsung dibuat tanpa menunggu admin.</p></div>
         <div class="feat"><div class="ico">🏦</div><h3 data-en="Bank transfer — unique code">Transfer bank — kode unik</h3><p data-en="Transfer the amount including the unique code at the end, upload the proof in the member area, and the admin confirms it.">Transfer nominal termasuk kode unik di belakangnya, unggah bukti di member area, lalu admin mengonfirmasi.</p></div>
         <div class="feat"><div class="ico">🧾</div><h3 data-en="Invoices &amp; reminders">Tagihan &amp; pengingat</h3><p data-en="Every invoice is in the member area. Rental reminders come 3 days and 1 day before the end; profit-sharing invoices every Sunday.">Semua tagihan ada di member area. Pengingat sewa datang H-3 dan H-1 sebelum habis; tagihan sharing profit tiap hari Minggu.</p></div>
       </div>
@@ -119,7 +119,7 @@
 </main>
 
 <script src="/assets/i18n.js?v=13f0d67d"></script>
-<script src="/assets/site.js?v=7de924c0"></script>
+<script src="/assets/site.js?v=66f4beb4"></script>
 <script>
 (() => {
   const { TT: T2, rp, durL, tx, esc } = SITE;
@@ -157,7 +157,7 @@
     const bestDisc = Math.max(0, ...Object.values(disc).map(Number));
     document.getElementById('vps-plans').innerHTML = vps.length ? vps.map((p) => {
       const feats = tx(p, 'features').split(/\r?\n/).filter(Boolean).map((f) => `<li>${esc(f)}</li>`).join('');
-      return `<div class="plan ${p.requires_ib ? 'best' : ''}">${p.requires_ib ? `<div class="rib">${T2('KHUSUS AKUN IB', 'IB ACCOUNTS')}</div>` : ''}
+      return `<div class="plan ${p.requires_ib ? 'ibonly' : ''}">${p.requires_ib ? `<div class="rib">${T2('KHUSUS AKUN IB', 'IB ACCOUNTS')}</div>` : ''}
         <h3>${esc(tx(p, 'name'))}</h3><p class="desc">${esc(tx(p, 'description'))}</p>
         <div class="price"><b>${rp(p.price)}</b><small>/ ${T2('bulan', 'month')}${bestDisc ? ' · ' + T2(`hemat sampai ${bestDisc}%`, `save up to ${bestDisc}%`) : ''}</small></div>
         <ul>${feats}</ul><a class="btn btn-outline" href="/member#/order/${p.id}">${T2('Pilih paket', 'Choose')}</a></div>`;
@@ -169,7 +169,7 @@
         `A Windows VPS keeps MetaTrader running day and night (spec: ${C.vps_spec}). Private: your own VPS with Remote Desktop. Shared: the admin runs your account on our VPS.`);
     }
   }
-  SITE.catalog.then((c) => { C = c; render(); });
+  SITE.catalog.then((c) => { C = c; const u = document.getElementById('pay-usdt'); if (u) u.hidden = !(c && c.pay && c.pay.usdt); render(); });
   document.addEventListener('ghg:lang', () => { if (C) render(); });
 })();
 </script>

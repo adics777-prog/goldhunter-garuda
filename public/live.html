@@ -19,12 +19,12 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="preload" as="style" href="https://fonts.googleapis.com/css2?family=Cinzel:wght@700;900&family=Poppins:wght@300;400;500;600;700;800&display=swap" onload="this.onload=null;this.rel='stylesheet'"><noscript><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Cinzel:wght@700;900&family=Poppins:wght@300;400;500;600;700;800&display=swap"></noscript>
-<link rel="stylesheet" href="/assets/app.css?v=245e2737">
-<link rel="stylesheet" href="/assets/site.css?v=21640775">
+<link rel="stylesheet" href="/assets/app.css?v=d6c5ea49">
+<link rel="stylesheet" href="/assets/site.css?v=b64cc27f">
 <script>if (/[?&]setup=\d/.test(location.search)) document.documentElement.classList.add('ld');</script>
 <style>
   .ld #overview{display:none!important} .ld #detail{display:block!important}
-  .pub-wrap{max-width:1180px;margin:0 auto;padding:30px clamp(16px,4vw,32px) 60px}
+  .pub-wrap{width:min(1160px,100% - 32px);margin:0 auto;padding:30px 0 34px}
   .pub-hero{text-align:center;margin-bottom:22px;position:relative}
   .pub-hero h1{font-family:'Cinzel',serif;font-size:clamp(1.5rem,4.5vw,2.3rem);margin:10px 0 8px}
   .pub-hero p{color:var(--muted);max-width:680px;margin:0 auto}
@@ -34,7 +34,8 @@
   .live-dot{display:inline-block;width:9px;height:9px;border-radius:50%;margin-right:6px;vertical-align:middle;background:#ff8b95}
   .live-dot.on{background:#6ee7a2;box-shadow:0 0 0 4px rgba(110,231,162,.18)}
   .tiles{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;margin-bottom:16px}
-  @media(min-width:720px){.tiles{grid-template-columns:repeat(4,minmax(0,1fr))}}
+  @media(min-width:720px){.tiles{grid-template-columns:repeat(3,minmax(0,1fr))}}
+  @media(max-width:719px){.tiles>.tile:last-child:nth-child(odd){grid-column:1/-1}}
   .tile{border:1px solid var(--line);border-radius:14px;background:var(--card);padding:14px 16px;min-width:0}
   .tile .k{color:var(--muted);font-size:.74rem;letter-spacing:.3px;text-transform:uppercase}
   .tile .v{font-size:clamp(1.15rem,2.6vw,1.5rem);font-weight:700;margin-top:4px;overflow-wrap:anywhere}
@@ -54,6 +55,10 @@
   .seri .big{font-size:1.3rem;font-weight:800}
   .kv{display:grid;grid-template-columns:auto 1fr;gap:4px 12px;font-size:.86rem;margin-top:8px}
   .kv dt{color:var(--muted)} .kv dd{margin:0;font-family:ui-monospace,Consolas,monospace;overflow-wrap:anywhere}
+  .kv.plain dd{font-family:inherit}
+  .infostrip{grid-column:1/-1;display:flex;flex-wrap:wrap;gap:6px 14px;font-size:.8rem;color:var(--muted);border:1px solid var(--line);border-radius:12px;background:var(--bg-2);padding:9px 12px}
+  .infostrip b{color:var(--text);font-weight:600}
+  .dl-row{display:flex;flex-direction:column;align-items:flex-start;gap:6px;margin:0 0 14px}
   .box{border:1px solid var(--line);border-radius:var(--radius);background:var(--card);padding:16px 18px;margin-bottom:16px}
   .box h2{font-size:1.05rem;margin:0 0 10px}
   .status{border:1px solid var(--line);border-radius:14px;background:var(--card);padding:12px 16px;margin-bottom:16px;display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap;align-items:center}
@@ -63,7 +68,8 @@
   .mk{display:inline-block;font-size:.7rem;font-weight:700;letter-spacing:.4px;padding:2px 7px;border-radius:6px;background:var(--bg-2);border:1px solid var(--line);color:var(--text)}
   .ev{display:flex;gap:10px;padding:8px 0;border-bottom:1px solid var(--line);font-size:.86rem}
   .ev:last-child{border-bottom:0}
-  .ev .t{color:var(--muted);white-space:nowrap;font-size:.78rem;min-width:88px}
+  .ev .t{color:var(--muted);white-space:nowrap;font-size:.78rem;flex:0 0 132px;font-variant-numeric:tabular-nums}
+  @media(max-width:600px){.ev{flex-direction:column;gap:2px}.ev .t{flex:none}}
   .bar{height:6px;border-radius:3px;background:var(--bg-2);overflow:hidden;margin-top:6px}
   .bar i{display:block;height:100%;background:#6ee7a2}
   .best{color:var(--gold)}
@@ -107,38 +113,38 @@
     <a href="/live" class="btn btn-ghost btn-sm" id="back" data-en="← All EAs">← Semua EA</a>
     <div class="dhead" id="dhead"><div style="padding:14px 0 10px;display:flex;flex-direction:column;gap:10px"><span class="sk h"></span><span class="sk w60"></span></div></div>
     <div class="status" id="dstatus"><span class="sk w40" style="width:180px"></span></div>
-    <div class="proof" id="dproof"></div>
     <div class="tiles" id="tiles"><div class="tile"><span class="sk w60"></span><span class="sk h" style="margin-top:8px"></span></div><div class="tile"><span class="sk w60"></span><span class="sk h" style="margin-top:8px"></span></div><div class="tile"><span class="sk w60"></span><span class="sk h" style="margin-top:8px"></span></div><div class="tile"><span class="sk w60"></span><span class="sk h" style="margin-top:8px"></span></div></div>
     <div class="cards" id="cards"></div>
-    <div class="box" id="params"></div>
     <div class="box" id="days"></div>
     <div class="box" id="series"></div>
     <div class="box" id="hist"></div>
+    <div class="proof" id="dproof"></div>
+    <div class="box" id="params"></div>
     <div class="box" id="events"></div>
   </div>
 
-  <p class="center tiny muted" data-en="Amounts in US dollars (cent account: 100 USC = $1). Capital = start balance plus deposits minus withdrawals. Times in your device's time zone; the page refreshes every 30 seconds.">Nominal dalam dolar AS (akun cent: 100 USC = $1). Modal = saldo awal ditambah deposit dikurangi penarikan. Waktu sesuai jam perangkat Anda; halaman diperbarui otomatis tiap 30 detik.</p>
-  <div class="alert err small center" style="line-height:1.7;margin-top:20px" data-en="<b>⚠️ RISK WARNING.</b> GOLD HUNTER GARUDA is a martingale / averaging EA: it adds positions while price moves against it, so the floating loss can get large before a series closes in profit. Past results are <b>not a guarantee</b> of future results. Trading carries a very high risk and can lead to the loss of part or all of your capital. <a href='#risiko' style='color:#ff8b95;text-decoration:underline'>Read the full risk warning</a>.">
-    <b>⚠️ PERINGATAN RISIKO.</b> GOLD HUNTER GARUDA adalah EA martingale / averaging: ia menambah posisi saat harga melawan, sehingga floating rugi bisa membesar sebelum satu seri ditutup profit. Hasil masa lalu <b>bukan jaminan</b> hasil ke depan.
-    Trading berisiko sangat tinggi dan dapat menyebabkan kehilangan sebagian atau seluruh modal.
-    <a href="#risiko" style="color:#ff8b95;text-decoration:underline">Baca peringatan risiko lengkap</a>.
-  </div>
+  <p class="center tiny muted" style="margin-top:14px" data-en="Amounts in US dollars (cent account: 100 USC = $1). Capital = start balance plus deposits minus withdrawals. Times in your device's time zone; the page refreshes every 30 seconds.">Nominal dalam dolar AS (akun cent: 100 USC = $1). Modal = saldo awal ditambah deposit dikurangi penarikan. Waktu sesuai jam perangkat Anda; halaman diperbarui otomatis tiap 30 detik.</p>
+  <p class="center tiny muted" style="margin-top:6px" data-en="⚠️ Past results are not a guarantee of future results; trading carries a high risk. &lt;a href='#risiko'&gt;Full risk warning&lt;/a&gt;">⚠️ Hasil masa lalu bukan jaminan hasil ke depan; trading berisiko tinggi. <a href="#risiko">Peringatan risiko lengkap</a></p>
 </main>
 <div class="netnote" id="netnote" hidden data-en="🔄 Connection is slow, reconnecting…">🔄 Koneksi lambat, menyambung ulang…</div>
 <script src="/assets/i18n.js?v=13f0d67d"></script>
-<script src="/assets/site.js?v=7de924c0"></script>
+<script src="/assets/site.js?v=66f4beb4"></script>
 <script src="/assets/common.js?v=ed3ae07d"></script>
-<script src="/assets/ghlive.js?v=e8dc7fcf"></script>
+<script src="/assets/ghlive.js?v=b4d210fb"></script>
 <script>
 (() => {
   const { $, fmtDateTime, fmtDate, ago } = GHG;
   const { esc, toUsd, usd, num, pct, cls, days, NAME, ICON, PAIRS, card, monthLabel, fetchJson, stash, unstash } = GHL;
-  const KIND = () => ({ pause: ['⏸', 'Pause'], kantong: ['🟡', T('Kantong profit', 'Profit pocket')], pengaman: ['🛑', T('Pengaman equity', 'Equity guard')], dd: ['⚠️', T('Floating rugi besar', 'Large floating loss')], layer: ['⚠️', T('Basket panjang', 'Long basket')], reduction: ['🔁', 'Reduction'] });
+  const MODE = () => ({ BARBAR: 'BARBAR', EMA: 'EMA TREN', SMA: T('SMA klasik', 'Classic SMA'), 'EMA+SMA': 'EMA + SMA', 'TREN MURNI': 'TREN MURNI' });
+  const WORD = (x) => { const m = { RIIL: T('riil (di broker)', 'real (at the broker)'), VIRTUAL: T('virtual (disimpan EA)', 'virtual (kept by the EA)'), GASPOL: T('tetap jalan', 'keeps trading'), PAUSE: T('jeda saat berita', 'pauses on news'), STOP: T('jeda saat berita', 'pauses on news') }; const k = String(x || '').toUpperCase(); return m[k] || (k ? k.charAt(0) + k.slice(1).toLowerCase() : ''); };
+  const dayTs = (d) => Math.floor(Date.parse(d + 'T12:00:00+07:00') / 1000);
+  const KIND = () => ({ pause: ['⏸', 'Pause'], resume: ['▶', T('Dilanjutkan', 'Resumed')], kantong: ['🟡', T('Kantong profit', 'Profit pocket')], pengaman: ['🛑', T('Pengaman equity', 'Equity guard')], dd: ['⚠️', T('Floating rugi besar', 'Large floating loss')], layer: ['⚠️', T('Basket panjang', 'Long basket')], reduction: ['🔁', 'Reduction'] });
   const q = new URLSearchParams(location.search);
   let setupId = Number(q.get('setup')) || 0;
   let pair = (q.get('pasar') || '').toUpperCase();
   let OV = null, DT = null, histAll = false;
-  const dur = (sec) => { const m = Math.max(0, Math.round(sec / 60)); return m >= 1440 ? `${Math.floor(m / 1440)}${T('h', 'd')} ${Math.floor((m % 1440) / 60)}${T('j', 'h')}` : m >= 60 ? `${Math.floor(m / 60)}${T('j', 'h')} ${m % 60}m` : `${m} ${T('mnt', 'min')}`; };
+  const dur = (sec) => { const m = Math.max(0, Math.round(sec / 60)); return m >= 1440 ? `${Math.floor(m / 1440)} ${T('hr', 'd')} ${Math.floor((m % 1440) / 60)} ${T('jam', 'h')}` : m >= 60 ? `${Math.floor(m / 60)} ${T('jam', 'h')} ${m % 60} ${T('mnt', 'min')}` : `${m} ${T('mnt', 'min')}`; };
+  let serAll = false;
 
   // ---------------------------------------------------------------- setup comparison (best profit % first)
   function compare(rows) {
@@ -162,7 +168,8 @@
     st.textContent = `.cmp-box{margin:0 0 18px}.cmp-scroll{overflow-x:auto;border:1px solid var(--line);border-radius:14px;background:var(--card)}
       .cmp{width:100%;border-collapse:collapse;font-size:.86rem;min-width:520px}.cmp th{text-align:left;color:var(--muted);font-weight:600;font-size:.72rem;text-transform:uppercase;letter-spacing:.4px;padding:10px 12px;border-bottom:1px solid var(--line)}
       .cmp td{padding:10px 12px;border-bottom:1px solid var(--line);vertical-align:middle}.cmp tr:last-child td{border-bottom:0}.cmp tbody tr{cursor:pointer}.cmp tbody tr:hover{background:rgba(245,197,66,.06)}
-      .cmp td small{display:block;color:var(--muted);font-size:.72rem;font-weight:400}.cmp .c-rank{width:34px;font-size:1.05rem;text-align:center}.cmp .c-name b{font-weight:800}`;
+      .cmp td small{display:block;color:var(--muted);font-size:.72rem;font-weight:400}.cmp .c-rank{width:34px;font-size:1.05rem;text-align:center}.cmp .c-name b{font-weight:800}
+      @media(max-width:600px){.cmp{min-width:0}.cmp th,.cmp td{padding:9px 8px}.cmp th:nth-child(5),.cmp td:nth-child(5),.cmp th:nth-child(6),.cmp td:nth-child(6){display:none}}`;
     document.head.appendChild(st);
   }
 
@@ -197,7 +204,7 @@
     const d = DT, v = d.setup, sn = v.snapshot || {}, c = v.cfg || {}, cur = v.currency;
     const dg = c.digits || (v.symbol === 'EURUSD' ? 5 : v.symbol === 'BTCUSD' ? 2 : 3);
     document.title = `${v.label || v.symbol} · GOLD HUNTER GARUDA Live`;
-    $('#dhead').innerHTML = `<h1>${ICON[v.symbol] || '📈'} ${esc(v.label && v.label !== v.symbol ? v.label : 'GOLD HUNTER GARUDA ' + v.symbol)}</h1><p class="muted small">${T('Akun', 'Account')} ${esc(v.account)} · ${esc(v.broker_symbol || v.symbol)} · ${T('mulai dihitung', 'counted from')} ${esc(fmtDate(v.since))} · EA v${esc(v.version)}</p>${v.preset ? `<p><button type="button" class="btn btn-gold btn-sm" id="dl-preset">⬇ ${T('Download preset setup ini', 'Download this setup\'s preset')}</button> <span class="small muted">${T('setelan persis seperti chart ini · gratis untuk member (cukup login)', 'the exact settings of this chart · free for members (just log in)')}${v.preset_live ? ' · ' + T('diperbarui otomatis dari EA', 'updated automatically by the EA') + ' ' + esc(ago(v.preset_at)) : ''}</span></p>` : ''}`;
+    $('#dhead').innerHTML = `<h1>${ICON[v.symbol] || '📈'} ${esc(v.label && v.label !== v.symbol ? v.label : 'GOLD HUNTER GARUDA ' + v.symbol)}</h1><p class="muted small">${T('Akun', 'Account')} ${esc(v.account)} · ${esc(v.broker_symbol || v.symbol)} · ${T('mulai dihitung', 'counted from')} ${esc(fmtDate(v.since))} · EA v${esc(v.version)}</p>${v.preset ? `<p class="dl-row"><button type="button" class="btn btn-gold btn-sm" id="dl-preset">⬇ ${T('Download preset setup ini', 'Download this setup\'s preset')}</button><span class="small muted">${T('setelan persis seperti chart ini · gratis untuk member (cukup login)', 'the exact settings of this chart · free for members (just log in)')}${v.preset_live ? ' · ' + T('diperbarui otomatis dari EA', 'updated automatically by the EA') + ' ' + esc(ago(v.preset_at)) : ''}</span></p>` : ''}`;
     const dl = $('#dl-preset');
     if (dl) dl.onclick = async () => {
       try {
@@ -215,9 +222,9 @@
     };
     $('#dstatus').innerHTML = `<span><span class="live-dot ${v.online ? 'on' : ''}"></span><b>${v.online ? 'ONLINE' : T('TIDAK MENGIRIM DATA', 'NOT REPORTING')}</b> · ${esc(v.status || '')}</span><span class="small muted">${T('data terakhir', 'last data')} ${esc(ago(v.at))}</span>`;
     const ck0 = d.check || {};
-    $('#dproof').innerHTML = `<h2>✓ ${T('Bukti akun riil', 'Real account proof')}</h2><dl class="kv">
+    $('#dproof').innerHTML = `<h2>✓ ${T('Bukti akun riil', 'Real account proof')}</h2><dl class="kv plain">
       <dt>${T('Terhubung', 'Connected')}</dt><dd style="font-family:inherit">MT5 → ${T('web GOLD HUNTER GARUDA, laporan otomatis tiap menit', 'GOLD HUNTER GARUDA web, automatic report every minute')}</dd>
-      ${v.server ? `<dt>${T('Server broker', 'Broker server')}</dt><dd>${esc(v.server)}</dd>` : ''}
+      ${v.server ? `<dt>${T('Server broker', 'Broker server')}</dt><dd class="mono">${esc(v.server)}</dd>` : ''}
       <dt>${T('Akun', 'Account')}</dt><dd>${esc(v.account)} <span class="small muted" style="font-family:inherit">(${T('disamarkan', 'masked')})</span> · ${esc(v.broker_symbol || v.symbol)} · magic ${esc(String(v.magic))}</dd>
       <dt>${T('Data terakhir', 'Last data')}</dt><dd style="font-family:inherit">${esc(fmtDateTime(v.at))} · ${esc(ago(v.at))} · EA v${esc(v.version)}</dd>
       ${v.connected_at ? `<dt>${T('Melapor sejak', 'Reporting since')}</dt><dd style="font-family:inherit">${esc(fmtDateTime(v.connected_at))}</dd>` : ''}
@@ -234,10 +241,10 @@
       <div class="tile"><div class="k">${monthLabel()}</div><div class="v ${cls(v.month)}">${usd(toUsd(v.month, cur))}</div><div class="s">${pct(v.month_pct)}</div></div>
       <div class="tile"><div class="k">${T('Floating sekarang', 'Floating now')}</div><div class="v ${cls(v.floating)}">${usd(toUsd(v.floating, cur))}</div><div class="s">${pct(v.floating_pct)}</div></div>
       <div class="tile"><div class="k">${T('Seri selesai', 'Closed series')}</div><div class="v">${num(st.n)}</div><div class="s">${num(st.wins)} ${T('profit', 'in profit')}${st.n ? ' · ' + T('rata-rata', 'avg') + ' ' + dur(st.dur) : ''} · ${T('basket terpanjang', 'longest')} ${num(Math.max(st.maxpos, v.max_layers))}</div></div>`;
-    const nw = sn.news && sn.news.name ? `📰 ${esc(sn.news.name)} · ${esc(fmtDateTime(sn.news.time))} · ${sn.news.active ? T('sedang jendela berita', 'in the news window') : T('berikutnya', 'next')} · ${esc(sn.news.mode)}` : `📰 ${T('tidak ada berita penting 6 jam ke depan', 'no high-impact news in the next 6 hours')}`;
+    const nw = sn.news && sn.news.name ? `<span>📰 ${sn.news.active ? T('Sedang berita', 'News now') : T('Berita berikutnya', 'Next news')}: <b>${esc(sn.news.name)}</b> · ${esc(fmtDateTime(sn.news.time))} · ${esc(WORD(sn.news.mode))}</span>` : `<span>📰 ${T('Tidak ada berita penting 6 jam ke depan', 'No high-impact news in the next 6 hours')}</span>`;
     const pk = sn.pocket || {};
     $('#cards').innerHTML = side('BUY', sn.buy, dg, cur, sn.pause && sn.pause.buy) + side('SELL', sn.sell, dg, cur, sn.pause && sn.pause.sell) +
-      `<div class="small muted" style="grid-column:1/-1">${nw} · ${T('kantong', 'pocket')} ${usd(toUsd(pk.saldo, cur), false)} (${T('dipakai', 'used')} ${pk.cuts || 0}×) · spread ${num(sn.spread)}</div>`;
+      `<div class="infostrip">${nw}<span>🟡 ${T('Kantong', 'Pocket')}: <b>${usd(toUsd(pk.saldo, cur), false)}</b> (${T('dipakai', 'used')} ${pk.cuts || 0}×)</span><span>↔ Spread: <b>${num(sn.spread)}</b></span></div>`;
     const pt = Number(c.point) || 0;
     const money = (pts) => (['XAUUSD', 'BTCUSD'].includes(v.symbol) && pt ? `$${(pts * pt).toLocaleString(T('id-ID', 'en-US'), { maximumFractionDigits: 2 })}` : `${(pts / 10).toLocaleString(T('id-ID', 'en-US'), { maximumFractionDigits: 1 })} pip`);
     const NS = [T('tunggu candle baru', 'wait for a new candle'), T('langsung', 'immediately'), T('tunggu harga mundur', 'wait for a pullback')];
@@ -245,23 +252,26 @@
       [T('Lot pertama', 'First lot'), `${num(v.first_lot, 2)} lot${c.auto_lot ? ` · ${T('0,01 per', '0.01 per')} ${num(c.lot_capital)} ${esc(cur)} ${T('(ikut balance)', '(grows with balance)')}` : ''}`],
       [T('Lot tiap layer', 'Lot per layer'), `×${num(v.lot_mult, 2)} · ${T('maks', 'max')} ${num(c.max_lot, 2)} lot`],
       [T('Jarak layer', 'Layer step'), `${money(v.dist_pts)} · ${T('melebar', 'widens')} ×${num(c.dist_mult, 2)} ${T('sesudah layer', 'after layer')} ${c.dist_from || '-'}`],
-      [T('Take profit bersama', 'Basket take profit'), `${money(v.tp_pts)} ${T('dari harga rata-rata', 'from the average price')} · ${esc(c.tp_mode || '')}${c.tp_net ? ' · ' + T('bersih swap', 'net of swap') : ''}`],
-      [T('Seri baru', 'New series'), `${NS[c.new_series] || '-'}${c.new_series === 2 ? ' ' + money(c.reentry_pts) + (c.reentry_bars > 0 ? ` ${T('maks', 'max')} ${c.reentry_bars} candle M1, ${T('lalu tetap buka', 'then opens anyway')}` : '') : ''} · ${esc(v.mode)}`],
+      [T('Take profit bersama', 'Basket take profit'), `${money(v.tp_pts)} ${T('dari harga rata-rata', 'from the average price')} · ${esc(WORD(c.tp_mode))}${c.tp_net ? ' · ' + T('bersih swap', 'net of swap') : ''}`],
+      [T('Seri baru', 'New series'), `${NS[c.new_series] || '-'}${c.new_series === 2 ? ' ' + money(c.reentry_pts) + (c.reentry_bars > 0 ? ` ${T('maks', 'max')} ${c.reentry_bars} candle M1, ${T('lalu tetap buka', 'then opens anyway')}` : '') : ''} · ${T('mode', 'mode')} ${esc(MODE()[v.mode] || v.mode)}`],
       ['DD reduction', c.reduction ? `${T('mulai', 'from')} ${v.reduction_from} ${T('posisi', 'positions')}, ${T('untung terbaru ≥ rugi terlama', 'newest profit ≥ oldest loss')} +${num(c.reduction_pct)}%` : T('mati', 'off')],
       [T('Kantong profit', 'Profit pocket'), c.pocket ? `${num(v.pocket_pct)}% ${T('profit masuk kantong', 'of profit saved')}, ${T('dipakai saat basket lebih dari', 'used when a basket has more than')} ${v.pocket_layers} ${T('layer', 'layers')}${c.pocket_min_loss ? ` ${T('dan floating', 'and floating')} ≤ −${num(c.pocket_min_loss, 1)}% ${T('modal', 'capital')}` : ''}` : T('mati', 'off')],
-      [T('Berita & spread', 'News & spread'), `${esc(c.news_mode || '')} · spread ${T('maks', 'max')} ${num(c.max_spread)} ${T('poin', 'pts')}${c.equity_stop ? ` · ${T('pengaman equity', 'equity guard')} ${num(c.equity_stop, 1)}%` : ''}`],
+      [T('Berita & spread', 'News & spread'), `${T('saat berita', 'on news')}: ${esc(WORD(c.news_mode))} · spread ${T('maks', 'max')} ${num(c.max_spread)} ${T('poin', 'pts')}${c.equity_stop ? ` · ${T('pengaman equity', 'equity guard')} ${num(c.equity_stop, 1)}%` : ''}`],
     ];
     $('#params').innerHTML = `<h2>${T('Pengaturan EA yang dipakai', 'EA settings in use')}</h2><dl class="kv" style="font-size:.9rem">${P.map(([k, x]) => `<dt>${k}</dt><dd style="font-family:inherit">${x}</dd>`).join('')}</dl>`;
     const ds = d.days || [];
     const mx = Math.max(1e-9, ...ds.map((x) => Math.abs(x.profit)));
     $('#days').innerHTML = `<h2>${T('Hasil harian', 'Daily results')}</h2>` + (ds.length ? `<div class="table-wrap"><table><thead><tr><th>${T('Tanggal', 'Date')}</th><th>Profit</th><th class="right">${T('Seri', 'Series')}</th><th class="right hide-sm">${T('Basket terpanjang', 'Longest basket')}</th><th class="right">DD</th></tr></thead><tbody>
-      ${ds.map((x) => `<tr><td class="nowrap">${esc(x.day)}</td><td><span class="${cls(x.profit)}">${usd(toUsd(x.profit, x.currency || cur))}</span><div class="bar"><i style="width:${Math.round(Math.abs(x.profit) / mx * 100)}%;background:${x.profit < 0 ? '#ff8b95' : '#6ee7a2'}"></i></div></td>
+      ${ds.map((x) => `<tr><td class="nowrap">${esc(fmtDate(dayTs(x.day)))}</td><td><span class="${cls(x.profit)}">${usd(toUsd(x.profit, x.currency || cur))}</span><div class="bar"><i style="width:${Math.round(Math.abs(x.profit) / mx * 100)}%;background:${x.profit < 0 ? '#ff8b95' : '#6ee7a2'}"></i></div></td>
         <td class="right">${x.series} <span class="tiny muted">(${x.wins} ✓)</span></td><td class="right hide-sm">${x.max_layers}</td><td class="right ${x.max_dd_pct ? 'neg' : ''}">${x.max_dd_pct ? '-' + num(x.max_dd_pct, 2) + '%' : '0%'}</td></tr>`).join('')}</tbody></table></div>`
       : `<div class="small muted">${T('Belum ada data harian.', 'No daily data yet.')}</div>`);
-    const ser = d.series || [];
+    const serA = d.series || [], ser = serAll ? serA : serA.slice(0, 10);
     $('#series').innerHTML = `<h2>${T('Seri selesai terakhir', 'Latest closed series')}</h2>` + (ser.length ? `<div class="table-wrap"><table><thead><tr><th>${T('Waktu', 'Time')}</th><th>${T('Sisi', 'Side')}</th><th class="right">${T('Posisi', 'Positions')}</th><th class="right hide-sm">Lot</th><th class="right hide-sm">${T('Durasi', 'Duration')}</th><th class="right">${T('Hasil', 'Result')}</th></tr></thead><tbody>
       ${ser.map((r) => `<tr><td class="small nowrap">${esc(fmtDateTime(r.closed_at))}</td><td><span class="tag ${r.side === 'BUY' ? 'buy' : 'sell'}">${esc(r.side)}</span></td><td class="right">${r.positions}</td><td class="right hide-sm">${Number(r.lots).toFixed(2)}</td><td class="right hide-sm nowrap">${dur(r.duration)}</td><td class="right nowrap ${cls(r.profit)}">${usd(toUsd(r.profit, r.currency || cur))}</td></tr>`).join('')}</tbody></table></div>`
-      : `<div class="small muted">${T('Belum ada seri yang selesai sejak EA ini mulai dihitung.', 'No series closed since this EA started counting.')}</div>`);
+      : `<div class="small muted">${T('Belum ada seri yang selesai sejak EA ini mulai dihitung.', 'No series closed since this EA started counting.')}</div>`)
+      + (serA.length > ser.length ? `<p class="center" style="margin-top:10px"><button type="button" class="btn btn-ghost btn-sm" id="ser-more">${T('Tampilkan', 'Show')} ${serA.length} ${T('seri terakhir', 'latest series')}</button></p>` : '');
+    const sm = $('#ser-more');
+    if (sm) sm.onclick = () => { serAll = true; renderDetail(); };
     // trading history: every closing deal since the start + the check of the totals against it
     const ck = d.check || {}, hs = d.history || [];
     const hShow = histAll ? hs : hs.slice(0, 30);
@@ -273,12 +283,13 @@
     $('#hist').innerHTML = `<div class="row between" style="align-items:center;gap:10px;flex-wrap:wrap"><h2 style="margin:0">${T('Riwayat trading', 'Trading history')}</h2>${ck.deals ? `<a class="btn btn-ghost btn-sm" href="/api/live/${v.id}/history.csv" download>⬇ ${T('Unduh riwayat lengkap (CSV)', 'Download the full history (CSV)')}</a>` : ''}</div>
       <p class="small muted" style="margin:6px 0 12px">${T('Setiap posisi yang ditutup EA ini sejak mulai dihitung, langsung dari riwayat MT5. Hasil = profit + swap + komisi penutupan; komisi saat posisi dibuka ikut dihitung di total.', 'Every position this EA closed since the start, straight from the MT5 history. Result = profit + swap + commission of the close; the opening commission is included in the total.')}</p>${badge}` +
       (hs.length ? `<div class="table-wrap"><table><thead><tr><th>${T('Waktu tutup', 'Closed')}</th><th>${T('Posisi', 'Position')}</th><th class="right">Lot</th><th class="right hide-sm">${T('Harga tutup', 'Close price')}</th><th class="right">${T('Hasil', 'Result')}</th></tr></thead><tbody>
-      ${hShow.map((x) => { const sd = x.type === 1 ? 'BUY' : 'SELL'; return `<tr><td class="small nowrap">${esc(fmtDateTime(x.time))}</td><td class="nowrap"><span class="tag ${sd === 'BUY' ? 'buy' : 'sell'}">${sd}</span> <span class="tiny muted">#${esc(String(x.pos || x.ticket))}</span></td><td class="right">${Number(x.volume).toFixed(2)}</td><td class="right hide-sm">${Number(x.price).toFixed(dg)}</td><td class="right nowrap ${cls(x.net)}">${usd(toUsd(x.net, cur))}</td></tr>`; }).join('')}</tbody></table></div>` +
+      ${hShow.map((x) => { const sd = x.type === 1 ? 'BUY' : 'SELL'; return `<tr><td class="small nowrap">${esc(fmtDateTime(x.time))}</td><td class="nowrap"><span class="tag ${sd === 'BUY' ? 'buy' : 'sell'}">${sd}</span> <span class="tiny muted">#${esc(String(x.pos || x.ticket).slice(-5))}</span></td><td class="right">${Number(x.volume).toFixed(2)}</td><td class="right hide-sm">${Number(x.price).toFixed(dg)}</td><td class="right nowrap ${cls(x.net)}">${usd(toUsd(x.net, cur))}</td></tr>`; }).join('')}</tbody></table></div>` +
       (hs.length > hShow.length ? `<p class="center" style="margin-top:10px"><button type="button" class="btn btn-ghost btn-sm" id="hist-more">${T('Tampilkan', 'Show')} ${hs.length} ${T('penutupan terakhir', 'latest closes')}</button></p>` : '')
       : (ck.deals ? `<div class="small muted">${T('Belum ada posisi yang ditutup sejak mulai dihitung.', 'No position closed since the start yet.')}</div>` : ''));
     const hm = $('#hist-more');
     if (hm) hm.onclick = () => { histAll = true; renderDetail(); };
     const ev = d.events || [], K = KIND();
+    ev.forEach((e) => { if (e.kind === 'pause' && /dilanjutkan|resum/i.test(e.text || '')) e.kind = 'resume'; });
     $('#events').innerHTML = `<h2>${T('Kejadian & peringatan', 'Events & warnings')}</h2>` + (ev.length ? ev.map((e) => `<div class="ev"><span class="t">${esc(fmtDateTime(e.at))}</span><span>${(K[e.kind] || ['•', e.kind])[0]} <b>${esc((K[e.kind] || ['', e.kind])[1])}</b>${e.side ? ' · ' + esc(e.side) : ''}${e.profit ? ` · <span class="${cls(e.profit)}">${usd(toUsd(e.profit, cur))}</span>` : ''}<div class="small muted">${esc(e.text)}</div></span></div>`).join('')
       : `<div class="small muted">${T('Belum ada kejadian. Di sini tercatat reduction, kantong yang dipakai, peringatan floating besar / basket panjang, dan pengaman equity.', 'No events yet. Reductions, pocket closes, large floating / long basket warnings and the equity guard are listed here.')}</div>`);
   }

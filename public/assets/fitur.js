@@ -8,9 +8,14 @@
   const root = document.getElementById('fx-root'), chips = document.getElementById('fx-chips'), count = document.getElementById('fx-count');
   if (!root) return;
   const setLab = (s) => (s === 'otomatis' ? T('otomatis', 'automatic') : s === 'installer' ? 'installer' : `setting ${esc(s)}`);
-  const feat = (f) => `<article class="fx reveal"><div class="fx-head"><h3>${L(f.title)}</h3>${f.setting ? `<span class="fx-set">${setLab(f.setting)}</span>` : ''}</div>
-      <div class="fx-row"><span class="fx-k" aria-hidden="true">⚙️</span><div><b>${T('Cara kerja', 'How it works')}</b><p>${L(f.how)}</p></div></div>
-      <div class="fx-row use"><span class="fx-k" aria-hidden="true">✅</span><div><b>${T('Fungsinya', 'What it is for')}</b><p>${L(f.use)}</p></div></div></article>`;
+  const len = (x) => String(x ? T(x.id || '', x.en || x.id || '') : '').length;
+  const feat = (f) => {
+    const long = len(f.how) + len(f.use) > 520;
+    return `<article class="fx reveal${long ? ' wide' : ''}"><div class="fx-head"><h3>${L(f.title)}</h3>${f.setting ? `<span class="fx-set">${setLab(f.setting)}</span>` : ''}</div>
+      <div class="fx-body">
+      <div class="fx-row"><span class="fx-k" aria-hidden="true">⚙️</span><div><b>${T('Cara kerja', 'How it works')}</b><p class="${len(f.how) > 300 ? 'fold' : ''}">${L(f.how)}</p>${len(f.how) > 300 ? `<button type="button" class="fx-more">${T('Selengkapnya', 'Read more')}</button>` : ''}</div></div>
+      <div class="fx-row use"><span class="fx-k" aria-hidden="true">✅</span><div><b>${T('Fungsinya', 'What it is for')}</b><p>${L(f.use)}</p></div></div></div></article>`;
+  };
   const flow = (g) => (g.flow && g.flow.length ? `<ol class="flowline${g.flow.length === 4 ? ' four' : ''} reveal">${g.flow.map((x) =>
     `<li><span class="fl-ico" aria-hidden="true">${esc(x.icon)}</span><b>${L(x.title)}</b><small>${L(x.sub)}</small></li>`).join('')}</ol>` : '');
   let DOC = null;
@@ -34,4 +39,10 @@
     .then((d) => { DOC = d; render(); })
     .catch(() => { root.innerHTML = `<section class="sec"><div class="wrap"><div class="empty-box">${T('Daftar fitur belum bisa dimuat. Muat ulang halaman.', 'The feature list could not be loaded. Please reload.')}</div></div></section>`; });
   document.addEventListener('ghg:lang', () => { if (DOC) render(); });
+  root.addEventListener('click', (e) => {
+    const b = e.target.closest('.fx-more');
+    if (!b) return;
+    const p = b.previousElementSibling, open = p.classList.toggle('open');
+    b.textContent = open ? T('Tutup', 'Show less') : T('Selengkapnya', 'Read more');
+  });
 })();
