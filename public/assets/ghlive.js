@@ -34,7 +34,7 @@ const GHL = (() => {
   // small bar chart of daily profit since the start
   function spark(arr, cur) {
     const a = (arr || []).slice(-30);
-    if (!a.length) return '';
+    if (a.length < 5) return '';
     const mx = Math.max(1e-9, ...a.map((x) => Math.abs(x[1])));
     const w = 100 / 30, off = 30 - a.length;          // 30 fixed slots, newest on the right
     const bars = a.map((x, j) => {
@@ -119,7 +119,7 @@ const GHL = (() => {
   }
 
   const CSS = `
-  .ghl-cards{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:12px}
+  .ghl-cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(300px,100%),380px));justify-content:center;gap:12px}
   .ghl-card{position:relative;display:flex;flex-direction:column;gap:10px;border:1px solid var(--line);border-radius:18px;padding:16px 16px 14px;color:var(--text);text-decoration:none;min-width:0;overflow:hidden;
     background:radial-gradient(120% 70% at 100% 0%,rgba(245,197,66,.10),transparent 60%),linear-gradient(180deg,rgba(255,255,255,.025),transparent 40%),var(--card);
     box-shadow:0 10px 30px rgba(0,0,0,.25);transition:border-color .2s,transform .2s,box-shadow .2s}
@@ -153,7 +153,7 @@ const GHL = (() => {
   .ghl-meta{display:flex;justify-content:space-between;gap:8px;flex-wrap:wrap;font-size:.76rem;color:var(--muted)}
   .ghl-meta b{color:var(--text)}
   .ghl-ver{margin-top:8px;font-size:.74rem;font-weight:600;color:#6ee7a2;border:1px solid rgba(46,204,113,.35);background:rgba(46,204,113,.07);border-radius:9px;padding:5px 9px;overflow-wrap:anywhere}
-  .ghl-cta{display:flex;align-items:center;justify-content:center;gap:6px;margin-top:2px;padding:9px 12px;border-radius:12px;font-weight:800;font-size:.84rem;color:#1a1306;background:linear-gradient(90deg,#d4a017,#f5c542);transition:filter .2s}
+  .ghl-cta{display:flex;align-items:center;justify-content:center;gap:6px;margin-top:2px;padding:9px 12px;border-radius:12px;font-weight:800;font-size:.84rem;color:#1a1306;background:var(--grad);transition:filter .2s}
   .ghl-card:hover .ghl-cta{filter:brightness(1.08)}
   .ghl-tabs{display:flex;gap:8px;flex-wrap:wrap;justify-content:center;margin-bottom:16px}
   .ghl-tabs button{border:1px solid var(--line);background:var(--bg-2);color:var(--text);border-radius:30px;padding:8px 14px;font-weight:700;font-size:.85rem;cursor:pointer}

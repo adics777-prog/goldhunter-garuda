@@ -20,7 +20,7 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="preload" as="style" href="https://fonts.googleapis.com/css2?family=Cinzel:wght@700;900&family=Poppins:wght@300;400;500;600;700;800&display=swap" onload="this.onload=null;this.rel='stylesheet'"><noscript><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Cinzel:wght@700;900&family=Poppins:wght@300;400;500;600;700;800&display=swap"></noscript>
 <link rel="stylesheet" href="/assets/app.css?v=245e2737">
-<link rel="stylesheet" href="/assets/site.css?v=763caea9">
+<link rel="stylesheet" href="/assets/site.css?v=21640775">
 <script>if (/[?&]setup=\d/.test(location.search)) document.documentElement.classList.add('ld');</script>
 <style>
   .ld #overview{display:none!important} .ld #detail{display:block!important}
@@ -126,9 +126,9 @@
 </main>
 <div class="netnote" id="netnote" hidden data-en="🔄 Connection is slow, reconnecting…">🔄 Koneksi lambat, menyambung ulang…</div>
 <script src="/assets/i18n.js?v=13f0d67d"></script>
-<script src="/assets/site.js?v=6d51a2e1"></script>
+<script src="/assets/site.js?v=7de924c0"></script>
 <script src="/assets/common.js?v=ed3ae07d"></script>
-<script src="/assets/ghlive.js?v=02f4b1bd"></script>
+<script src="/assets/ghlive.js?v=e8dc7fcf"></script>
 <script>
 (() => {
   const { $, fmtDateTime, fmtDate, ago } = GHG;
@@ -268,7 +268,7 @@
     const badge = !ck.deals
       ? `<div class="alert small" style="margin:0 0 12px">⏳ ${T('Riwayat trading sedang dikirim EA (EA v3.28 ke atas). Begitu masuk, total profit dicocokkan dengan setiap transaksi.', 'The EA is sending its trading history (EA v3.28 and up). Once in, the total profit is checked against every deal.')}</div>`
       : ck.ok
-        ? `<div class="alert ok small" style="margin:0 0 12px">✓ <b>${T('Angka terverifikasi', 'Figures verified')}</b> · ${T('profit sejak mulai', 'profit since start')} <b>${usd(toUsd(ck.total, cur))}</b> = ${T('jumlah', 'the sum of')} ${num(ck.deals)} ${T('transaksi di riwayat trading', 'deals in the trading history')} (${num(ck.closes)} ${T('penutupan', 'closes')}) · ${T('hari ini', 'today')} ${usd(toUsd(ck.today, cur))} · ${T('kemarin', 'yesterday')} ${usd(toUsd(ck.yday, cur))} · ${monthLabel(true)} ${usd(toUsd(ck.month, cur))}</div>`
+        ? `<div class="alert ok small" style="margin:0 0 12px">✓ <b>${T('Angka terverifikasi', 'Figures verified')}</b> · ${T('profit sejak mulai', 'profit since start')} <b>${usd(toUsd(ck.total, cur))}</b> = ${T('jumlah', 'the sum of')} ${num(ck.deals)} ${T('transaksi di riwayat trading', 'deals in the trading history')} (${num(ck.closes)} ${T('penutupan', 'closes')})</div>`
         : `<div class="alert small" style="margin:0 0 12px">⏳ ${T('Riwayat sedang disinkronkan', 'History is syncing')}: ${num(ck.deals)} ${T('transaksi tercatat, total riwayat', 'deals recorded, history total')} ${usd(toUsd(ck.net, cur))}${ck.total != null ? ` · ${T('laporan EA', 'EA report')} ${usd(toUsd(ck.total, cur))}` : ''}</div>`;
     $('#hist').innerHTML = `<div class="row between" style="align-items:center;gap:10px;flex-wrap:wrap"><h2 style="margin:0">${T('Riwayat trading', 'Trading history')}</h2>${ck.deals ? `<a class="btn btn-ghost btn-sm" href="/api/live/${v.id}/history.csv" download>⬇ ${T('Unduh riwayat lengkap (CSV)', 'Download the full history (CSV)')}</a>` : ''}</div>
       <p class="small muted" style="margin:6px 0 12px">${T('Setiap posisi yang ditutup EA ini sejak mulai dihitung, langsung dari riwayat MT5. Hasil = profit + swap + komisi penutupan; komisi saat posisi dibuka ikut dihitung di total.', 'Every position this EA closed since the start, straight from the MT5 history. Result = profit + swap + commission of the close; the opening commission is included in the total.')}</p>${badge}` +

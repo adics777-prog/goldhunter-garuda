@@ -25,7 +25,7 @@
         ${flow(g)}${g.note ? `<p class="fx-note reveal">${L(g.note)}</p>` : ''}
         <div class="fx-grid">${(g.features || []).map(feat).join('')}</div>
       </div></section>`).join('');
-    if (window.SITE && SITE.reveal) SITE.reveal(root);
+    if (typeof SITE !== 'undefined' && SITE.reveal) SITE.reveal(root);
     if (location.hash) { const el = document.getElementById(location.hash.slice(1)); if (el) el.scrollIntoView({ block: 'start' }); }
   }
   const load = (u) => fetch(u, { credentials: 'same-origin' }).then((r) => (r.ok ? r.json() : Promise.reject(r.status)))

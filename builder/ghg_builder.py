@@ -555,7 +555,8 @@ def sync_features(cfg):
     if not m:
         return
     raw = m.group(1)
-    sha = hashlib.sha256(raw.encode('utf-8')).hexdigest()
+    vm0 = re.search(r'#property\s+version\s+"([^"]+)"', text)
+    sha = hashlib.sha256((raw + '|' + (vm0.group(1) if vm0 else '')).encode('utf-8')).hexdigest()
     try:
         if open(FEATURES_STATE, encoding='utf-8').read().strip() == sha:
             return

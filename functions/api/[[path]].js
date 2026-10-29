@@ -1348,7 +1348,7 @@ function cleanFeatures(doc) {
   const L = (x, n) => ({ id: str(x && x.id, n), en: str(x && (x.en || x.id), n) });
   const groups = (Array.isArray(doc && doc.groups) ? doc.groups : []).slice(0, 40).map((g) => {
     const out = { id: str(g.id, 30).replace(/[^a-z0-9-]/gi, '').toLowerCase(), icon: str(g.icon, 8), title: L(g.title, 80), intro: L(g.intro, 300),
-      features: (Array.isArray(g.features) ? g.features : []).slice(0, 40).map((f) => ({ title: L(f.title, 90), setting: str(f.setting, 40), how: L(f.how, 700), use: L(f.use, 500) }))
+      features: (Array.isArray(g.features) ? g.features : []).slice(0, 40).map((f) => ({ title: L(f.title, 90), setting: str(f.setting, 40), how: L(f.how, 2400), use: L(f.use, 1200) }))
         .filter((f) => f.title.id) };
     if (g.badge) out.badge = L(g.badge, 40);
     if (g.note) out.note = L(g.note, 400);

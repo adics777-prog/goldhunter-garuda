@@ -46,7 +46,7 @@ const SITE = (() => {
         <li><a href="#risiko" data-en="Risk warning">Peringatan risiko</a></li></ul></div>
     </div>
     ${risk}
-    <p class="foot-copy">© <span id="foot-yr"></span> GOLD HUNTER GARUDA · MetaTrader 5 · All rights reserved.</p>
+    <p class="foot-copy">© <span id="foot-yr"></span> GOLD HUNTER GARUDA · MetaTrader 5 · <span data-en="All rights reserved.">Hak cipta dilindungi.</span></p>
   </div></footer>
   <a class="wa-float" id="wa-float" hidden target="_blank" rel="noopener" aria-label="WhatsApp admin" title="WhatsApp admin"><svg viewBox="0 0 24 24" width="28" height="28" fill="#fff" aria-hidden="true"><path d="M17.5 14.4c-.3-.1-1.8-.9-2-1-.3-.1-.5-.1-.7.1-.2.3-.8 1-.9 1.2-.2.2-.3.2-.6.1-.3-.1-1.3-.5-2.4-1.5-.9-.8-1.5-1.8-1.7-2.1-.2-.3 0-.5.1-.6l.4-.5c.1-.2.2-.3.3-.5.1-.2 0-.4 0-.5l-.9-2.2c-.2-.6-.5-.5-.7-.5h-.6c-.2 0-.5.1-.8.4-.3.3-1 1-1 2.5s1.1 2.9 1.2 3.1c.1.2 2.1 3.2 5.1 4.5.7.3 1.3.5 1.7.6.7.2 1.4.2 1.9.1.6-.1 1.8-.7 2-1.4.2-.7.2-1.3.2-1.4-.1-.2-.3-.3-.6-.4zM12 2C6.5 2 2 6.5 2 12c0 1.8.5 3.5 1.3 4.9L2 22l5.2-1.4c1.4.8 3.1 1.2 4.8 1.2 5.5 0 10-4.5 10-10S17.5 2 12 2z"/></svg></a>`;
 
@@ -75,6 +75,15 @@ const SITE = (() => {
   };
   reveal();                                          // site.js sits at the end of the page: the content above is parsed
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', () => reveal());
+  // content a page script adds later (feature list, plans, live cards) is revealed too, never left hidden
+  if ('MutationObserver' in window) {
+    let rq = 0;
+    new MutationObserver((ms) => {
+      if (rq || !ms.some((m) => [...m.addedNodes].some((n) => n.nodeType === 1 && (n.classList.contains('reveal') || n.querySelector('.reveal:not(.show)'))))) return;
+      rq = requestAnimationFrame(() => { rq = 0; reveal(); });
+    }).observe(document.body, { childList: true, subtree: true });
+  }
+  window.SITE_REVEAL = reveal;
 
   // ---- shared data
   const catalog = fetch('/api/catalog', { credentials: 'same-origin' }).then((r) => r.json()).catch(() => null);

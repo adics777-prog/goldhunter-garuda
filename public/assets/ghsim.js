@@ -854,7 +854,7 @@
       visible = es[0].isIntersecting;
       if (visible) start();
       if (started) this.setRun();
-    }, { rootMargin: '120px' }).observe(host);
+    }, { rootMargin: '600px 0px' }).observe(host);
     document.addEventListener('visibilitychange', () => this.setRun());
     narrowMQ.addEventListener && narrowMQ.addEventListener('change', () => this.setRun());
     let rt = 0;
